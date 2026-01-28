@@ -11,10 +11,7 @@ dependencies = [
 ]
 
 [project.scripts]
-sqlch = "sqlch.cli.main:main"
+sqlch = "cli.main:main"
 
 [tool.setuptools]
-package-dir = { "" = "sqlch" }
-
-[tool.setuptools.packages.find]
-where = ["sqlch"]
+packages = ["cli", "core", "tui"]
