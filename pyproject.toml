@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [project.scripts]
-sqlch = "cli.cli:main"
+sqlch = "cli.main:main"
 
 [tool.setuptools]
 packages = [

@@ -1,3 +1,4 @@
+import os
 import time
 import json
 import base64
@@ -53,8 +54,6 @@ def _save_cache(db: Dict[str, Any]) -> None:
 # Spotify helpers
 # -----------------------------
 
-import os
-
 def _load_spotify_creds() -> Optional[tuple[str, str]]:
     cid = os.getenv("SPOTIFY_CLIENT_ID")
     csec = os.getenv("SPOTIFY_CLIENT_SECRET")
@@ -96,6 +95,16 @@ def _get_spotify_token() -> Optional[str]:
     except Exception:
         return None
 
+def _spotify_artist_genres(artist_id: str, token: str) -> list[str]:
+    try:
+        r = requests.get(
+            f"https://api.spotify.com/v1/artists/{artist_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=6,
+        ).json()
+        return r.get("genres", [])
+    except Exception:
+        return []
 
 # -----------------------------
 # Enrichment engines
@@ -170,19 +179,13 @@ def _enrich_spotify(artist: str, track: str) -> Dict[str, Any]:
         if artists:
             aid = artists[0].get("id")
             if aid:
-                ainfo = requests.get(
-                    f"https://api.spotify.com/v1/artists/{aid}",
-                    headers={"Authorization": f"Bearer {token}"},
-                    timeout=6,
-                ).json()
-                result["genres"] = ainfo.get("genres", [])
+                result["genres"] = _spotify_artist_genres(aid, token)
 
         result["source"] = "spotify"
     except Exception:
         pass
 
     return result
-
 
 # -----------------------------
 # Public API
