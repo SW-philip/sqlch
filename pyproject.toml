@@ -4,20 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sqlch"
-version = "0.1"
+version = "0.1.0"
 dependencies = [
     "requests",
+    "textual",
 ]
 
 [project.scripts]
-sqlch = "cli.main:main"
+sqlch = "sqlch.cli.main:main"
 
 [tool.setuptools]
-packages = [
-    "cli",
-    "core",
-    "tui"
-]
+package-dir = { "" = "sqlch" }
 
-[tool.setuptools.package-dir]
-"" = "."
+[tool.setuptools.packages.find]
+where = ["sqlch"]
