@@ -1,17 +1,11 @@
-[build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "sqlch"
-version = "0.1.0"
-dependencies = [
-    "requests",
-    "textual",
-]
+version = "0.1"
+requires-python = ">=3.11"
 
 [project.scripts]
-sqlch = "cli.main:main"
+sqlch = "sqlch.cli.main:main"
 
-[tool.setuptools]
-packages = ["cli", "core", "tui"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sqlch*"]
