@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sqlch"
+version = "0.1"
+dependencies = [
+    "requests",
+]
+
+[project.scripts]
+sqlch = "sqlch.cli:main"
+
+[tool.setuptools]
+packages = [
+    "sqlch",
+    "sqlch.core",
+]
+
+[tool.setuptools.package-dir]
+"" = "."
