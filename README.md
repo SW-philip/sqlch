@@ -15,9 +15,9 @@ machine.
 
 ## What sqlch is
 
--   A **CLI-first** radio / stream orchestrator\
--   A **Python application**, not a monolith\
--   A **reproducible artifact** (builds cleanly via PEP 517 and Nix)\
+-   A **CLI-first** radio / stream orchestrator
+-   A **Python application**, not a monolith
+-   A **reproducible artifact** (builds cleanly via PEP 517 and Nix)
 -   A place where **metadata, playback, and control** are treated as
     separate concerns
 
@@ -25,9 +25,9 @@ machine.
 
 ## What sqlch is *not*
 
--   Not a GUI-first media player\
--   Not a Spotify clone\
--   Not a "just works on my machine" script bundle\
+-   Not a GUI-first media player
+-   Not a Spotify clone
+-   Not a "just works on my machine" script bundle
 -   Not dependent on global Python state
 
 ------------------------------------------------------------------------
@@ -177,8 +177,8 @@ sustained questioning.
 
 ### What this project optimizes for
 
--   Explicit contracts over convenience\
--   Reproducibility over cleverness\
+-   Explicit contracts over convenience
+-   Reproducibility over cleverness
 -   Understanding over velocity
 
 If this project is useful, it's not because it solves a large problem.
@@ -188,8 +188,8 @@ pushing directly on its weakest assumptions.
 
 ### Epilogue
 
-I didn't know how Python packaging really worked.\
-I didn't know what Nix would and would not tolerate.\
+I didn't know how Python packaging really worked.
+I didn't know what Nix would and would not tolerate.
 I didn't know how many things "worked" only because nothing was
 checking.
 

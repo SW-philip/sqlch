@@ -3,7 +3,8 @@ import ast
 from pathlib import Path
 from statistics import mean
 
-ANCHOR = Path("tui/app.py")
+ROOT = Path(__file__).resolve().parents[1]
+ANCHOR = ROOT / "sqlch" / "tui" / "app.py"
 
 class FuncMetrics:
     def __init__(self, name, loc, max_depth, returns, raises, blanks, comments):
