@@ -17,6 +17,7 @@ build/
 .cache/
 .mypy_cache/
 .pytest_cache/
+result 
 
 # Editor / OS noise
 .DS_Store
