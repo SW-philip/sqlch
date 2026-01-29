@@ -174,12 +174,18 @@ class SQLCH(App):
         self.set_status("Stopped.")
 
     def action_preview(self):
-        sel = self.results.highlighted
-        if not sel:
+        idx = self.results.highlighted
+        if idx is None or idx < 0:
             self.set_status("No result highlighted.")
             return
 
-        url = sel.value
+        urls = list(self._discover_results)
+        try:
+            url = urls[idx]
+        except IndexError:
+            self.set_status("Selection out of range.")
+            return
+
         st = self._discover_results.get(url)
         if not st:
             self.set_status("Internal error: missing station data.")
@@ -189,13 +195,20 @@ class SQLCH(App):
         player.preview(url)
         self.set_status(f"Previewing: {name}")
 
+
     def action_play(self):
-        sel = self.results.highlighted
-        if not sel:
+        idx = self.results.highlighted
+        if idx is None or idx < 0:
             self.set_status("No result highlighted.")
             return
 
-        url = sel.value
+        urls = list(self._discover_results)
+        try:
+            url = urls[idx]
+        except IndexError:
+            self.set_status("Selection out of range.")
+            return
+
         st = self._discover_results.get(url)
         if not st:
             self.set_status("Internal error: missing station data.")
@@ -207,9 +220,9 @@ class SQLCH(App):
             player.play_url(url, name=name)
             self.set_status(f"Playing: {name}")
         except AttributeError:
-            # fallback until play_url exists
             player.preview(url)
             self.set_status(f"(Fallback) Playing: {name}")
+
 
     def action_add(self):
         urls = list(self.results.selected)
