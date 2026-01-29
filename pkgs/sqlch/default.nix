@@ -7,10 +7,14 @@ python3Packages.buildPythonApplication {
   pname = "sqlch";
   version = "0.1.0";
 
-  # repo root
   src = lib.cleanSource ../..;
 
   pyproject = true;
+
+  nativeBuildInputs = with python3Packages; [
+    setuptools
+    wheel
+  ];
 
   propagatedBuildInputs =
     (with python3Packages; [
