@@ -1,5 +1,5 @@
-from core.config import load, save
-from core.util import find_by_id, normalize
+from sqlch.core.config import load, save
+from sqlch.core.util import find_by_id, normalize
 
 def get_stations():
     return load().get("stations", [])

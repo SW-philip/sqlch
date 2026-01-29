@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
-from core import player, library, discover
+from sqlch.core import player, library, discover
 
 
 HELP = """sqlch — radio + metadata orchestrator

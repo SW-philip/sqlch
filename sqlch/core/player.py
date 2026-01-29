@@ -5,7 +5,7 @@ import threading
 import subprocess
 from pathlib import Path
 
-from core import config, notify, enrich, library
+from sqlch.core import config, notify, enrich, library
 
 SOCKET = Path("/tmp/sqlch-mpv.sock")
 MPV_BIN = os.environ.get("MPV_BIN", "mpv")

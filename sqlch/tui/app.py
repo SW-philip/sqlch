@@ -13,8 +13,8 @@ from textual.widgets import (
 from textual.binding import Binding
 from textual.reactive import reactive
 
-from core.discover import search as rb_search
-from core import player
+from sqlch.core.discover import search as rb_search
+from sqlch.core import player
 
 
 # ---- temporary library stub (wire later) ----
