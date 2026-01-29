@@ -1,8 +1,23 @@
+# Python bytecode
 __pycache__/
-*.pyc
+*.py[cod]
+
+# Virtual environments / env files
 .env
 .envrc
-.cache/
+.venv/
+venv/
+
+# Build artifacts
 dist/
 build/
 *.egg-info/
+
+# Caches
+.cache/
+.mypy_cache/
+.pytest_cache/
+
+# Editor / OS noise
+.DS_Store
+
