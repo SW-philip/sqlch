@@ -13,6 +13,14 @@ machine.
 
 ------------------------------------------------------------------------
 
+## TUI Preview
+
+![SQLCH Textual TUI](assets/sqlch-tui.png)
+
+Textual-based TUI for discovery and preview, backed by the same core used by the CLI.
+
+------------------------------------------------------------------------
+
 ## What sqlch is
 
 -   A **CLI-first** radio / stream orchestrator
