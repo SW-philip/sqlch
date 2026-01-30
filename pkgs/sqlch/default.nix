@@ -1,27 +1,21 @@
-{ lib, python3Packages }:
 python3Packages.buildPythonApplication {
   pname = "sqlch";
-  version = "0.1.0";
-  src = ../../.;
-  
+  version = "0.1.1"; # ← bump this
+
+  src = ../..;  # ← relative to pkgs/sqlch, this now points at ~/src/sqlch
+
   pyproject = true;
-  
-  nativeBuildInputs = [
-    python3Packages.setuptools
-    python3Packages.wheel
-  ];
-  
+
   propagatedBuildInputs = [
     python3Packages.requests
     python3Packages.textual
   ];
-  
-  pythonImportsCheck = [ "sqlch" ];
+
+  pythonImportsCheck = [
+    "sqlch"
+    "sqlch.cli.main"
+    "sqlch.tui.app"
+  ];
+
   doCheck = false;
-  
-  meta = with lib; {
-    description = "Headless radio + TUI streaming controller";
-    license = licenses.mit;
-    platforms = platforms.linux;
-  };
 }
