@@ -6,6 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "sqlch"
 version = "0.1.0"
 requires-python = ">=3.11"
+dependencies = [
+  "requests",
+  "textual>=0.50"
+]
 
 [project.scripts]
 sqlch = "sqlch.cli.main:main"

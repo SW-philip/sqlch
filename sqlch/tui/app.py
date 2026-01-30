@@ -14,17 +14,7 @@ from textual.binding import Binding
 from textual.reactive import reactive
 
 from sqlch.core.discover import search as rb_search
-from sqlch.core import player
-
-
-# ---- temporary library stub (wire later) ----
-def list_library_stub():
-    return [
-        ("wxpn", "WXPN"),
-        ("xponential", "XPONENTIAL"),
-        ("ynot", "YNOT"),
-    ]
-# --------------------------------------------
+from sqlch.core import player, library
 
 
 class SQLCH(App):
@@ -65,7 +55,6 @@ class SQLCH(App):
 
     def __init__(self):
         super().__init__()
-        # url -> station dict
         self._discover_results: dict[str, dict] = {}
 
     # ------------------------------------------------------------
@@ -78,8 +67,8 @@ class SQLCH(App):
         with Horizontal():
             with Vertical(id="sidebar"):
                 yield Label("Library")
-                self.library = ListView()
-                yield self.library
+                self.library_view = ListView()
+                yield self.library_view
 
             with Vertical(id="main"):
                 yield Label("Discover (RadioBrowser)")
@@ -98,13 +87,19 @@ class SQLCH(App):
         self.refresh_library()
 
     # ------------------------------------------------------------
-    # Library (stub)
+    # Library
     # ------------------------------------------------------------
 
     def refresh_library(self):
-        self.library.clear()
-        for slug, name in list_library_stub():
-            self.library.append(ListItem(Label(f"{slug}  {name}")))
+        self.library_view.clear()
+
+        stations = library.list_stations()
+        if not stations:
+            return
+
+        for st in stations:
+            label = f"{st['id']}  {st['name']}"
+            self.library_view.append(ListItem(Label(label)))
 
     def action_refresh_library(self):
         self.refresh_library()
@@ -138,7 +133,7 @@ class SQLCH(App):
             self.set_status(f"Search failed: {e}")
             return
 
-        options: list[tuple[str, str]] = []
+        options = []
         self._discover_results.clear()
 
         for st in stations:
@@ -153,7 +148,7 @@ class SQLCH(App):
 
             label = name
             if codec:
-                label += f" [{str(codec).upper()}]"
+                label += f" [{codec.upper()}]"
             if bitrate:
                 label += f" {bitrate}k"
             if country:
@@ -174,55 +169,13 @@ class SQLCH(App):
         self.set_status("Stopped.")
 
     def action_preview(self):
-        idx = self.results.highlighted
-        if idx is None or idx < 0:
-            self.set_status("No result highlighted.")
-            return
-
-        urls = list(self._discover_results)
-        try:
-            url = urls[idx]
-        except IndexError:
-            self.set_status("Selection out of range.")
-            return
-
-        st = self._discover_results.get(url)
-        if not st:
-            self.set_status("Internal error: missing station data.")
-            return
-
-        name = st.get("name") or "Unknown"
-        player.preview(url)
-        self.set_status(f"Previewing: {name}")
-
+        self._with_selected_station(player.preview, "Previewing")
 
     def action_play(self):
-        idx = self.results.highlighted
-        if idx is None or idx < 0:
-            self.set_status("No result highlighted.")
-            return
-
-        urls = list(self._discover_results)
-        try:
-            url = urls[idx]
-        except IndexError:
-            self.set_status("Selection out of range.")
-            return
-
-        st = self._discover_results.get(url)
-        if not st:
-            self.set_status("Internal error: missing station data.")
-            return
-
-        name = st.get("name") or "Unknown"
-
-        try:
-            player.play_url(url, name=name)
-            self.set_status(f"Playing: {name}")
-        except AttributeError:
-            player.preview(url)
-            self.set_status(f"(Fallback) Playing: {name}")
-
+        self._with_selected_station(
+            lambda url, st: player.play_url(url, name=st.get("name")),
+            "Playing",
+        )
 
     def action_add(self):
         urls = list(self.results.selected)
@@ -232,20 +185,42 @@ class SQLCH(App):
 
         for url in urls:
             st = self._discover_results.get(url)
-            if not st:
-                continue
-            print(f"[ADD] {st.get('name', 'Unknown')} → {url}")
-            # TODO: library.add_discovered_station(st)
+            if st:
+                library.add_discovered_station(st)
 
-        self.set_status(f"Queued add: {len(urls)} station(s).")
+        self.set_status(f"Added {len(urls)} station(s).")
 
     # ------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------
 
+    def _with_selected_station(self, fn, verb):
+        idx = self.results.highlighted
+        if idx is None or idx < 0:
+            self.set_status("No result highlighted.")
+            return
+
+        try:
+            url = list(self._discover_results)[idx]
+        except IndexError:
+            self.set_status("Selection out of range.")
+            return
+
+        st = self._discover_results.get(url)
+        if not st:
+            self.set_status("Internal error.")
+            return
+
+        fn(url, st)
+        self.set_status(f"{verb}: {st.get('name', 'Unknown')}")
+
     def set_status(self, msg: str):
         self.status.update(msg)
 
 
-if __name__ == "__main__":
+def main():
     SQLCH().run()
+
+
+if __name__ == "__main__":
+    main()
