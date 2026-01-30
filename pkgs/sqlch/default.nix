@@ -1,10 +1,26 @@
+{ lib
+, python3Packages
+, fetchFromGitHub
+}:
+
 python3Packages.buildPythonApplication {
   pname = "sqlch";
-  version = "0.1.1"; # ← bump this
+  version = "0.1.1";
 
-  src = ../..;  # ← relative to pkgs/sqlch, this now points at ~/src/sqlch
+  src = fetchFromGitHub {
+    owner = "SW-philip";
+    repo  = "sqlch";
+    rev   = "af71af5";
+    sha256 = "sha256-QNCllTQBafEPcODI7UWlos98iOzni8O7kvZ7tZ9RwOw=";
+  };
 
   pyproject = true;
+
+  # 🔧 THIS is what was missing
+  nativeBuildInputs = [
+    python3Packages.setuptools
+    python3Packages.wheel
+  ];
 
   propagatedBuildInputs = [
     python3Packages.requests
@@ -18,4 +34,10 @@ python3Packages.buildPythonApplication {
   ];
 
   doCheck = false;
+
+  meta = with lib; {
+    description = "Headless radio + TUI streaming controller";
+    license = licenses.mit;
+    platforms = platforms.linux;
+  };
 }
