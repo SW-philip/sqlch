@@ -16,7 +16,9 @@ CACHE_FILE = CACHE_DIR / "enriched.json"
 TOKEN_CACHE = CACHE_DIR / "spotify_token.json"
 CONF = Path.home() / ".config/sqlch/spotify.conf"
 
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+def _ensure_cache_dir() -> None:
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 # -----------------------------
 # Utilities
@@ -40,6 +42,7 @@ def _empty_result(artist: str, track: str) -> Dict[str, Any]:
 
 
 def _load_cache() -> Dict[str, Any]:
+    _ensure_cahce_dir()
     try:
         return json.loads(CACHE_FILE.read_text())
     except Exception:
@@ -47,6 +50,7 @@ def _load_cache() -> Dict[str, Any]:
 
 
 def _save_cache(db: Dict[str, Any]) -> None:
+    _ensure_cache_dir()
     CACHE_FILE.write_text(json.dumps(db, indent=2))
 
 
@@ -64,6 +68,7 @@ def _load_spotify_creds() -> Optional[tuple[str, str]]:
     return cid, csec
 
 def _get_spotify_token() -> Optional[str]:
+    _ensure_cache_dir()
     if TOKEN_CACHE.exists():
         try:
             tok = json.loads(TOKEN_CACHE.read_text())
