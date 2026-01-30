@@ -10,8 +10,8 @@ python3Packages.buildPythonApplication {
   src = fetchFromGitHub {
     owner = "SW-philip";
     repo  = "sqlch";
-    rev   = "af71af5";
-    sha256 = "sha256-QNCllTQBafEPcODI7UWlos98iOzni8O7kvZ7tZ9RwOw=";
+    rev   = "840c9ff";
+   sha256 = "sha256-9uZdlHjN4okjgvYgjfz8AzNdTjFP6Zi8j9px39o27WI=";
   };
 
   pyproject = true;
