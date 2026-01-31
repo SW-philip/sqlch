@@ -27,6 +27,10 @@
         python3
         python3Packages.pip
         python3Packages.virtualenv
+        python3Packages.pydbus
+        python3Packages.pygobject3
+        glib
+        gobject-introspection
       ];
     };
   };

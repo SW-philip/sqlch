@@ -1,33 +1,30 @@
-import os
 import time
 import json
-import base64
 import requests
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
-# -----------------------------
+from sqlch.core import spoti
+
+# ------------------------------------------------------------
 # Paths / cache
-# -----------------------------
+# ------------------------------------------------------------
 
 CACHE_DIR = Path.home() / ".cache/sqlch"
 CACHE_FILE = CACHE_DIR / "enriched.json"
-TOKEN_CACHE = CACHE_DIR / "spotify_token.json"
 
-# -----------------------------
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+# ------------------------------------------------------------
 # Helpers
-# -----------------------------
-
-def _ensure_cache_dir() -> None:
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
+# ------------------------------------------------------------
 
 def _now() -> int:
     return int(time.time())
 
 
 def _norm(s: str) -> str:
-    return s.strip().lower()
+    return " ".join(s.lower().strip().split())
 
 
 def _cache_key(artist: str, track: str) -> str:
@@ -48,7 +45,6 @@ def _empty_result(artist: str, track: str) -> Dict[str, Any]:
 
 
 def _load_cache() -> Dict[str, Any]:
-    _ensure_cache_dir()
     try:
         return json.loads(CACHE_FILE.read_text())
     except Exception:
@@ -56,75 +52,12 @@ def _load_cache() -> Dict[str, Any]:
 
 
 def _save_cache(db: Dict[str, Any]) -> None:
-    _ensure_cache_dir()
     CACHE_FILE.write_text(json.dumps(db, indent=2))
 
 
-# -----------------------------
-# Spotify helpers
-# -----------------------------
-
-def _load_spotify_creds() -> Optional[tuple[str, str]]:
-    cid = os.getenv("SPOTIFY_CLIENT_ID")
-    csec = os.getenv("SPOTIFY_CLIENT_SECRET")
-
-    if not cid or not csec:
-        return None
-
-    return cid, csec
-
-
-def _get_spotify_token() -> Optional[str]:
-    _ensure_cache_dir()
-
-    if TOKEN_CACHE.exists():
-        try:
-            tok = json.loads(TOKEN_CACHE.read_text())
-            if tok.get("expires_at", 0) > time.time():
-                return tok.get("access_token")
-        except Exception:
-            pass
-
-    creds = _load_spotify_creds()
-    if not creds:
-        return None
-
-    cid, csec = creds
-    auth = base64.b64encode(f"{cid}:{csec}".encode()).decode()
-
-    try:
-        resp = requests.post(
-            "https://accounts.spotify.com/api/token",
-            headers={"Authorization": f"Basic {auth}"},
-            data={"grant_type": "client_credentials"},
-            timeout=8,
-        )
-        resp.raise_for_status()
-        tok = resp.json()
-
-        tok["expires_at"] = time.time() + tok.get("expires_in", 0) - 30
-        TOKEN_CACHE.write_text(json.dumps(tok))
-        return tok.get("access_token")
-    except Exception:
-        return None
-
-
-def _spotify_artist_genres(artist_id: str, token: str) -> list[str]:
-    try:
-        r = requests.get(
-            f"https://api.spotify.com/v1/artists/{artist_id}",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=6,
-        )
-        r.raise_for_status()
-        return r.json().get("genres", [])
-    except Exception:
-        return []
-
-
-# -----------------------------
-# Enrichment engines
-# -----------------------------
+# ------------------------------------------------------------
+# MusicBrainz fallback (cheap, no auth)
+# ------------------------------------------------------------
 
 def _enrich_musicbrainz(artist: str, track: str) -> Dict[str, Any]:
     result: Dict[str, Any] = {}
@@ -163,59 +96,21 @@ def _enrich_musicbrainz(artist: str, track: str) -> Dict[str, Any]:
     return result
 
 
-def _enrich_spotify(artist: str, track: str) -> Dict[str, Any]:
-    token = _get_spotify_token()
-    if not token:
-        return {}
-
-    result: Dict[str, Any] = {}
-
-    try:
-        r = requests.get(
-            "https://api.spotify.com/v1/search",
-            params={"q": f"{artist} {track}", "type": "track", "limit": 1},
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=8,
-        )
-        r.raise_for_status()
-        data = r.json()
-
-        items = data.get("tracks", {}).get("items") or []
-        if not items:
-            return result
-
-        item = items[0]
-        album = item.get("album", {})
-
-        result["album"] = album.get("name")
-        if album.get("release_date"):
-            result["year"] = album["release_date"].split("-")[0]
-
-        images = album.get("images") or []
-        if images:
-            result["cover"] = images[0].get("url")
-
-        artists = item.get("artists") or []
-        if artists:
-            aid = artists[0].get("id")
-            if aid:
-                result["genres"] = _spotify_artist_genres(aid, token)
-
-        result["source"] = "spotify"
-    except Exception:
-        pass
-
-    return result
-
-
-# -----------------------------
+# ------------------------------------------------------------
 # Public API
-# -----------------------------
+# ------------------------------------------------------------
 
 def enrich_track(artist: str, track: str) -> Dict[str, Any]:
+    """
+    Enrich track metadata using:
+      1. Local enriched cache
+      2. Spotify backend (spoti.py)
+      3. MusicBrainz fallback
+    """
     db = _load_cache()
     key = _cache_key(artist, track)
 
+    # ---- cache hit ----
     if key in db:
         cached = db[key]
         cached["source"] = "cache"
@@ -223,20 +118,26 @@ def enrich_track(artist: str, track: str) -> Dict[str, Any]:
 
     base = _empty_result(artist, track)
 
-    # MusicBrainz first (free, canonical)
-    mb = _enrich_musicbrainz(artist, track)
-    for k, v in mb.items():
-        if v is not None:
-            base[k] = v
-
-    # Spotify second (art, genres)
-    sp = _enrich_spotify(artist, track)
-    for k, v in sp.items():
-        if v is not None:
-            base[k] = v
+    # ---- Spotify (authoritative) ----
+    sp = spoti.enrich(artist, track)
+    if sp:
+        base.update({
+            "artist": sp["artist"],
+            "track": sp["track"],
+            "album": sp.get("album"),
+            "year": sp.get("year"),
+            "cover": sp.get("art_url"),
+            "genres": sp.get("genres", []),
+            "source": "spotify",
+        })
+    else:
+        # ---- MusicBrainz fallback ----
+        mb = _enrich_musicbrainz(artist, track)
+        for k, v in mb.items():
+            if v is not None:
+                base[k] = v
 
     base["ts"] = _now()
-
     db[key] = base
     _save_cache(db)
 

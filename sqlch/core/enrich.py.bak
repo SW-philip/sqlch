@@ -3,7 +3,6 @@ import time
 import json
 import base64
 import requests
-import configparser
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -14,18 +13,25 @@ from typing import Dict, Any, Optional
 CACHE_DIR = Path.home() / ".cache/sqlch"
 CACHE_FILE = CACHE_DIR / "enriched.json"
 TOKEN_CACHE = CACHE_DIR / "spotify_token.json"
-CONF = Path.home() / ".config/sqlch/spotify.conf"
 
+# -----------------------------
+# Helpers
+# -----------------------------
 
 def _ensure_cache_dir() -> None:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-# -----------------------------
-# Utilities
-# -----------------------------
 
 def _now() -> int:
     return int(time.time())
+
+
+def _norm(s: str) -> str:
+    return s.strip().lower()
+
+
+def _cache_key(artist: str, track: str) -> str:
+    return f"{_norm(artist)}::{_norm(track)}"
 
 
 def _empty_result(artist: str, track: str) -> Dict[str, Any]:
@@ -42,7 +48,7 @@ def _empty_result(artist: str, track: str) -> Dict[str, Any]:
 
 
 def _load_cache() -> Dict[str, Any]:
-    _ensure_cahce_dir()
+    _ensure_cache_dir()
     try:
         return json.loads(CACHE_FILE.read_text())
     except Exception:
@@ -67,13 +73,15 @@ def _load_spotify_creds() -> Optional[tuple[str, str]]:
 
     return cid, csec
 
+
 def _get_spotify_token() -> Optional[str]:
     _ensure_cache_dir()
+
     if TOKEN_CACHE.exists():
         try:
             tok = json.loads(TOKEN_CACHE.read_text())
             if tok.get("expires_at", 0) > time.time():
-                return tok["access_token"]
+                return tok.get("access_token")
         except Exception:
             pass
 
@@ -94,11 +102,12 @@ def _get_spotify_token() -> Optional[str]:
         resp.raise_for_status()
         tok = resp.json()
 
-        tok["expires_at"] = time.time() + tok["expires_in"] - 30
+        tok["expires_at"] = time.time() + tok.get("expires_in", 0) - 30
         TOKEN_CACHE.write_text(json.dumps(tok))
-        return tok["access_token"]
+        return tok.get("access_token")
     except Exception:
         return None
+
 
 def _spotify_artist_genres(artist_id: str, token: str) -> list[str]:
     try:
@@ -106,17 +115,19 @@ def _spotify_artist_genres(artist_id: str, token: str) -> list[str]:
             f"https://api.spotify.com/v1/artists/{artist_id}",
             headers={"Authorization": f"Bearer {token}"},
             timeout=6,
-        ).json()
-        return r.get("genres", [])
+        )
+        r.raise_for_status()
+        return r.json().get("genres", [])
     except Exception:
         return []
+
 
 # -----------------------------
 # Enrichment engines
 # -----------------------------
 
 def _enrich_musicbrainz(artist: str, track: str) -> Dict[str, Any]:
-    result = {}
+    result: Dict[str, Any] = {}
 
     try:
         r = requests.get(
@@ -128,9 +139,11 @@ def _enrich_musicbrainz(artist: str, track: str) -> Dict[str, Any]:
             },
             headers={"User-Agent": "sqlch/1.0"},
             timeout=8,
-        ).json()
+        )
+        r.raise_for_status()
+        data = r.json()
 
-        recs = r.get("recordings") or []
+        recs = data.get("recordings") or []
         if not recs:
             return result
 
@@ -155,7 +168,7 @@ def _enrich_spotify(artist: str, track: str) -> Dict[str, Any]:
     if not token:
         return {}
 
-    result = {}
+    result: Dict[str, Any] = {}
 
     try:
         r = requests.get(
@@ -163,9 +176,11 @@ def _enrich_spotify(artist: str, track: str) -> Dict[str, Any]:
             params={"q": f"{artist} {track}", "type": "track", "limit": 1},
             headers={"Authorization": f"Bearer {token}"},
             timeout=8,
-        ).json()
+        )
+        r.raise_for_status()
+        data = r.json()
 
-        items = r.get("tracks", {}).get("items") or []
+        items = data.get("tracks", {}).get("items") or []
         if not items:
             return result
 
@@ -178,7 +193,7 @@ def _enrich_spotify(artist: str, track: str) -> Dict[str, Any]:
 
         images = album.get("images") or []
         if images:
-            result["cover"] = images[0]["url"]
+            result["cover"] = images[0].get("url")
 
         artists = item.get("artists") or []
         if artists:
@@ -192,14 +207,15 @@ def _enrich_spotify(artist: str, track: str) -> Dict[str, Any]:
 
     return result
 
+
 # -----------------------------
 # Public API
 # -----------------------------
 
 def enrich_track(artist: str, track: str) -> Dict[str, Any]:
-    key = f"{artist} - {track}"
-
     db = _load_cache()
+    key = _cache_key(artist, track)
+
     if key in db:
         cached = db[key]
         cached["source"] = "cache"
@@ -207,13 +223,17 @@ def enrich_track(artist: str, track: str) -> Dict[str, Any]:
 
     base = _empty_result(artist, track)
 
-    # MusicBrainz first (free, fast, no auth)
+    # MusicBrainz first (free, canonical)
     mb = _enrich_musicbrainz(artist, track)
-    base.update({k: v for k, v in mb.items() if v is not None})
+    for k, v in mb.items():
+        if v is not None:
+            base[k] = v
 
-    # Spotify second (richer data)
+    # Spotify second (art, genres)
     sp = _enrich_spotify(artist, track)
-    base.update({k: v for k, v in sp.items() if v is not None})
+    for k, v in sp.items():
+        if v is not None:
+            base[k] = v
 
     base["ts"] = _now()
 
@@ -221,4 +241,3 @@ def enrich_track(artist: str, track: str) -> Dict[str, Any]:
     _save_cache(db)
 
     return base
-
