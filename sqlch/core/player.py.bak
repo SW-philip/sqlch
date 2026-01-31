@@ -9,6 +9,7 @@ from sqlch.core import config, notify, enrich, library
 
 SOCKET = Path("/tmp/sqlch-mpv.sock")
 MPV_BIN = os.environ.get("MPV_BIN", "mpv")
+_preview_timer = None
 
 MPRIS_PLUGIN = (
     "/nix/store/jh3yklrqbzi8lv0765g332cs11wp91pm-mpv-mpris-1.1"
@@ -16,16 +17,13 @@ MPRIS_PLUGIN = (
 )
 
 _current = None
-_preview_timer = None
 
-_metadata_thread = None
-_metadata_stop = threading.Event()
 
 # ------------------------------------------------------------
 # IPC helpers
 # ------------------------------------------------------------
 
-def _mpv_ipc(cmd: dict, timeout: float = 0.4):
+def _mpv_ipc(cmd: dict, timeout: float = 0.3):
     if not SOCKET.exists():
         return None
     try:
@@ -54,7 +52,7 @@ def mpv_set(prop: str, value):
     if value is None:
         return
     _mpv_ipc({
-        "command": ["set_property_string", f"user-data/{prop}", str(value)]
+        "command": ["set_property", f"metadata/{prop}", value]
     })
 
 
@@ -79,7 +77,15 @@ def _parse_icy(title: str):
     return artist.strip() or None, track.strip() or None
 
 
-def _apply_enrichment_now(artist: str | None, track: str, station_name: str):
+def apply_enrichment(station_name: str):
+    raw = mpv_get("media-title")
+    if not raw:
+        return
+
+    artist, track = _parse_icy(raw)
+    if not track:
+        return
+
     meta = enrich.enrich_track(artist or "", track)
 
     mpv_set("title", track)
@@ -90,38 +96,8 @@ def _apply_enrichment_now(artist: str | None, track: str, station_name: str):
 
     if meta.get("year"):
         mpv_set("date", meta["year"])
-
     if meta.get("genres"):
         mpv_set("genre", ", ".join(meta["genres"]))
-
-
-def _watch_metadata(station_name: str):
-    """
-    Poll MPV metadata and re-apply enrichment
-    whenever icy-title changes.
-    """
-    _metadata_stop.clear()
-    last_seen = None
-
-    # ask mpv to track metadata changes
-    _mpv_ipc({
-        "command": ["observe_property", 1, "metadata"]
-    })
-
-    while not _metadata_stop.is_set():
-        meta = mpv_get("metadata")
-        if not meta:
-            time.sleep(0.5)
-            continue
-
-        icy = meta.get("icy-title") or meta.get("title")
-        if icy and icy != last_seen:
-            last_seen = icy
-            artist, track = _parse_icy(icy)
-            if track:
-                _apply_enrichment_now(artist, track, station_name)
-
-        time.sleep(0.5)
 
 
 # ------------------------------------------------------------
@@ -129,10 +105,6 @@ def _watch_metadata(station_name: str):
 # ------------------------------------------------------------
 
 def _kill_existing():
-    global _metadata_thread
-
-    _metadata_stop.set()
-
     if SOCKET.exists():
         try:
             subprocess.run(
@@ -151,8 +123,6 @@ def _kill_existing():
         ["pkill", "-f", f"mpv.*{SOCKET}"],
         stderr=subprocess.DEVNULL,
     )
-
-    _metadata_thread = None
 
 
 def _spawn_mpv(url, *, video=False, preview=False):
@@ -188,7 +158,6 @@ def _spawn_mpv(url, *, video=False, preview=False):
 
 def stop():
     global _current, _preview_timer
-
     if _preview_timer:
         _preview_timer.cancel()
         _preview_timer = None
@@ -209,7 +178,7 @@ def pause():
 
 
 def play_station(station):
-    global _current, _metadata_thread
+    global _current
 
     if not station.get("url"):
         notify.notify("sqlch error", "Station missing URL")
@@ -223,18 +192,13 @@ def play_station(station):
     library.record_play(station["id"])
 
     if _wait_for_ipc():
-        _metadata_thread = threading.Thread(
-            target=_watch_metadata,
-            args=(station["name"],),
-            daemon=True,
-        )
-        _metadata_thread.start()
-
+        apply_enrichment(station["name"])
 
 def preview(url, duration=12):
     global _preview_timer
 
     stop()
+
     _spawn_mpv(url, preview=True)
 
     def _end_preview():
@@ -243,7 +207,6 @@ def preview(url, duration=12):
     _preview_timer = threading.Timer(duration, _end_preview)
     _preview_timer.daemon = True
     _preview_timer.start()
-
 
 def current():
     return _current
