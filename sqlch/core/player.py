@@ -4,13 +4,8 @@ import json
 import threading
 import subprocess
 from pathlib import Path
-from typing import Optional, Tuple
 
 from sqlch.core import config, notify, enrich, library
-
-# ------------------------------------------------------------
-# Constants / globals
-# ------------------------------------------------------------
 
 SOCKET = Path("/tmp/sqlch-mpv.sock")
 MPV_BIN = os.environ.get("MPV_BIN", "mpv")
@@ -23,14 +18,14 @@ MPRIS_PLUGIN = (
 _current = None
 _preview_timer = None
 
-_metadata_thread: Optional[threading.Thread] = None
+_metadata_thread = None
 _metadata_stop = threading.Event()
 
 # ------------------------------------------------------------
 # IPC helpers
 # ------------------------------------------------------------
 
-def _mpv_ipc(cmd: dict, timeout: float = 0.4) -> Optional[dict]:
+def _mpv_ipc(cmd: dict, timeout: float = 0.4):
     if not SOCKET.exists():
         return None
     try:
@@ -55,7 +50,15 @@ def mpv_get(prop: str):
     return None
 
 
-def _wait_for_ipc(timeout: float = 2.0) -> bool:
+def mpv_set(prop: str, value):
+    if value is None:
+        return
+    _mpv_ipc({
+        "command": ["set_property_string", f"user-data/{prop}", str(value)]
+    })
+
+
+def _wait_for_ipc(timeout=2.0):
     start = time.time()
     while time.time() - start < timeout:
         if SOCKET.exists():
@@ -66,7 +69,191 @@ def _wait_for_ipc(timeout: float = 2.0) -> bool:
 
 
 # ------------------------------------------------------------
-# Metadata parsing
+# Metadata helpers
 # ------------------------------------------------------------
 
-def _parse_icy
+def _parse_icy(title: str):
+    if not title or "-" not in title:
+        return None, None
+    artist, track = title.split("-", 1)
+    return artist.strip() or None, track.strip() or None
+
+
+def _apply_enrichment_now(artist: str | None, track: str, station_name: str):
+    meta = enrich.enrich_track(artist or "", track)
+
+    mpv_set("title", track)
+    if artist:
+        mpv_set("artist", artist)
+
+    mpv_set("album", meta.get("album") or station_name)
+
+    if meta.get("year"):
+        mpv_set("date", meta["year"])
+
+    if meta.get("genres"):
+        mpv_set("genre", ", ".join(meta["genres"]))
+
+
+def _watch_metadata(station_name: str):
+    """
+    Poll MPV metadata and re-apply enrichment
+    whenever icy-title changes.
+    """
+    _metadata_stop.clear()
+    last_seen = None
+
+    # ask mpv to track metadata changes
+    _mpv_ipc({
+        "command": ["observe_property", 1, "metadata"]
+    })
+
+    while not _metadata_stop.is_set():
+        meta = mpv_get("metadata")
+        if not meta:
+            time.sleep(0.5)
+            continue
+
+        icy = meta.get("icy-title") or meta.get("title")
+        if icy and icy != last_seen:
+            last_seen = icy
+            artist, track = _parse_icy(icy)
+            if track:
+                _apply_enrichment_now(artist, track, station_name)
+
+        time.sleep(0.5)
+
+
+# ------------------------------------------------------------
+# mpv lifecycle
+# ------------------------------------------------------------
+
+def _kill_existing():
+    global _metadata_thread
+
+    _metadata_stop.set()
+
+    if SOCKET.exists():
+        try:
+            subprocess.run(
+                ["socat", "-", str(SOCKET)],
+                input=b"quit\n",
+                timeout=0.3,
+            )
+        except Exception:
+            pass
+        try:
+            SOCKET.unlink()
+        except Exception:
+            pass
+
+    subprocess.run(
+        ["pkill", "-f", f"mpv.*{SOCKET}"],
+        stderr=subprocess.DEVNULL,
+    )
+
+    _metadata_thread = None
+
+
+def _spawn_mpv(url, *, video=False, preview=False):
+    args = [
+        MPV_BIN,
+        f"--input-ipc-server={SOCKET}",
+        "--script=" + MPRIS_PLUGIN,
+        "--idle=yes",
+        "--force-window=no",
+        "--no-terminal",
+        "--cache=yes",
+    ]
+
+    if not video:
+        args.append("--no-video")
+    if preview:
+        args.append("--volume=60")
+
+    args.append(url)
+
+    subprocess.Popen(
+        args,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+# ------------------------------------------------------------
+# Public API
+# ------------------------------------------------------------
+
+def stop():
+    global _current, _preview_timer
+
+    if _preview_timer:
+        _preview_timer.cancel()
+        _preview_timer = None
+
+    _kill_existing()
+    _current = None
+    notify.notify("sqlch", "Playback stopped")
+
+
+def pause():
+    if SOCKET.exists():
+        subprocess.run(
+            ["socat", "-", str(SOCKET)],
+            input=b"cycle pause\n",
+            timeout=0.2,
+            stderr=subprocess.DEVNULL,
+        )
+
+
+def play_station(station):
+    global _current, _metadata_thread
+
+    if not station.get("url"):
+        notify.notify("sqlch error", "Station missing URL")
+        return
+
+    stop()
+    notify.notify("Now Playing", station["name"])
+    _spawn_mpv(station["url"])
+
+    _current = {"type": "station", "item": station}
+    library.record_play(station["id"])
+
+    if _wait_for_ipc():
+        _metadata_thread = threading.Thread(
+            target=_watch_metadata,
+            args=(station["name"],),
+            daemon=True,
+        )
+        _metadata_thread.start()
+
+
+def preview(url, duration=12):
+    global _preview_timer
+
+    stop()
+    _spawn_mpv(url, preview=True)
+
+    def _end_preview():
+        stop()
+
+    _preview_timer = threading.Timer(duration, _end_preview)
+    _preview_timer.daemon = True
+    _preview_timer.start()
+
+
+def current():
+    return _current
+
+
+def status_string():
+    if SOCKET.exists():
+        d = config.load()
+        lp = d.get("last_played")
+        if lp:
+            return f"Now playing: {lp.get('name')}"
+        return "Now playing"
+    return "sqlch: Not Playing"
