@@ -1,67 +1,104 @@
-import os
-import time
+# sqlch/core/player.py
+from __future__ import annotations
+
 import json
-import threading
+import os
 import subprocess
+import threading
+import time
 from pathlib import Path
+from typing import Any
 
-from sqlch.core import config, notify, enrich, library
+from sqlch.core import config, enrich, library, notify
 
-SOCKET = Path("/tmp/sqlch-mpv.sock")
-MPV_BIN = os.environ.get("MPV_BIN", "mpv")
+# ------------------------------------------------------------
+# Runtime paths + environment
+# ------------------------------------------------------------
 
-MPRIS_PLUGIN = (
-    "/nix/store/jh3yklrqbzi8lv0765g332cs11wp91pm-mpv-mpris-1.1"
-    "/share/mpv/scripts/mpris.so"
-)
+def runtime_dir() -> Path:
+    """
+    Per-user runtime directory. Prefer XDG_RUNTIME_DIR (systemd user session),
+    fall back to /tmp for non-systemd shells.
+    """
+    base = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+    p = Path(base) / "sqlch"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
 
-_current = None
-_preview_timer = None
 
-_metadata_thread = None
+MPV_SOCKET: Path = runtime_dir() / "mpv.sock"
+
+MPV_BIN: str = os.environ.get("MPV_BIN", "mpv")
+MPRIS_PLUGIN: str | None = os.environ.get("SQLCH_MPRIS_PLUGIN")
+
+# Track current playback state
+_current: dict[str, Any] | None = None
+_preview_timer: threading.Timer | None = None
+
+# Metadata watcher thread
+_metadata_thread: threading.Thread | None = None
 _metadata_stop = threading.Event()
 
+
+def _need_env(name: str, value: str | None) -> str:
+    if not value:
+        raise RuntimeError(
+            f"{name} is not set. (Expected Nix wrapper to export it.)"
+        )
+    return value
+
+
 # ------------------------------------------------------------
-# IPC helpers
+# IPC helpers (mpv JSON IPC via socat)
 # ------------------------------------------------------------
 
-def _mpv_ipc(cmd: dict, timeout: float = 0.4):
-    if not SOCKET.exists():
+def _mpv_ipc(cmd: dict[str, Any], timeout: float = 0.4) -> dict[str, Any] | None:
+    """
+    Send a JSON IPC command to mpv. Returns parsed JSON response or None.
+    """
+    if not MPV_SOCKET.exists():
         return None
+
     try:
         proc = subprocess.run(
-            ["socat", "-", str(SOCKET)],
-            input=(json.dumps(cmd) + "\n").encode(),
+            ["socat", "-", str(MPV_SOCKET)],
+            input=(json.dumps(cmd) + "\n").encode("utf-8"),
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             timeout=timeout,
+            check=False,
         )
-        if proc.stdout:
-            return json.loads(proc.stdout.decode())
+        if not proc.stdout:
+            return None
+        return json.loads(proc.stdout.decode("utf-8", errors="replace"))
     except Exception:
-        pass
-    return None
+        return None
 
 
-def mpv_get(prop: str):
+def mpv_get(prop: str) -> Any:
     resp = _mpv_ipc({"command": ["get_property", prop]})
     if resp and resp.get("error") == "success":
         return resp.get("data")
     return None
 
 
-def mpv_set(prop: str, value):
+def mpv_command(*parts: Any) -> None:
+    _mpv_ipc({"command": list(parts)})
+
+
+def mpv_set_userdata(key: str, value: Any) -> None:
+    """
+    Store metadata into mpv user-data namespace. mpv-mpris reads user-data/*.
+    """
     if value is None:
         return
-    _mpv_ipc({
-        "command": ["set_property_string", f"user-data/{prop}", str(value)]
-    })
+    mpv_command("set_property_string", f"user-data/{key}", str(value))
 
 
-def _wait_for_ipc(timeout=2.0):
+def _wait_for_ipc(timeout: float = 2.0) -> bool:
     start = time.time()
     while time.time() - start < timeout:
-        if SOCKET.exists():
+        if MPV_SOCKET.exists():
             if _mpv_ipc({"command": ["get_property", "pid"]}):
                 return True
         time.sleep(0.05)
@@ -69,44 +106,45 @@ def _wait_for_ipc(timeout=2.0):
 
 
 # ------------------------------------------------------------
-# Metadata helpers
+# Metadata + enrichment
 # ------------------------------------------------------------
 
-def _parse_icy(title: str):
+def _parse_icy(title: str) -> tuple[str | None, str | None]:
     if not title or "-" not in title:
         return None, None
     artist, track = title.split("-", 1)
-    return artist.strip() or None, track.strip() or None
+    artist = artist.strip() or None
+    track = track.strip() or None
+    return artist, track
 
 
-def _apply_enrichment_now(artist: str | None, track: str, station_name: str):
+def _apply_enrichment_now(artist: str | None, track: str, station_name: str) -> None:
     meta = enrich.enrich_track(artist or "", track)
 
-    mpv_set("title", track)
+    mpv_set_userdata("title", track)
     if artist:
-        mpv_set("artist", artist)
+        mpv_set_userdata("artist", artist)
 
-    mpv_set("album", meta.get("album") or station_name)
+    mpv_set_userdata("album", meta.get("album") or station_name)
 
-    if meta.get("year"):
-        mpv_set("date", meta["year"])
+    year = meta.get("year")
+    if year:
+        mpv_set_userdata("date", year)
 
-    if meta.get("genres"):
-        mpv_set("genre", ", ".join(meta["genres"]))
+    genres = meta.get("genres")
+    if genres:
+        mpv_set_userdata("genre", ", ".join(genres))
 
 
-def _watch_metadata(station_name: str):
+def _watch_metadata(station_name: str) -> None:
     """
-    Poll MPV metadata and re-apply enrichment
-    whenever icy-title changes.
+    Poll MPV metadata and re-apply enrichment whenever icy-title changes.
     """
     _metadata_stop.clear()
-    last_seen = None
+    last_seen: str | None = None
 
-    # ask mpv to track metadata changes
-    _mpv_ipc({
-        "command": ["observe_property", 1, "metadata"]
-    })
+    # Ask mpv to observe metadata changes (harmless if repeated)
+    _mpv_ipc({"command": ["observe_property", 1, "metadata"]})
 
     while not _metadata_stop.is_set():
         meta = mpv_get("metadata")
@@ -114,6 +152,7 @@ def _watch_metadata(station_name: str):
             time.sleep(0.5)
             continue
 
+        # mpv returns metadata keys like "icy-title"
         icy = meta.get("icy-title") or meta.get("title")
         if icy and icy != last_seen:
             last_seen = icy
@@ -128,38 +167,61 @@ def _watch_metadata(station_name: str):
 # mpv lifecycle
 # ------------------------------------------------------------
 
-def _kill_existing():
+def _send_quit() -> None:
+    if not MPV_SOCKET.exists():
+        return
+    try:
+        # "quit" via JSON IPC (preferred)
+        _mpv_ipc({"command": ["quit"]}, timeout=0.3)
+    except Exception:
+        # fallback: raw command string is also accepted by mpv ipc in practice,
+        # but we keep it minimal.
+        pass
+
+
+def _cleanup_socket() -> None:
+    try:
+        if MPV_SOCKET.exists():
+            MPV_SOCKET.unlink()
+    except Exception:
+        pass
+
+
+def _kill_existing() -> None:
     global _metadata_thread
 
     _metadata_stop.set()
 
-    if SOCKET.exists():
-        try:
-            subprocess.run(
-                ["socat", "-", str(SOCKET)],
-                input=b"quit\n",
-                timeout=0.3,
-            )
-        except Exception:
-            pass
-        try:
-            SOCKET.unlink()
-        except Exception:
-            pass
+    # Ask nicely
+    _send_quit()
 
+    # Clean up socket (mpv sometimes leaves it behind)
+    _cleanup_socket()
+
+    # Last resort: kill mpv matching this socket path
     subprocess.run(
-        ["pkill", "-f", f"mpv.*{SOCKET}"],
+        ["pkill", "-f", f"mpv.*{MPV_SOCKET}"],
         stderr=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        check=False,
     )
 
     _metadata_thread = None
 
 
-def _spawn_mpv(url, *, video=False, preview=False):
-    args = [
+def _spawn_mpv(url: str, *, video: bool = False, preview: bool = False) -> None:
+    """
+    Start mpv detached, with IPC enabled and mpris plugin loaded.
+    """
+    mpris = _need_env("SQLCH_MPRIS_PLUGIN", MPRIS_PLUGIN)
+
+    # Ensure parent dir exists; mpv won't create it.
+    MPV_SOCKET.parent.mkdir(parents=True, exist_ok=True)
+
+    args: list[str] = [
         MPV_BIN,
-        f"--input-ipc-server={SOCKET}",
-        "--script=" + MPRIS_PLUGIN,
+        f"--input-ipc-server={MPV_SOCKET}",
+        f"--script={mpris}",
         "--idle=yes",
         "--force-window=no",
         "--no-terminal",
@@ -186,7 +248,7 @@ def _spawn_mpv(url, *, video=False, preview=False):
 # Public API
 # ------------------------------------------------------------
 
-def stop():
+def stop() -> None:
     global _current, _preview_timer
 
     if _preview_timer:
@@ -198,46 +260,55 @@ def stop():
     notify.notify("sqlch", "Playback stopped")
 
 
-def pause():
-    if SOCKET.exists():
+def pause() -> None:
+    if MPV_SOCKET.exists():
+        # cycle pause is simplest
         subprocess.run(
-            ["socat", "-", str(SOCKET)],
+            ["socat", "-", str(MPV_SOCKET)],
             input=b"cycle pause\n",
             timeout=0.2,
             stderr=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            check=False,
         )
 
 
-def play_station(station):
+def play_station(station: dict[str, Any]) -> None:
     global _current, _metadata_thread
 
-    if not station.get("url"):
+    url = station.get("url")
+    if not url:
         notify.notify("sqlch error", "Station missing URL")
         return
 
     stop()
-    notify.notify("Now Playing", station["name"])
-    _spawn_mpv(station["url"])
+    notify.notify("Now Playing", station.get("name", "Unknown Station"))
+    _spawn_mpv(url)
 
     _current = {"type": "station", "item": station}
-    library.record_play(station["id"])
 
+    # Persist play history
+    sid = station.get("id")
+    if sid is not None:
+        library.record_play(sid)
+
+    # Start metadata watcher once mpv IPC is ready
     if _wait_for_ipc():
         _metadata_thread = threading.Thread(
             target=_watch_metadata,
-            args=(station["name"],),
+            args=(station.get("name", "Station"),),
             daemon=True,
         )
         _metadata_thread.start()
 
 
-def preview(url, duration=12):
+def preview(url: str, duration: int = 12) -> None:
     global _preview_timer
 
     stop()
     _spawn_mpv(url, preview=True)
 
-    def _end_preview():
+    def _end_preview() -> None:
         stop()
 
     _preview_timer = threading.Timer(duration, _end_preview)
@@ -245,12 +316,12 @@ def preview(url, duration=12):
     _preview_timer.start()
 
 
-def current():
+def current() -> dict[str, Any] | None:
     return _current
 
 
-def status_string():
-    if SOCKET.exists():
+def status_string() -> str:
+    if MPV_SOCKET.exists():
         d = config.load()
         lp = d.get("last_played")
         if lp:

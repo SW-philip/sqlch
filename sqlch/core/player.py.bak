@@ -7,13 +7,16 @@ from pathlib import Path
 
 from sqlch.core import config, notify, enrich, library
 
-SOCKET = Path("/tmp/sqlch-mpv.sock")
+def _runtime_dir() -> Path:
+    base = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+    p = Path(base) / "sqlch"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+SOCKET = _runtime_dir() / "mpv.sock"
 MPV_BIN = os.environ.get("MPV_BIN", "mpv")
 
-MPRIS_PLUGIN = (
-    "/nix/store/jh3yklrqbzi8lv0765g332cs11wp91pm-mpv-mpris-1.1"
-    "/share/mpv/scripts/mpris.so"
-)
+MPRIS_PLUGIN = os.environ.get("SQLCH_MPRIS_PLUGIN")
 
 _current = None
 _preview_timer = None
@@ -67,14 +70,6 @@ def _wait_for_ipc(timeout=2.0):
         time.sleep(0.05)
     return False
 
-def mpris_set(metadata: dict):
-    _mpv_ipc({
-        "command": [
-            "script-message",
-            "mpris-set-metadata",
-            json.dumps(metadata),
-        ]
-    })
 
 # ------------------------------------------------------------
 # Metadata helpers
@@ -88,21 +83,20 @@ def _parse_icy(title: str):
 
 
 def _apply_enrichment_now(artist: str | None, track: str, station_name: str):
-    enriched = enrich.enrich_track(artist or "", track)
+    meta = enrich.enrich_track(artist or "", track)
 
-    meta = {
-        "xesam:title": track,
-        "xesam:artist": [artist] if artist else [],
-        "xesam:album": enriched.get("album") or station_name,
-    }
+    mpv_set("title", track)
+    if artist:
+        mpv_set("artist", artist)
 
-    if enriched.get("genres"):
-        meta["xesam:genre"] = enriched["genres"]
+    mpv_set("album", meta.get("album") or station_name)
 
-    if enriched.get("year"):
-        meta["xesam:contentCreated"] = enriched["year"]
+    if meta.get("year"):
+        mpv_set("date", meta["year"])
 
-    mpris_set(meta)
+    if meta.get("genres"):
+        mpv_set("genre", ", ".join(meta["genres"]))
+
 
 def _watch_metadata(station_name: str):
     """

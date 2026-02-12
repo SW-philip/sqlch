@@ -1,3 +1,5 @@
+# sqlch/cli/main.py
+
 import os
 import sys
 import json
@@ -7,11 +9,14 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from sqlch.core import player, library, discover
+from sqlch.core import client
+from sqlch.core.daemon import run_daemon
 
 
 HELP = """sqlch — radio + metadata orchestrator
 
 Usage:
+  sqlch daemon
   sqlch status
   sqlch play <id|name|index|url>
   sqlch play-last
@@ -29,7 +34,6 @@ Library:
 Discovery:
   sqlch search <query>
   sqlch preview <index|url>
-  sqlch import <stations.json>
 """
 
 
@@ -41,7 +45,7 @@ def main():
     argv = sys.argv[1:]
 
     if not argv:
-        print(player.status_string())
+        print(status())
         return
 
     if argv[0] in ("-h", "--help", "help"):
@@ -50,7 +54,10 @@ def main():
 
     cmd, *args = argv
 
-    # TUI is a mode, not a side script
+    if cmd == "daemon":
+        run_daemon()
+        return
+
     if cmd == "tui":
         from sqlch.tui.app import main as tui_main
         tui_main()
@@ -60,26 +67,55 @@ def main():
 
 
 # ------------------------------------------------------------
+# Utilities
+# ------------------------------------------------------------
+
+def daemon_call(payload: dict):
+    """
+    Send command to daemon if available.
+    Returns response dict or None if daemon not running.
+    """
+    if not client.daemon_available():
+        return None
+    return client.send(payload)
+
+
+def status():
+    resp = daemon_call({"cmd": "status"})
+    if resp:
+        return resp.get("status", "sqlch: unknown")
+    return player.status_string()
+
+
+# ------------------------------------------------------------
 # Command dispatch
 # ------------------------------------------------------------
 
 def dispatch_command(cmd: str, args: list[str]) -> None:
-    # ---------------- basic controls ----------------
+
+    # ---------------- status ----------------
 
     if cmd == "status":
-        print(player.status_string())
+        print(status())
         return
 
+    # ---------------- stop / pause ----------------
+
     if cmd == "stop":
-        player.stop()
+        if daemon_call({"cmd": "stop"}) is None:
+            player.stop()
         return
 
     if cmd == "pause":
-        player.pause()
+        if daemon_call({"cmd": "pause"}) is None:
+            player.pause()
         return
 
+    # ---------------- play-last ----------------
+
     if cmd == "play-last":
-        player.start_last()
+        if daemon_call({"cmd": "play", "query": "__last__"}) is None:
+            player.start_last()
         return
 
     # ---------------- play ----------------
@@ -125,7 +161,7 @@ def dispatch_command(cmd: str, args: list[str]) -> None:
 
 
 # ------------------------------------------------------------
-# Command implementations
+# Play logic
 # ------------------------------------------------------------
 
 def play_cmd(args: list[str]) -> None:
@@ -134,6 +170,16 @@ def play_cmd(args: list[str]) -> None:
         sys.exit(1)
 
     arg = args[0]
+
+    # If daemon exists, let it resolve + play
+    resp = daemon_call({"cmd": "play", "query": arg})
+    if resp:
+        if not resp.get("ok"):
+            print(resp.get("error", "play failed"), file=sys.stderr)
+            sys.exit(1)
+        return
+
+    # ---- Fallback (no daemon running) ----
 
     if arg.isdigit():
         results = discover.load_last_search()
@@ -151,13 +197,6 @@ def play_cmd(args: list[str]) -> None:
             tags=(st.get("tags") or "").split(",")
             if isinstance(st.get("tags"), str)
             else st.get("tags") or [],
-            source={
-                "type": "search",
-                "origin": "radio-browser",
-                "country": st.get("country"),
-                "codec": st.get("codec"),
-                "bitrate": st.get("bitrate"),
-            },
             allow_existing=True,
         )
 
@@ -173,7 +212,6 @@ def play_cmd(args: list[str]) -> None:
         station = library.add_station(
             name=urlparse(arg).netloc or arg,
             url=arg,
-            source={"type": "adhoc", "origin": "cli"},
             allow_existing=True,
         )
         player.play_station(station)
@@ -182,6 +220,10 @@ def play_cmd(args: list[str]) -> None:
     print(f"Could not resolve station: {arg}", file=sys.stderr)
     sys.exit(1)
 
+
+# ------------------------------------------------------------
+# Library
+# ------------------------------------------------------------
 
 def list_cmd() -> None:
     stations = library.list_stations()
@@ -214,7 +256,6 @@ def add_cmd(args: list[str]) -> None:
     url = args[0]
     name = urlparse(url).netloc or url
     st = library.add_station(name=name, url=url)
-
     print(f"Added station: {st['id']}")
 
 
@@ -254,6 +295,10 @@ def rm_cmd(args: list[str]) -> None:
         sys.exit(1)
 
 
+# ------------------------------------------------------------
+# Discovery
+# ------------------------------------------------------------
+
 def search_cmd(args: list[str]) -> None:
     if not args:
         print("Usage: sqlch search <query>", file=sys.stderr)
@@ -267,15 +312,12 @@ def search_cmd(args: list[str]) -> None:
         return
 
     for i, st in enumerate(results, 1):
-        country = st.get("country") or "-"
-        codec = st.get("codec") or "-"
-        bitrate = f"{st['bitrate']}kbps" if st.get("bitrate") else "-"
-        url = st.get("url") or "-"
-
         print(
             f"[{i:2}] {st.get('name', 'Unknown')}\n"
-            f"     {country} | {codec} {bitrate}\n"
-            f"     url: {url}\n"
+            f"     {st.get('country','-')} | "
+            f"{st.get('codec','-')} "
+            f"{st.get('bitrate','-')}kbps\n"
+            f"     url: {st.get('url','-')}\n"
         )
 
 
@@ -285,6 +327,12 @@ def preview_cmd(args: list[str]) -> None:
         sys.exit(1)
 
     arg = args[0]
+
+    # Prefer daemon
+    resp = daemon_call({"cmd": "preview", "url": arg})
+    if resp:
+        return
+
     if arg.isdigit():
         results = discover.load_last_search()
         idx = int(arg) - 1
