@@ -12,6 +12,7 @@ def _cache_dir():
         p.mkdir(parents=True, exist_ok=True)
         _CACHE_DIR = p
     return _CACHE_DIR
+
 import re
 import json
 import os
@@ -25,7 +26,7 @@ def _now() -> int:
     return int(time.time())
 
 def _ensure_dirs():
-    _data_dir.mkdir(parents=True, exist_ok=True)
+    _data_dir().mkdir(parents=True, exist_ok=True)
 
 def _atomic_write(path: Path, data: dict):
     tmp = path.with_suffix('.tmp')
@@ -62,12 +63,12 @@ def _normalize_station(st: dict) -> dict:
 
 def load() -> dict:
     _ensure_dirs()
-    if not _library_path.exists():
+    if not _library_path().exists():
         lib = _default_library()
-        _atomic_write(_library_path, lib)
+        _atomic_write(_library_path(), lib)
         return lib
     try:
-        lib = json.loads(_library_path.read_text())
+        lib = json.loads(_library_path().read_text())
     except Exception:
         lib = _default_library()
     lib.setdefault('version', LIBRARY_VERSION)
@@ -77,7 +78,7 @@ def load() -> dict:
 
 def save(lib: dict):
     _ensure_dirs()
-    _atomic_write(_library_path, lib)
+    _atomic_write(_library_path(), lib)
 
 def list_stations(category: Optional[str]=None) -> List[dict]:
     lib = load()
