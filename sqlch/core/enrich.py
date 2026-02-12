@@ -18,7 +18,9 @@ import requests
 from pathlib import Path
 from typing import Dict, Any
 from sqlch.core import spoti
-CACHE_FILE = CACHE_DIR / 'enriched.json'
+
+def _cache_file() -> Path:
+    return _cache_dir() / "enriched.json"
 
 def _now() -> int:
     return int(time.time())
@@ -34,12 +36,12 @@ def _empty_result(artist: str, track: str) -> Dict[str, Any]:
 
 def _load_cache() -> Dict[str, Any]:
     try:
-        return json.loads(CACHE_FILE.read_text())
+        return json.loads(_cache_file.read_text())
     except Exception:
         return {}
 
 def _save_cache(db: Dict[str, Any]) -> None:
-    CACHE_FILE.write_text(json.dumps(db, indent=2))
+    _cache_file.write_text(json.dumps(db, indent=2))
 
 def _enrich_musicbrainz(artist: str, track: str) -> Dict[str, Any]:
     result: Dict[str, Any] = {}

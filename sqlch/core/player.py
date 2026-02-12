@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # ------------------------------------------------------------
 # Lazy cache resolution (Nix-safe)
 # ------------------------------------------------------------
@@ -17,7 +19,6 @@ def _cache_dir():
         _CACHE_DIR = p
     return _CACHE_DIR
 
-from __future__ import annotations
 import json
 import os
 import subprocess
@@ -36,9 +37,16 @@ def runtime_dir() -> Path:
     p = Path(base) / 'sqlch'
     p.mkdir(parents=True, exist_ok=True)
     return p
-MPV_SOCKET: Path = runtime_dir() / 'mpv.sock'
-MPV_BIN: str = os.environ.get('MPV_BIN', 'mpv')
-MPRIS_PLUGIN: str | None = os.environ.get('SQLCH_MPRIS_PLUGIN')
+
+def mpv_socket() -> Path:
+    return runtime_dir() / "mpv.sock"
+
+def mpv_bin() -> str:
+    return os.environ.get("MPV_BIN", "mpv")
+
+def mpris_plugin() -> str | None:
+    return os.environ.get("SQLCH_MPRIS_PLUGIN")
+
 _current: dict[str, Any] | None = None
 _preview_timer: threading.Timer | None = None
 _metadata_thread: threading.Thread | None = None
@@ -53,10 +61,10 @@ def _mpv_ipc(cmd: dict[str, Any], timeout: float=0.4) -> dict[str, Any] | None:
     """
     Send a JSON IPC command to mpv. Returns parsed JSON response or None.
     """
-    if not MPV_SOCKET.exists():
+    if not _mpv_socket.exists():
         return None
     try:
-        proc = subprocess.run(['socat', '-', str(MPV_SOCKET)], input=(json.dumps(cmd) + '\n').encode('utf-8'), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=timeout, check=False)
+        proc = subprocess.run(['socat', '-', str(_mpv_socket)], input=(json.dumps(cmd) + '\n').encode('utf-8'), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=timeout, check=False)
         if not proc.stdout:
             return None
         return json.loads(proc.stdout.decode('utf-8', errors='replace'))
@@ -83,7 +91,7 @@ def mpv_set_userdata(key: str, value: Any) -> None:
 def _wait_for_ipc(timeout: float=2.0) -> bool:
     start = time.time()
     while time.time() - start < timeout:
-        if MPV_SOCKET.exists():
+        if _mpv_socket.exists():
             if _mpv_ipc({'command': ['get_property', 'pid']}):
                 return True
         time.sleep(0.05)
@@ -131,7 +139,7 @@ def _watch_metadata(station_name: str) -> None:
         time.sleep(0.5)
 
 def _send_quit() -> None:
-    if not MPV_SOCKET.exists():
+    if not _mpv_socket.exists():
         return
     try:
         _mpv_ipc({'command': ['quit']}, timeout=0.3)
@@ -140,8 +148,8 @@ def _send_quit() -> None:
 
 def _cleanup_socket() -> None:
     try:
-        if MPV_SOCKET.exists():
-            MPV_SOCKET.unlink()
+        if _mpv_socket.exists():
+            _mpv_socket.unlink()
     except Exception:
         pass
 
@@ -150,7 +158,7 @@ def _kill_existing() -> None:
     _metadata_stop.set()
     _send_quit()
     _cleanup_socket()
-    subprocess.run(['pkill', '-f', f'mpv.*{MPV_SOCKET}'], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, check=False)
+    subprocess.run(['pkill', '-f', f'mpv.*{_mpv_socket}'], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, check=False)
     _metadata_thread = None
 
 def _spawn_mpv(url: str, *, video: bool=False, preview: bool=False) -> None:
@@ -158,8 +166,8 @@ def _spawn_mpv(url: str, *, video: bool=False, preview: bool=False) -> None:
     Start mpv detached, with IPC enabled and mpris plugin loaded.
     """
     mpris = _need_env('SQLCH_MPRIS_PLUGIN', MPRIS_PLUGIN)
-    MPV_SOCKET.parent.mkdir(parents=True, exist_ok=True)
-    args: list[str] = [MPV_BIN, f'--input-ipc-server={MPV_SOCKET}', f'--script={mpris}', '--idle=yes', '--force-window=no', '--no-terminal', '--cache=yes']
+    _mpv_socket.parent.mkdir(parents=True, exist_ok=True)
+    args: list[str] = [MPV_BIN, f'--input-ipc-server={_mpv_socket}', f'--script={mpris}', '--idle=yes', '--force-window=no', '--no-terminal', '--cache=yes']
     if not video:
         args.append('--no-video')
     if preview:
@@ -177,8 +185,8 @@ def stop() -> None:
     notify.notify('sqlch', 'Playback stopped')
 
 def pause() -> None:
-    if MPV_SOCKET.exists():
-        subprocess.run(['socat', '-', str(MPV_SOCKET)], input=b'cycle pause\n', timeout=0.2, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, check=False)
+    if _mpv_socket.exists():
+        subprocess.run(['socat', '-', str(_mpv_socket)], input=b'cycle pause\n', timeout=0.2, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, check=False)
 
 def play_station(station: dict[str, Any]) -> None:
     global _current, _metadata_thread
@@ -212,7 +220,7 @@ def current() -> dict[str, Any] | None:
     return _current
 
 def status_string() -> str:
-    if MPV_SOCKET.exists():
+    if _mpv_socket.exists():
         d = config.load()
         lp = d.get('last_played')
         if lp:

@@ -12,30 +12,26 @@ def _cache_dir():
         p.mkdir(parents=True, exist_ok=True)
         _CACHE_DIR = p
     return _CACHE_DIR
-import requests
-import json
-import os
-from pathlib import Path
-from typing import List, Dict
-XDG_CACHE_HOME = Path(os.environ.get('XDG_CACHE_HOME', Path.home() / '.cache'))
-LAST_SEARCH = CACHE_DIR / 'last_search.json'
-BASE = 'https://de1.api.radio-browser.info/json'
 
-def search(query: str, limit: int=10):
-    params = {'name': query, 'limit': limit, 'hidebroken': 'true', 'order': 'votes', 'reverse': 'true'}
-    r = requests.get(f'{BASE}/stations/search', params=params, timeout=8)
-    r.raise_for_status()
-    results = []
-    for st in r.json():
-        results.append({'name': st.get('name'), 'url': st.get('url_resolved'), 'tags': st.get('tags'), 'country': st.get('country'), 'codec': st.get('codec'), 'bitrate': st.get('bitrate')})
-    return results
+import json
+import requests
+from typing import List, Dict
+from pathlib import Path
+
+# keep your existing _cache_dir() but use it
+def _last_search_path() -> Path:
+    return _cache_dir() / "last_search.json"
+
+BASE = "https://de1.api.radio-browser.info/json"
 
 def save_last_search(results: List[Dict]):
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    LAST_SEARCH.write_text(json.dumps(results, indent=2))
+    path = _last_search_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(results, indent=2))
 
 def load_last_search() -> List[Dict]:
+    path = _last_search_path()
     try:
-        return json.loads(LAST_SEARCH.read_text())
+        return json.loads(path.read_text())
     except Exception:
         return []
