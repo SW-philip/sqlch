@@ -8,7 +8,7 @@ python3Packages.buildPythonApplication {
     owner = "SW-philip";
     repo  = "sqlch";
     rev   = "840c9ff";  # pinned commit
-    sha256 = "sha256-9uZdlHjN4okjgvYgjfz8AzNdTjFP6Zi8j9px39o27WI=";
+    sha256 = lib.fakeSha256;
   };
 
   pyproject = true;
