@@ -26,7 +26,7 @@ def _now() -> int:
     return int(time.time())
 
 def _ensure_dirs():
-    _data_dir().mkdir(parents=True, exist_ok=True)
+    _data_dirs().mkdir(parents=True, exist_ok=True)
 
 def _atomic_write(path: Path, data: dict):
     tmp = path.with_suffix('.tmp')
