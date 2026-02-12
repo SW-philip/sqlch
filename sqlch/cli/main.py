@@ -150,14 +150,62 @@ def info_cmd(args: list[str]) -> None:
         sys.exit(1)
     print(json.dumps(st, indent=2))
 
-def add_cmd(args: list[str]) -> None:
+def add_cmd(args):
+    from sqlch.core import library, discover
+
     if not args:
-        print('Usage: sqlch add <url>', file=sys.stderr)
-        sys.exit(1)
-    url = args[0]
-    name = urlparse(url).netloc or url
+        print("Usage: sqlch add <number|name>")
+        return
+
+    query = " ".join(args)
+
+    results = discover.load_last_search()
+    if not results:
+        print("No recent search results found. Run `sqlch search` first.")
+        return
+
+    # -------------------------------------------------
+    # 1. Numeric selection
+    # -------------------------------------------------
+    if query.isdigit():
+        idx = int(query) - 1
+        if idx < 0 or idx >= len(results):
+            print("Invalid selection number.")
+            return
+        chosen = results[idx]
+
+    # -------------------------------------------------
+    # 2. Fuzzy name match
+    # -------------------------------------------------
+    else:
+        q = query.lower()
+        matches = [
+            r for r in results
+            if q in (r.get("name") or "").lower()
+        ]
+
+        if not matches:
+            print(f"No match found for '{query}'.")
+            return
+
+        if len(matches) > 1:
+            print("Multiple matches found:")
+            for i, m in enumerate(matches, 1):
+                print(f"  {i}. {m['name']}")
+            print("Be more specific.")
+            return
+
+        chosen = matches[0]
+
+    name = chosen.get("name")
+    url = chosen.get("url")
+
+    if not url:
+        print("Selected station has no valid URL.")
+        return
+
     st = library.add_station(name=name, url=url)
-    print(f"Added station: {st['id']}")
+    print(f"Added: {st['name']}")
 
 def edit_cmd(args: list[str]) -> None:
     if not args:
