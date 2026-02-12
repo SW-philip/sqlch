@@ -30,11 +30,11 @@ def _track_cache() -> Path:
     return _cache_dir() / "spotify_tracks.json"
 
 
-def __artist_cache() -> Path:
+def _artist_cache() -> Path:
     return _cache_dir() / "spotify_artists.json"
 
 
-def ___token_cache() -> Path:
+def _token_cache() -> Path:
     return _cache_dir() / "spotify_token.json"
 
 # ------------------------------------------------------------
@@ -73,9 +73,9 @@ def _save_json(path: Path, data: dict):
 # ------------------------------------------------------------
 
 def _get_token() -> Optional[str]:
-    if __token_cache().exists():
+    if TOKEN_CACHE.exists():
         try:
-            tok = json.loads(__token_cache().read_text())
+            tok = json.loads(TOKEN_CACHE.read_text())
             if tok.get("expires_at", 0) > time.time():
                 return tok["access_token"]
         except Exception:
@@ -97,7 +97,7 @@ def _get_token() -> Optional[str]:
     r.raise_for_status()
     tok = r.json()
     tok["expires_at"] = time.time() + tok["expires_in"] - 30
-    __token_cache().write_text(json.dumps(tok))
+    TOKEN_CACHE.write_text(json.dumps(tok))
     return tok["access_token"]
 
 
@@ -131,7 +131,7 @@ def _search_track(artist: str, track: str, token: str) -> Optional[dict]:
 
 
 def _artist_genres(artist_id: str, token: str) -> list[str]:
-    cache = _load_json(_artist_cache())
+    cache = _load_json(ARTIST_CACHE)
     if artist_id in cache:
         return cache[artist_id]["genres"]
 
@@ -147,7 +147,7 @@ def _artist_genres(artist_id: str, token: str) -> list[str]:
         "genres": genres,
         "ts": _now(),
     }
-    _save_json(_artist_cache(), cache)
+    _save_json(ARTIST_CACHE, cache)
     return genres
 
 
@@ -161,7 +161,7 @@ def enrich(artist: str, track: str) -> Optional[Dict[str, Any]]:
 
     Returns canonical enriched metadata or None if no confident match.
     """
-    cache = _load_json(_track_cache())
+    cache = _load_json(TRACK_CACHE)
     k = _key(artist, track)
 
     if k in cache:
@@ -194,6 +194,5 @@ def enrich(artist: str, track: str) -> Optional[Dict[str, Any]]:
     }
 
     cache[k] = enriched
-    _save_json(_track_cache(), cache)
+    _save_json(TRACK_CACHE, cache)
     return enriched
-WARNING: CACHE_DIR block not found.
