@@ -196,4 +196,3 @@ def enrich(artist: str, track: str) -> Optional[Dict[str, Any]]:
     cache[k] = enriched
     _save_json(_track_cache(), cache)
     return enriched
-WARNING: CACHE_DIR block not found.
