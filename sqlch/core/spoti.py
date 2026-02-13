@@ -21,7 +21,7 @@ def _cache_dir() -> Path:
 def _track_cache() -> Path:
     return _cache_dir() / 'spotify_tracks.json'
 
-def () -> Path:
+def _artist_cache() -> Path:
     return _cache_dir() / 'spotify_artists.json'
 
 def _token_cache() -> Path:
@@ -83,14 +83,27 @@ def _search_track(artist: str, track: str, token: str) -> Optional[dict]:
     return None
 
 def _artist_genres(artist_id: str, token: str) -> list[str]:
-    cache = _load_json(())
+    cache_path = _artist_cache()
+    cache = _load_json(cache_path)
+
     if artist_id in cache:
-        return cache[artist_id]['genres']
-    r = requests.get(f'https://api.spotify.com/v1/artists/{artist_id}', headers={'Authorization': f'Bearer {token}'}, timeout=8)
+        return cache[artist_id].get('genres', [])
+
+    r = requests.get(
+        f'https://api.spotify.com/v1/artists/{artist_id}',
+        headers={'Authorization': f'Bearer {token}'},
+        timeout=8,
+    )
     r.raise_for_status()
+
     genres = r.json().get('genres', [])
-    cache[artist_id] = {'genres': genres, 'ts': _now()}
-    _save_json((), cache)
+
+    cache[artist_id] = {
+        'genres': genres,
+        'ts': _now(),
+    }
+
+    _save_json(cache_path, cache)
     return genres
 
 def enrich(artist: str, track: str) -> Optional[Dict[str, Any]]:
