@@ -187,7 +187,11 @@ def _watch_metadata(station_name: str) -> None:
             last_seen = icy
             artist, track = _parse_icy(icy)
             if track:
-                _apply_enrichment_now(artist, track, station_name)
+                try:
+                    _apply_enrichment_now(artist, track, station_name)
+                except Exception as e:
+                    # optional: log once
+                    pass
 
         time.sleep(0.5)
 

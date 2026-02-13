@@ -21,10 +21,10 @@ def _cache_dir() -> Path:
 def _track_cache() -> Path:
     return _cache_dir() / 'spotify_tracks.json'
 
-def __artist_cache() -> Path:
+def () -> Path:
     return _cache_dir() / 'spotify_artists.json'
 
-def ___token_cache() -> Path:
+def _token_cache() -> Path:
     return _cache_dir() / 'spotify_token.json'
 
 def _now() -> int:
@@ -49,9 +49,9 @@ def _save_json(path: Path, data: dict):
     path.write_text(json.dumps(data, indent=2))
 
 def _get_token() -> Optional[str]:
-    if __token_cache().exists():
+    if _token_cache().exists():
         try:
-            tok = json.loads(__token_cache().read_text())
+            tok = json.loads(_token_cache().read_text())
             if tok.get('expires_at', 0) > time.time():
                 return tok['access_token']
         except Exception:
@@ -65,7 +65,7 @@ def _get_token() -> Optional[str]:
     r.raise_for_status()
     tok = r.json()
     tok['expires_at'] = time.time() + tok['expires_in'] - 30
-    __token_cache().write_text(json.dumps(tok))
+    _token_cache().write_text(json.dumps(tok))
     return tok['access_token']
 
 def _search_track(artist: str, track: str, token: str) -> Optional[dict]:
@@ -83,14 +83,14 @@ def _search_track(artist: str, track: str, token: str) -> Optional[dict]:
     return None
 
 def _artist_genres(artist_id: str, token: str) -> list[str]:
-    cache = _load_json(_artist_cache())
+    cache = _load_json(())
     if artist_id in cache:
         return cache[artist_id]['genres']
     r = requests.get(f'https://api.spotify.com/v1/artists/{artist_id}', headers={'Authorization': f'Bearer {token}'}, timeout=8)
     r.raise_for_status()
     genres = r.json().get('genres', [])
     cache[artist_id] = {'genres': genres, 'ts': _now()}
-    _save_json(_artist_cache(), cache)
+    _save_json((), cache)
     return genres
 
 def enrich(artist: str, track: str) -> Optional[Dict[str, Any]]:
