@@ -7,8 +7,13 @@ python3Packages.buildPythonApplication {
   src = fetchFromGitHub {
     owner = "SW-philip";
     repo  = "sqlch";
+<<<<<<< HEAD
     rev   = "840c9ff";
     sha256 = lib.fakeSha256;
+=======
+    rev   = "main";
+   sha256 = "lib.fakeSha256;"
+>>>>>>> 5d8091c (change sqlch/defualt.nix)
   };
 
   pyproject = true;
