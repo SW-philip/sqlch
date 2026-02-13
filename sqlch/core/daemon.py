@@ -71,6 +71,7 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
     return {'ok': False, 'error': f'unknown cmd: {cmd}'}
 
 def run_daemon():
+print("RUN_DAEMON ENTERED", CONTROL_SOCK, flush=True)
     try:
         if CONTROL_SOCK.exists():
             CONTROL_SOCK.unlink()
