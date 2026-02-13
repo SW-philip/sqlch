@@ -30,7 +30,9 @@ def runtime_dir() -> Path:
     p = Path(base) / 'sqlch'
     p.mkdir(parents=True, exist_ok=True)
     return p
-CONTROL_SOCK = runtime_dir() / 'control.sock'
+
+def control_sock() -> Path:
+    return runtime_dir() / "control.sock"
 
 def _reply(conn: socket.socket, obj: dict[str, Any]):
     data = (json.dumps(obj) + '\n').encode()
@@ -71,16 +73,20 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
     return {'ok': False, 'error': f'unknown cmd: {cmd}'}
 
 def run_daemon():
-print("RUN_DAEMON ENTERED", CONTROL_SOCK, flush=True)
+    sock = control_sock()
+    print("RUN_DAEMON ENTERED", sock, flush=True)
+
     try:
-        if CONTROL_SOCK.exists():
-            CONTROL_SOCK.unlink()
+        if sock.exists():
+            sock.unlink()
     except Exception:
         pass
+
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    srv.bind(str(CONTROL_SOCK))
-    os.chmod(CONTROL_SOCK, 384)
+    srv.bind(str(sock))
+    os.chmod(sock, 0o600)
     srv.listen(16)
+
     while True:
         conn, _ = srv.accept()
         try:
