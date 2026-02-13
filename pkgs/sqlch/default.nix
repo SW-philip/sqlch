@@ -7,7 +7,7 @@ python3Packages.buildPythonApplication {
   src = fetchFromGitHub {
     owner = "SW-philip";
     repo  = "sqlch";
-    rev   = "840c9ff";  # pinned commit
+    rev   = "840c9ff";
     sha256 = lib.fakeSha256;
   };
 
@@ -23,17 +23,19 @@ python3Packages.buildPythonApplication {
     textual
   ];
 
-  # Runtime tools sqlch shells out to
-  buildInputs = [
+  # Tools sqlch uses at runtime
+  runtimeDeps = [
     pkgs.mpv
     pkgs.socat
     pkgs.procps
     pkgs.mpvScripts.mpris
   ];
 
-  # Inject runtime paths cleanly (no hardcoded /nix/store in Python)
+  buildInputs = runtimeDeps;
+
   postFixup = ''
     wrapProgram $out/bin/sqlch \
+      --prefix PATH : ${lib.makeBinPath runtimeDeps} \
       --set MPV_BIN ${pkgs.mpv}/bin/mpv \
       --set SQLCH_MPRIS_PLUGIN ${pkgs.mpvScripts.mpris}/share/mpv/scripts/mpris.so
   '';
