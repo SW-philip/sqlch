@@ -36,12 +36,12 @@ def _empty_result(artist: str, track: str) -> Dict[str, Any]:
 
 def _load_cache() -> Dict[str, Any]:
     try:
-        return json.loads(_cache_file.read_text())
+        return json.loads(_cache_file().read_text())
     except Exception:
         return {}
 
 def _save_cache(db: Dict[str, Any]) -> None:
-    _cache_file.write_text(json.dumps(db, indent=2))
+    _cache_file().write_text(json.dumps(db, indent=2))
 
 def _enrich_musicbrainz(artist: str, track: str) -> Dict[str, Any]:
     result: Dict[str, Any] = {}
@@ -73,20 +73,34 @@ def enrich_track(artist: str, track: str) -> Dict[str, Any]:
     """
     db = _load_cache()
     key = _cache_key(artist, track)
+
     if key in db:
         cached = db[key]
-        cached['source'] = 'cache'
+        cached["source"] = "cache"
         return cached
+
     base = _empty_result(artist, track)
+
+    # --- Spotify first ---
     sp = spoti.enrich(artist, track)
     if sp:
-        base.update({'artist': sp['artist'], 'track': sp['track'], 'album': sp.get('album'), 'year': sp.get('year'), 'cover': sp.get('art_url'), 'genres': sp.get('genres', []), 'source': 'spotify'})
+        base.update({
+            "artist": sp["artist"],
+            "track": sp["track"],
+            "album": sp.get("album"),
+            "year": sp.get("year"),
+            "cover": sp.get("art_url"),
+            "genres": sp.get("genres", []),
+            "source": "spotify",
+        })
     else:
+        # --- MusicBrainz fallback ---
         mb = _enrich_musicbrainz(artist, track)
         for k, v in mb.items():
             if v is not None:
                 base[k] = v
-    base['ts'] = _now()
+
+    base["ts"] = _now()
     db[key] = base
     _save_cache(db)
     return base

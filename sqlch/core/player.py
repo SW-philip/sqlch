@@ -139,6 +139,11 @@ def _wait_for_ipc(timeout: float = 2.0) -> bool:
 # Metadata / enrichment
 # ------------------------------------------------------------
 
+def mpv_set_metadata(key: str, value: Any) -> None:
+    if value is None:
+        return
+    mpv_command("set_property_string", f"metadata/{key}", str(value))
+
 def _parse_icy(title: str) -> tuple[str | None, str | None]:
     if not title or "-" not in title:
         return (None, None)
@@ -151,17 +156,27 @@ def _parse_icy(title: str) -> tuple[str | None, str | None]:
 def _apply_enrichment_now(artist: str | None, track: str, station_name: str) -> None:
     meta = enrich.enrich_track(artist or "", track)
 
+    album = meta.get("album") or station_name
+    year = meta.get("year")
+    genres = meta.get("genres")
+
+    # --- canonical metadata (Waybar/MPRIS)
+    mpv_set_metadata("title", track)
+    if artist:
+        mpv_set_metadata("artist", artist)
+    mpv_set_metadata("album", album)
+    if year:
+        mpv_set_metadata("date", year)
+    if genres:
+        mpv_set_metadata("genre", ", ".join(genres))
+
+    # --- user-data (mpv-mpris compatibility)
     mpv_set_userdata("title", track)
     if artist:
         mpv_set_userdata("artist", artist)
-
-    mpv_set_userdata("album", meta.get("album") or station_name)
-
-    year = meta.get("year")
+    mpv_set_userdata("album", album)
     if year:
         mpv_set_userdata("date", year)
-
-    genres = meta.get("genres")
     if genres:
         mpv_set_userdata("genre", ", ".join(genres))
 
