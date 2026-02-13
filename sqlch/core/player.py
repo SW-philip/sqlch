@@ -189,8 +189,8 @@ def _watch_metadata(station_name: str) -> None:
             if track:
                 try:
                     _apply_enrichment_now(artist, track, station_name)
-                except Exception as e:
-                    # optional: log once
+                except Exception:
+                    # never kill metadata thread
                     pass
 
         time.sleep(0.5)
