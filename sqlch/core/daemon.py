@@ -54,15 +54,29 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
         q = (msg.get('query') or '').strip()
         if not q:
             return {'ok': False, 'error': 'missing query'}
-        st = library.resolve_station(q)
+
+        # Try library first
+        st = library.find_station(q)
+
+        # Fallback: discovery search
         if not st:
             results = discover.search(q)
             if len(results) == 1:
-                st = library.add_station(results[0])
+                st = library.add_station(
+                    name=results[0].get('name') or 'unknown',
+                    url=results[0].get('url'),
+                    allow_existing=True,
+                )
             else:
-                return {'ok': False, 'error': f'could not resolve: {q}', 'results': results[:10]}
+                return {
+                    'ok': False,
+                    'error': f'could not resolve: {q}',
+                    'results': results[:10],
+                }
+
         player.play_station(st)
         return {'ok': True, 'station': {'id': st.get('id'), 'name': st.get('name')}}
+
     if cmd == 'preview':
         url = (msg.get('url') or '').strip()
         if not url:
