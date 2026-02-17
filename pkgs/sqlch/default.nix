@@ -13,8 +13,9 @@ python3Packages.buildPythonApplication {
   src = fetchFromGitHub {
     owner = "SW-philip";
     repo  = "sqlch";
-    rev   = "main";
-    sha256 = "sha256-WHdASmHSWZDOI6+gIuyjlMa/b3DZEqk3fgpJlz+7Vkw=";
+    rev    = "08823869197e6a84334cccab269ecb84a66d8eaf";
+    sha256 = lib.fakeHash;
+
   };
   pyproject = true;
   nativeBuildInputs = with python3Packages; [ setuptools wheel ];

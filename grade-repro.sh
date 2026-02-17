@@ -158,17 +158,19 @@ done
 header "Runtime assumptions"
 ########################################
 
-# check if sqlch shells out to mpv by name (should use MPV_BIN)
-if grep -rn '"mpv"' sqlch/ 2>/dev/null | grep -v '__pycache__' | grep -q .; then
-  fail 'shellout to "mpv" by name found — should use os.environ["MPV_BIN"] instead:'
-  grep -rn '"mpv"' sqlch/ | grep -v '__pycache__' | sed 's/^/       /'
+# check if sqlch shells out to mpv by name without using MPV_BIN
+# allow os.environ.get("MPV_BIN", "mpv") — that's the correct fallback pattern
+BAD_MPV=$(grep -rn '"mpv"\|'"'mpv'" sqlch/ 2>/dev/null \
+  | grep -v '__pycache__' \
+  | grep -v '\.bak:' \
+  | grep -v 'environ.*MPV_BIN' \
+  | grep -v 'MPV_BIN.*mpv' \
+  || true)
+if echo "$BAD_MPV" | grep -q .; then
+  fail 'bare "mpv" shellout found without MPV_BIN fallback:'
+  echo "$BAD_MPV" | sed 's/^/       /'
 else
-  pass 'no bare "mpv" shellouts found'
-fi
-
-if grep -rn "'mpv'" sqlch/ 2>/dev/null | grep -v '__pycache__' | grep -q .; then
-  fail "shellout to 'mpv' by name found — should use MPV_BIN:"
-  grep -rn "'mpv'" sqlch/ | grep -v '__pycache__' | sed 's/^/       /'
+  pass 'mpv invocations use MPV_BIN with correct fallback'
 fi
 
 # check for os.system usage (harder to make reproducible than subprocess)
@@ -180,9 +182,9 @@ else
 fi
 
 # check for tempfile usage (fine, just flag for awareness)
-if grep -rn 'tempfile\|/tmp/' sqlch/ 2>/dev/null | grep -v '__pycache__' | grep -q .; then
+if grep -rn 'tempfile\|/tmp/' sqlch/ 2>/dev/null | grep -v '__pycache__' | grep -v '\.bak:' | grep -q .; then
   warn "tempfile or /tmp/ usage found — make sure cleanup is handled:"
-  grep -rn 'tempfile\|/tmp/' sqlch/ | grep -v '__pycache__' | sed 's/^/       /'
+  grep -rn 'tempfile\|/tmp/' sqlch/ | grep -v '__pycache__' | grep -v '\.bak:' | sed 's/^/       /'
 fi
 
 ########################################
