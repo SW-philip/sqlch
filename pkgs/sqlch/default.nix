@@ -7,7 +7,6 @@ python3Packages.buildPythonApplication {
   src = fetchFromGitHub {
     owner = "SW-philip";
     repo  = "sqlch";
-    rev   = "840c9ff";
     sha256 = lib.fakeSha256;
   };
 
