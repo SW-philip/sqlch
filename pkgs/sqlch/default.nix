@@ -14,7 +14,7 @@ python3Packages.buildPythonApplication {
     owner = "SW-philip";
     repo  = "sqlch";
     rev    = "08823869197e6a84334cccab269ecb84a66d8eaf";
-    sha256 = lib.fakeHash;
+    sha256 = "sha256-QkAvOUmenYME6Ev4Wzs+ggCbFJA6uLeOGeWi5ZSBsSA=";
 
   };
   pyproject = true;
