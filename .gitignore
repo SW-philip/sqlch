@@ -1,24 +1,67 @@
-# Python bytecode
+# ── Python ────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
-
-# Virtual environments / env files
-.env
-.envrc
-.venv/
-venv/
-
-# Build artifacts
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
 dist/
 build/
-*.egg-info/
+wheels/
+sdist/
+.eggs/
 
-# Caches
-.cache/
+# ── Virtual environments ───────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.env
+.envrc
+
+# ── Type checking / linting ────────────────────────────────────
 .mypy_cache/
+.dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# ── Testing ────────────────────────────────────────────────────
 .pytest_cache/
-result 
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.test
 
-# Editor / OS noise
+# ── Nix ───────────────────────────────────────────────────────
+result
+result-*
+.direnv/
+
+# ── Editor noise ───────────────────────────────────────────────
 .DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.kate-swp
 
+# ── Backups ────────────────────────────────────────────────────
+*.bak
+*.orig
+*.backup
+
+# ── Logs / runtime ────────────────────────────────────────────
+*.log
+*.pid
+*.sock
+
+# ── Secrets ───────────────────────────────────────────────────
+*.pem
+*.key
+*.crt
+secrets.*
