@@ -25,8 +25,6 @@ from sqlch.core import player, library
 
 
 class TransportBar(Static):
-    """Now-playing + transport controls shown in the sidebar."""
-
     DEFAULT_CSS = """
     TransportBar {
         height: auto;
@@ -34,29 +32,29 @@ class TransportBar(Static):
         padding: 1 1;
         margin-bottom: 1;
     }
-    TransportBar .transport-title {
-        color: $text-muted;
+    .transport-title {
+        color: $accent;
         text-style: bold;
     }
-    TransportBar .now-playing {
+    .now-playing {
         color: $success;
         text-style: italic;
+        margin-top: 1;
         margin-bottom: 1;
     }
-    TransportBar .transport-hint {
+    .transport-hint {
         color: $text-muted;
         text-style: dim;
     }
     """
 
-    now_playing: reactive[str] = reactive("stopped")
-
     def compose(self) -> ComposeResult:
         yield Label("Transport", classes="transport-title")
-        yield Label("", classes="now-playing", id="now-playing-label")
-        yield Label("p  pause    s  stop", classes="transport-hint")
-        yield Label("l  play-last         ", classes="transport-hint")
-        yield Label("+  vol+5   -  vol-5  ", classes="transport-hint")
+        yield Label("", id="now-playing-label", classes="now-playing")
+        yield Label("p  pause / resume", classes="transport-hint")
+        yield Label("s  stop",           classes="transport-hint")
+        yield Label("enter  play result", classes="transport-hint")
+        yield Label("a  add to library",  classes="transport-hint")
 
     def on_mount(self) -> None:
         self.refresh_status()
@@ -64,7 +62,7 @@ class TransportBar(Static):
 
     def refresh_status(self) -> None:
         try:
-            status = player.status() or "stopped"
+            status = player.status_string()
         except Exception:
             status = "stopped"
         self.query_one("#now-playing-label", Label).update(status)
@@ -77,25 +75,21 @@ class SQLCH(App):
     Screen {
         background: $surface;
     }
-
     #sidebar {
-        width: 30%;
+        width: 32%;
         border: round $primary;
         padding: 1 1;
     }
-
     #sidebar-label {
-        color: $text-muted;
+        color: $accent;
         text-style: bold;
         margin-bottom: 1;
     }
-
     #main {
-        width: 70%;
+        width: 68%;
         border: round $primary;
         padding: 1 1;
     }
-
     #status {
         margin-top: 1;
         height: 3;
@@ -103,22 +97,18 @@ class SQLCH(App):
         padding: 0 1;
         color: $success;
     }
-
     Input {
         margin-bottom: 1;
     }
     """
 
     BINDINGS = [
-        Binding("q", "quit", "Quit"),
-        Binding("p", "pause", "Pause"),
-        Binding("s", "stop", "Stop"),
-        Binding("l", "play_last", "Play Last"),
-        Binding("+", "vol_up", "Vol +5"),
-        Binding("-", "vol_down", "Vol -5"),
-        Binding("enter", "play", "Play"),
-        Binding("a", "add", "Add Selected"),
-        Binding("r", "refresh_library", "Refresh Library"),
+        Binding("q",     "quit",            "Quit"),
+        Binding("p",     "pause",           "Pause"),
+        Binding("s",     "stop",            "Stop"),
+        Binding("enter", "play",            "Play"),
+        Binding("a",     "add",             "Add Selected"),
+        Binding("r",     "refresh_library", "Refresh Library"),
     ]
 
     query: reactive[str] = reactive("")
@@ -154,8 +144,7 @@ class SQLCH(App):
         if not stations:
             return
         for st in stations:
-            label = f"{st['id']}  {st['name']}"
-            self.library_view.append(ListItem(Label(label)))
+            self.library_view.append(ListItem(Label(f"{st['id']}  {st['name']}")))
 
     def action_refresh_library(self) -> None:
         self.refresh_library()
@@ -188,22 +177,17 @@ class SQLCH(App):
             if not url:
                 continue
             name = (st.get("name") or "Unknown").strip()
-            codec = st.get("codec")
+            codec   = st.get("codec")
             bitrate = st.get("bitrate")
             country = st.get("country")
             label = name
-            if codec:
-                label += f" [{codec.upper()}]"
-            if bitrate:
-                label += f" {bitrate}k"
-            if country:
-                label += f" ({country})"
+            if codec:   label += f" [{codec.upper()}]"
+            if bitrate: label += f" {bitrate}k"
+            if country: label += f" ({country})"
             options.append((label, url))
             self._discover_results[url] = st
         self.results.set_options(options)
         self.set_status(f"Results: {len(options)}")
-
-    # ── transport actions ─────────────────────────────────────────────────────
 
     def action_pause(self) -> None:
         player.pause()
@@ -213,21 +197,9 @@ class SQLCH(App):
         player.stop()
         self.set_status("Stopped.")
 
-    def action_play_last(self) -> None:
-        player.play_last()
-        self.set_status("Playing last station.")
-
-    def action_vol_up(self) -> None:
-        player.volume("+5")
-        self.set_status("Volume +5")
-
-    def action_vol_down(self) -> None:
-        player.volume("-5")
-        self.set_status("Volume -5")
-
     def action_play(self) -> None:
         self._with_selected_station(
-            lambda url, st: player.play_url(url, name=st.get("name")),
+            lambda url, st: player.play_station(st),
             "Playing",
         )
 
@@ -265,7 +237,6 @@ class SQLCH(App):
 
 def main():
     SQLCH().run()
-
 
 if __name__ == "__main__":
     main()
