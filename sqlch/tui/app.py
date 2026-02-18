@@ -51,10 +51,12 @@ class TransportBar(Static):
     def compose(self) -> ComposeResult:
         yield Label("Transport", classes="transport-title")
         yield Label("", id="now-playing-label", classes="now-playing")
-        yield Label("p  pause / resume", classes="transport-hint")
-        yield Label("s  stop",           classes="transport-hint")
-        yield Label("enter  play result", classes="transport-hint")
-        yield Label("a  add to library",  classes="transport-hint")
+        yield Label("space  pause / resume",   classes="transport-hint")
+        yield Label("s      stop",             classes="transport-hint")
+        yield Label("enter  play highlighted", classes="transport-hint")
+        yield Label("p      preview (12s)",    classes="transport-hint")
+        yield Label("a      add to library",   classes="transport-hint")
+        yield Label("r      refresh library",  classes="transport-hint")
 
     def on_mount(self) -> None:
         self.refresh_status()
@@ -103,12 +105,13 @@ class SQLCH(App):
     """
 
     BINDINGS = [
-        Binding("q",     "quit",            "Quit"),
-        Binding("p",     "pause",           "Pause"),
-        Binding("s",     "stop",            "Stop"),
-        Binding("enter", "play",            "Play"),
-        Binding("a",     "add",             "Add Selected"),
-        Binding("r",     "refresh_library", "Refresh Library"),
+        Binding("q",      "quit",            "Quit"),
+        Binding("space",  "pause",           "Pause"),
+        Binding("s",      "stop",            "Stop"),
+        Binding("p",      "preview",         "Preview"),
+        Binding("enter",  "play",            "Play"),
+        Binding("a",      "add",             "Add Selected"),
+        Binding("r",      "refresh_library", "Refresh Library"),
     ]
 
     query: reactive[str] = reactive("")
@@ -189,6 +192,8 @@ class SQLCH(App):
         self.results.set_options(options)
         self.set_status(f"Results: {len(options)}")
 
+    # ── transport ─────────────────────────────────────────────────────────────
+
     def action_pause(self) -> None:
         player.pause()
         self.set_status("Paused / resumed.")
@@ -196,6 +201,22 @@ class SQLCH(App):
     def action_stop(self) -> None:
         player.stop()
         self.set_status("Stopped.")
+
+    def action_preview(self) -> None:
+        # preview only applies to discover results, not library
+        idx = self.results.highlighted
+        if idx is None or idx < 0:
+            self.set_status("Highlight a search result to preview.")
+            return
+        try:
+            url = list(self._discover_results)[idx]
+        except IndexError:
+            self.set_status("Selection out of range.")
+            return
+        st = self._discover_results.get(url)
+        name = st.get("name", "Unknown") if st else "Unknown"
+        player.preview(url)
+        self.set_status(f"Previewing (12s): {name}")
 
     def action_play(self) -> None:
         self._with_selected_station(
