@@ -34,12 +34,6 @@ def _cache_dir() -> Path:
 # ------------------------------------------------------------
 
 def runtime_dir() -> Path:
-    """
-    Per-user runtime directory.
-
-    Prefer XDG_RUNTIME_DIR (systemd user session),
-    fall back to /tmp for non-systemd shells.
-    """
     base = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
     p = Path(base) / "sqlch"
     p.mkdir(parents=True, exist_ok=True)
@@ -51,12 +45,10 @@ def mpv_socket() -> Path:
 
 
 def mpv_bin() -> str:
-    # Nix wrapper can export MPV_BIN; otherwise rely on PATH.
     return os.environ.get("MPV_BIN", "mpv")
 
 
 def mpris_plugin() -> str | None:
-    # Expect Nix wrapper to export this.
     return os.environ.get("SQLCH_MPRIS_PLUGIN")
 
 
@@ -77,18 +69,13 @@ _metadata_stop = threading.Event()
 
 
 # ------------------------------------------------------------
-# MPV IPC helpers (uses socat)
+# MPV IPC helpers
 # ------------------------------------------------------------
 
 def _mpv_ipc(cmd: dict[str, Any], timeout: float = 0.4) -> dict[str, Any] | None:
-    """
-    Send a JSON IPC command to mpv via its UNIX socket.
-    Returns parsed JSON response (if any) or None.
-    """
     sock = mpv_socket()
     if not sock.exists():
         return None
-
     try:
         proc = subprocess.run(
             ["socat", "-", str(sock)],
@@ -117,9 +104,6 @@ def mpv_command(*parts: Any) -> None:
 
 
 def mpv_set_userdata(key: str, value: Any) -> None:
-    """
-    Store metadata into mpv user-data namespace. mpv-mpris reads user-data/*.
-    """
     if value is None:
         return
     mpv_command("set_property_string", f"user-data/{key}", str(value))
@@ -136,6 +120,24 @@ def _wait_for_ipc(timeout: float = 2.0) -> bool:
 
 
 # ------------------------------------------------------------
+# Volume fade
+# ------------------------------------------------------------
+
+def _fade_volume(target: int, steps: int = 20, duration: float = 1.0) -> None:
+    """Gradually fade the main mpv volume to target over duration seconds."""
+    current_vol = mpv_get("volume")
+    if current_vol is None:
+        return
+    current_vol = float(current_vol)
+    step_size = (target - current_vol) / steps
+    delay = duration / steps
+    for _ in range(steps):
+        current_vol += step_size
+        mpv_command("set_property", "volume", max(0, min(100, int(current_vol))))
+        time.sleep(delay)
+
+
+# ------------------------------------------------------------
 # Metadata / enrichment
 # ------------------------------------------------------------
 
@@ -144,23 +146,20 @@ def mpv_set_metadata(key: str, value: Any) -> None:
         return
     mpv_command("set_property_string", f"metadata/{key}", str(value))
 
+
 def _parse_icy(title: str) -> tuple[str | None, str | None]:
     if not title or "-" not in title:
         return (None, None)
     artist, track = title.split("-", 1)
-    artist = artist.strip() or None
-    track = track.strip() or None
-    return (artist, track)
+    return (artist.strip() or None, track.strip() or None)
 
 
 def _apply_enrichment_now(artist: str | None, track: str, station_name: str) -> None:
     meta = enrich.enrich_track(artist or "", track)
-
     album = meta.get("album") or station_name
     year = meta.get("year")
     genres = meta.get("genres")
 
-    # --- canonical metadata (Waybar/MPRIS)
     mpv_set_metadata("title", track)
     if artist:
         mpv_set_metadata("artist", artist)
@@ -170,7 +169,6 @@ def _apply_enrichment_now(artist: str | None, track: str, station_name: str) -> 
     if genres:
         mpv_set_metadata("genre", ", ".join(genres))
 
-    # --- user-data (mpv-mpris compatibility)
     mpv_set_userdata("title", track)
     if artist:
         mpv_set_userdata("artist", artist)
@@ -182,13 +180,8 @@ def _apply_enrichment_now(artist: str | None, track: str, station_name: str) -> 
 
 
 def _watch_metadata(station_name: str) -> None:
-    """
-    Poll MPV metadata and re-apply enrichment whenever icy-title changes.
-    """
     _metadata_stop.clear()
     last_seen: str | None = None
-
-    # Ask mpv to start tracking; harmless if it ignores.
     _mpv_ipc({"command": ["observe_property", 1, "metadata"]})
 
     while not _metadata_stop.is_set():
@@ -196,7 +189,6 @@ def _watch_metadata(station_name: str) -> None:
         if not meta:
             time.sleep(0.5)
             continue
-
         icy = meta.get("icy-title") or meta.get("title")
         if icy and icy != last_seen:
             last_seen = icy
@@ -205,9 +197,7 @@ def _watch_metadata(station_name: str) -> None:
                 try:
                     _apply_enrichment_now(artist, track, station_name)
                 except Exception:
-                    # never kill metadata thread
                     pass
-
         time.sleep(0.5)
 
 
@@ -216,7 +206,6 @@ def _watch_metadata(station_name: str) -> None:
 # ------------------------------------------------------------
 
 def _send_quit() -> None:
-    # Important: mpv_socket() is a function.
     if not mpv_socket().exists():
         return
     try:
@@ -235,16 +224,10 @@ def _cleanup_socket() -> None:
 
 
 def _kill_existing() -> None:
-    """
-    Try to gracefully quit mpv via IPC, then clean up stale socket,
-    then pkill any mpv process still holding that socket path.
-    """
     global _metadata_thread
-
     _metadata_stop.set()
     _send_quit()
     _cleanup_socket()
-
     sock = mpv_socket()
     subprocess.run(
         ["pkill", "-f", f"mpv.*{sock}"],
@@ -256,11 +239,7 @@ def _kill_existing() -> None:
 
 
 def _spawn_mpv(url: str, *, video: bool = False, preview: bool = False) -> None:
-    """
-    Start mpv detached, with IPC enabled and MPRIS plugin loaded.
-    """
     mpris = _need_env("SQLCH_MPRIS_PLUGIN", mpris_plugin())
-
     sock = mpv_socket()
     sock.parent.mkdir(parents=True, exist_ok=True)
 
@@ -273,12 +252,10 @@ def _spawn_mpv(url: str, *, video: bool = False, preview: bool = False) -> None:
         "--no-terminal",
         "--cache=yes",
     ]
-
     if not video:
         args.append("--no-video")
     if preview:
         args.append("--volume=60")
-
     args.append(url)
 
     subprocess.Popen(
@@ -296,11 +273,9 @@ def _spawn_mpv(url: str, *, video: bool = False, preview: bool = False) -> None:
 
 def stop() -> None:
     global _current, _preview_timer
-
     if _preview_timer:
         _preview_timer.cancel()
         _preview_timer = None
-
     _kill_existing()
     _current = None
     notify.notify("sqlch", "Playback stopped")
@@ -310,8 +285,6 @@ def pause() -> None:
     sock = mpv_socket()
     if not sock.exists():
         return
-
-    # mpv also accepts command mode text over IPC; this is fine.
     try:
         subprocess.run(
             ["socat", "-", str(sock)],
@@ -335,7 +308,6 @@ def play_station(station: dict[str, Any]) -> None:
 
     stop()
     notify.notify("Now Playing", station.get("name", "Unknown Station"))
-
     _spawn_mpv(url)
     _current = {"type": "station", "item": station}
 
@@ -352,18 +324,65 @@ def play_station(station: dict[str, Any]) -> None:
         _metadata_thread.start()
 
 
-def preview(url: str, duration: int = 12) -> None:
+def preview(url: str, duration: int = 10) -> None:
+    """
+    Preview a station URL for `duration` seconds.
+
+    If a station is currently playing:
+      - fade main volume down to 20% over 1s
+      - play preview in a separate mpv process at 80% volume
+      - when preview ends, fade main volume back to 100% over 1s
+
+    If nothing is playing:
+      - play preview normally and stop after duration seconds
+    """
     global _preview_timer
 
-    stop()
-    _spawn_mpv(url, preview=True)
+    # cancel any existing simple preview timer
+    if _preview_timer:
+        _preview_timer.cancel()
+        _preview_timer = None
 
-    def _end_preview() -> None:
+    was_playing = _current is not None and mpv_socket().exists()
+
+    if was_playing:
+        def _ducked_preview() -> None:
+            # fade main stream down
+            _fade_volume(20, steps=20, duration=1.0)
+
+            # play preview in a bare mpv (no IPC, no script, just audio)
+            proc = subprocess.Popen(
+                [
+                    mpv_bin(),
+                    "--no-video",
+                    "--no-terminal",
+                    "--volume=80",
+                    f"--length={duration}",
+                    url,
+                ],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            proc.wait()  # blocks until preview finishes or is killed
+
+            # fade main stream back up
+            _fade_volume(100, steps=20, duration=1.0)
+
+        t = threading.Thread(target=_ducked_preview, daemon=True)
+        t.start()
+
+    else:
+        # nothing playing — standard preview
         stop()
+        _spawn_mpv(url, preview=True)
 
-    _preview_timer = threading.Timer(duration, _end_preview)
-    _preview_timer.daemon = True
-    _preview_timer.start()
+        def _end_preview() -> None:
+            stop()
+
+        _preview_timer = threading.Timer(duration, _end_preview)
+        _preview_timer.daemon = True
+        _preview_timer.start()
 
 
 def current() -> dict[str, Any] | None:

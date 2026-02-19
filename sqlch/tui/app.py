@@ -51,12 +51,12 @@ class TransportBar(Static):
     def compose(self) -> ComposeResult:
         yield Label("Transport", classes="transport-title")
         yield Label("", id="now-playing-label", classes="now-playing")
-        yield Label("space  pause / resume",   classes="transport-hint")
-        yield Label("s      stop",             classes="transport-hint")
-        yield Label("enter  play highlighted", classes="transport-hint")
-        yield Label("p      preview (12s)",    classes="transport-hint")
-        yield Label("a      add to library",   classes="transport-hint")
-        yield Label("r      refresh library",  classes="transport-hint")
+        yield Label("space  pause / resume",      classes="transport-hint")
+        yield Label("s      stop",                classes="transport-hint")
+        yield Label("enter  play highlighted",    classes="transport-hint")
+        yield Label("p      preview (ducks 10s)", classes="transport-hint")
+        yield Label("a      add to library",      classes="transport-hint")
+        yield Label("r      refresh library",     classes="transport-hint")
 
     def on_mount(self) -> None:
         self.refresh_status()
@@ -203,7 +203,6 @@ class SQLCH(App):
         self.set_status("Stopped.")
 
     def action_preview(self) -> None:
-        # preview only applies to discover results, not library
         idx = self.results.highlighted
         if idx is None or idx < 0:
             self.set_status("Highlight a search result to preview.")
@@ -215,8 +214,12 @@ class SQLCH(App):
             return
         st = self._discover_results.get(url)
         name = st.get("name", "Unknown") if st else "Unknown"
-        player.preview(url)
-        self.set_status(f"Previewing (12s): {name}")
+        currently = player.current()
+        player.preview(url, duration=10)
+        if currently:
+            self.set_status(f"Ducking & previewing (10s): {name}")
+        else:
+            self.set_status(f"Previewing (10s): {name}")
 
     def action_play(self) -> None:
         self._with_selected_station(
