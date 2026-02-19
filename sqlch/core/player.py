@@ -325,20 +325,8 @@ def play_station(station: dict[str, Any]) -> None:
 
 
 def preview(url: str, duration: int = 10) -> None:
-    """
-    Preview a station URL for `duration` seconds.
-
-    If a station is currently playing:
-      - fade main volume down to 20% over 1s
-      - play preview in a separate mpv process at 80% volume
-      - when preview ends, fade main volume back to 100% over 1s
-
-    If nothing is playing:
-      - play preview normally and stop after duration seconds
-    """
     global _preview_timer
 
-    # cancel any existing simple preview timer
     if _preview_timer:
         _preview_timer.cancel()
         _preview_timer = None
@@ -347,33 +335,28 @@ def preview(url: str, duration: int = 10) -> None:
 
     if was_playing:
         def _ducked_preview() -> None:
-            # fade main stream down
             _fade_volume(20, steps=20, duration=1.0)
 
-            # play preview in a bare mpv (no IPC, no script, just audio)
+            # use ffplay instead of mpv — won't touch mpv socket or conflict
             proc = subprocess.Popen(
                 [
-                    mpv_bin(),
-                    "--no-video",
-                    "--no-terminal",
-                    "--volume=80",
-                    f"--length={duration}",
+                    "ffplay",
+                    "-nodisp",
+                    "-autoexit",
+                    "-loglevel", "quiet",
+                    "-t", str(duration),
                     url,
                 ],
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            proc.wait()  # blocks until preview finishes or is killed
-
-            # fade main stream back up
+            proc.wait()
             _fade_volume(100, steps=20, duration=1.0)
 
-        t = threading.Thread(target=_ducked_preview, daemon=True)
-        t.start()
+        threading.Thread(target=_ducked_preview, daemon=True).start()
 
     else:
-        # nothing playing — standard preview
         stop()
         _spawn_mpv(url, preview=True)
 
