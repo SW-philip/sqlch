@@ -218,3 +218,25 @@ def record_play(station_id: str):
             st["play_count"] += 1
             save(lib)
             return
+
+
+def add_discovered_station(st: dict) -> dict:
+    """Add a station dict returned by RadioBrowser discovery to the library."""
+    tags = st.get("tags") or ""
+    if isinstance(tags, str):
+        tags = [t.strip() for t in tags.split(",") if t.strip()]
+
+    return add_station(
+        name=st.get("name") or "Unknown",
+        url=st["url"],
+        tags=tags,
+        stream={
+            "codec": st.get("codec"),
+            "bitrate": st.get("bitrate"),
+            "country": st.get("country"),
+            "validated": False,
+            "last_checked": None,
+        },
+        source={"type": "radiobrowser", "origin": st.get("url")},
+        allow_existing=True,
+    )
