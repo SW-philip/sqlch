@@ -248,6 +248,7 @@ def _spawn_mpv(url: str, *, video: bool = False, preview: bool = False) -> None:
         f"--input-ipc-server={sock}",
         f"--script={mpris}",
         "--idle=yes",
+        "--keep-open=yes",
         "--force-window=no",
         "--no-terminal",
         "--cache=yes",
