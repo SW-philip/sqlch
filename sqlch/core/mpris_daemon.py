@@ -27,7 +27,7 @@ from sqlch.core.player import mpv_socket
 # Constants
 # ---------------------------------------------------------------------------
 
-MPV_SOCKET = _mpv_socket()
+MPV_SOCKET = mpv_socket()
 BUS_NAME   = "org.mpris.MediaPlayer2.sqlch"
 OBJ_PATH   = "/org/mpris/MediaPlayer2"
 
