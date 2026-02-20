@@ -103,8 +103,15 @@ def _to_variant(value: Any) -> GLib.Variant:
 
 
 def dict_to_a_sv(d: Dict[str, Any]) -> GLib.Variant:
-    """Convert a Python dict to a GLib a{sv} Variant, skipping None values."""
-    return V("a{sv}", {k: _to_variant(v) for k, v in d.items() if v is not None})
+    out = {}
+    for k, v in d.items():
+        if v is None:
+            continue
+        if k == "mpris:trackid":
+            out[k] = V("o", v)
+        else:
+            out[k] = _to_variant(v)
+    return V("a{sv}", out)
 
 
 def wrap_metadata(meta: Dict[str, Any]) -> GLib.Variant:
