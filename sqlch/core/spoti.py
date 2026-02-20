@@ -104,7 +104,7 @@ def _artist_genres(artist_id: str, token: str) -> list[str]:
     }
 
     _save_json(cache_path, cache)
-    return genres2
+    return genres
 
 def enrich(artist: str, track: str) -> Optional[Dict[str, Any]]:
     """
