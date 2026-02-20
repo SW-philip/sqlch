@@ -256,6 +256,8 @@ class SQLCHMPRIS:
                 props[attr] = _to_variant(val)
         return props
 
+    def Introspect(self):
+        return MPRIS_XML
     # --- Player properties ---
 
     @property
