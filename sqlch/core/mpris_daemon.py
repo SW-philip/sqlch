@@ -77,6 +77,11 @@ MPRIS_XML = """
     <property name="Volume"         type="d"  access="readwrite"/>
     <property name="Position"       type="x"  access="read"/>
     <property name="CanControl"     type="b"  access="read"/>
+    <property type="b" name="CanPlay"     access="read"/>
+    <property type="b" name="CanPause"    access="read"/>
+    <property type="b" name="CanSeek"     access="read"/>
+    <property type="b" name="CanGoNext"   access="read"/>
+    <property type="b" name="CanGoPrevious" access="read"/>
   </interface>
 </node>
 """
@@ -214,7 +219,11 @@ class SQLCHMPRIS:
     SupportedUriSchemes = ["http", "https"]
     SupportedMimeTypes  = ["audio/mpeg", "audio/ogg", "audio/aac"]
     CanControl          = True
-
+    CanPlay             = True
+    CanPause            = True
+    CanSeek             = False
+    CanGoNext           = False
+    CanGoPrevious       = False
     def __init__(self) -> None:
         self._playback_status: str = "Stopped"
         self._metadata: Dict[str, Any] = {}
