@@ -12,27 +12,66 @@ def _cache_dir():
         p.mkdir(parents=True, exist_ok=True)
         _CACHE_DIR = p
     return _CACHE_DIR
+
+
 import time
 import json
 import requests
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+
 from sqlch.core import spoti
+
+
+# How long before a cached result is considered stale (30 days)
+CACHE_TTL = 60 * 60 * 24 * 30
+
+# Fields that represent "quality" — more filled = better result
+_QUALITY_FIELDS = ('album', 'year', 'cover', 'genres', 'isrc')
+
 
 def _cache_file() -> Path:
     return _cache_dir() / "enriched.json"
 
+
 def _now() -> int:
     return int(time.time())
+
 
 def _norm(s: str) -> str:
     return ' '.join(s.lower().strip().split())
 
+
 def _cache_key(artist: str, track: str) -> str:
     return f'{_norm(artist)}::{_norm(track)}'
 
+
 def _empty_result(artist: str, track: str) -> Dict[str, Any]:
-    return {'artist': artist, 'track': track, 'album': None, 'year': None, 'cover': None, 'genres': [], 'source': 'unknown', 'ts': _now()}
+    return {
+        'artist': artist,
+        'track': track,
+        'album': None,
+        'year': None,
+        'cover': None,
+        'genres': [],
+        'source': 'unknown',
+        'ts': _now(),
+    }
+
+
+def _quality_score(result: Dict[str, Any]) -> int:
+    """Count how many quality fields are populated."""
+    score = 0
+    for f in _QUALITY_FIELDS:
+        v = result.get(f)
+        if v and v != [] and v != '':
+            score += 1
+    return score
+
+
+def _is_stale(result: Dict[str, Any]) -> bool:
+    return (_now() - result.get('ts', 0)) > CACHE_TTL
+
 
 def _load_cache() -> Dict[str, Any]:
     try:
@@ -40,18 +79,30 @@ def _load_cache() -> Dict[str, Any]:
     except Exception:
         return {}
 
+
 def _save_cache(db: Dict[str, Any]) -> None:
     _cache_file().write_text(json.dumps(db, indent=2))
+
 
 def _enrich_musicbrainz(artist: str, track: str) -> Dict[str, Any]:
     result: Dict[str, Any] = {}
     try:
-        r = requests.get('https://musicbrainz.org/ws/2/recording/', params={'query': f'artist:"{artist}" AND recording:"{track}"', 'fmt': 'json', 'limit': 1}, headers={'User-Agent': 'sqlch/1.0'}, timeout=8)
+        r = requests.get(
+            'https://musicbrainz.org/ws/2/recording/',
+            params={
+                'query': f'artist:"{artist}" AND recording:"{track}"',
+                'fmt': 'json',
+                'limit': 1,
+            },
+            headers={'User-Agent': 'sqlch/1.0'},
+            timeout=8,
+        )
         r.raise_for_status()
         data = r.json()
         recs = data.get('recordings') or []
         if not recs:
             return result
+
         rec = recs[0]
         releases = rec.get('releases') or []
         if releases:
@@ -59,48 +110,103 @@ def _enrich_musicbrainz(artist: str, track: str) -> Dict[str, Any]:
             result['album'] = rel.get('title')
             if rel.get('date'):
                 result['year'] = rel['date'].split('-')[0]
+
+        # Fetch genres/tags from the recording itself
+        genres = _mb_genres_for_recording(rec.get('id'))
+        if genres:
+            result['genres'] = genres
+
         result['source'] = 'musicbrainz'
+
     except Exception:
         pass
+
     return result
+
+
+def _mb_genres_for_recording(recording_id: Optional[str]) -> list:
+    """Fetch MusicBrainz tags for a recording and return the top genre tags."""
+    if not recording_id:
+        return []
+    try:
+        r = requests.get(
+            f'https://musicbrainz.org/ws/2/recording/{recording_id}',
+            params={'fmt': 'json', 'inc': 'tags+genres'},
+            headers={'User-Agent': 'sqlch/1.0'},
+            timeout=8,
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        # Prefer explicit genres, fall back to tags
+        genres = [g['name'] for g in (data.get('genres') or []) if g.get('count', 0) > 0]
+        if not genres:
+            genres = [t['name'] for t in (data.get('tags') or []) if t.get('count', 0) > 0]
+
+        # Sort by vote count descending, cap at 5
+        genres_with_votes = [
+            g for g in (data.get('genres') or data.get('tags') or [])
+            if g.get('count', 0) > 0
+        ]
+        genres_with_votes.sort(key=lambda g: g.get('count', 0), reverse=True)
+        return [g['name'] for g in genres_with_votes[:5]]
+
+    except Exception:
+        return []
+
 
 def enrich_track(artist: str, track: str) -> Dict[str, Any]:
     """
     Enrich track metadata using:
-      1. Local enriched cache
+      1. Local enriched cache (skipped if stale)
       2. Spotify backend (spoti.py)
       3. MusicBrainz fallback
+
+    Cache is refreshed when:
+      - The entry is older than CACHE_TTL (30 days)
+      - The fresh result has a higher quality score (more fields populated)
     """
     db = _load_cache()
     key = _cache_key(artist, track)
+    cached = db.get(key)
 
-    if key in db:
-        cached = db[key]
-        cached["source"] = "cache"
+    # Return cache hit if fresh
+    if cached and not _is_stale(cached):
+        cached['source'] = 'cache'
         return cached
 
+    # Fetch fresh result
     base = _empty_result(artist, track)
 
-    # --- Spotify first ---
     sp = spoti.enrich(artist, track)
     if sp:
         base.update({
-            "artist": sp["artist"],
-            "track": sp["track"],
-            "album": sp.get("album"),
-            "year": sp.get("year"),
-            "cover": sp.get("art_url"),
-            "genres": sp.get("genres", []),
-            "source": "spotify",
+            'artist':  sp['artist'],
+            'track':   sp['track'],
+            'album':   sp.get('album'),
+            'year':    sp.get('year'),
+            'cover':   sp.get('art_url'),
+            'genres':  sp.get('genres', []),
+            'source':  'spotify',
         })
     else:
-        # --- MusicBrainz fallback ---
         mb = _enrich_musicbrainz(artist, track)
         for k, v in mb.items():
             if v is not None:
                 base[k] = v
 
-    base["ts"] = _now()
-    db[key] = base
-    _save_cache(db)
+    base['ts'] = _now()
+
+    # Only overwrite cache if fresh result is at least as good
+    if cached is None or _quality_score(base) >= _quality_score(cached):
+        db[key] = base
+        _save_cache(db)
+    else:
+        # Keep the richer cached result but reset its TTL so we don't keep retrying
+        cached['ts'] = _now()
+        db[key] = cached
+        _save_cache(db)
+        cached['source'] = 'cache'
+        return cached
+
     return base
