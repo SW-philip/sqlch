@@ -21,12 +21,13 @@ from pydbus import SessionBus
 from pydbus.generic import signal
 
 from sqlch.core import enrich
+from sqlch.core.player import mpv_socket
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-MPV_SOCKET = Path("/tmp/sqlch-mpv.sock")
+MPV_SOCKET = _mpv_socket()
 BUS_NAME   = "org.mpris.MediaPlayer2.sqlch"
 OBJ_PATH   = "/org/mpris/MediaPlayer2"
 
