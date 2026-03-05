@@ -86,6 +86,28 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
         return {'ok': True}
     return {'ok': False, 'error': f'unknown cmd: {cmd}'}
 
+    if cmd == 'next':
+        current = player.current()
+        if current:
+            sid = current.get('item', {}).get('id')
+            st = library.next_station(sid)
+        else:
+            st = library.list_stations()[0] if library.list_stations() else None
+        if st:
+            player.play_station(st)
+        return {'ok': True}
+
+    if cmd == 'prev':
+        current = player.current()
+        if current:
+            sid = current.get('item', {}).get('id')
+            st = library.prev_station(sid)
+        else:
+            st = library.list_stations()[-1] if library.list_stations() else None
+        if st:
+            player.play_station(st)
+    return {'ok': True}
+
 def run_daemon():
     sock = control_sock()
     print("RUN_DAEMON ENTERED", sock, flush=True)

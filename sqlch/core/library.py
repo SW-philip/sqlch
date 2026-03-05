@@ -89,6 +89,21 @@ def _normalize_station(st: dict) -> dict:
     )
     return st
 
+def next_station(current_id: str) -> Optional[dict]:
+    stations = list_stations()
+    ids = [s["id"] for s in stations]
+    if current_id not in ids:
+        return stations[0] if stations else None
+    idx = (ids.index(current_id) + 1) % len(stations)
+    return stations[idx]
+
+def prev_station(current_id: str) -> Optional[dict]:
+    stations = list_stations()
+    ids = [s["id"] for s in stations]
+    if current_id not in ids:
+        return stations[-1] if stations else None
+    idx = (ids.index(current_id) - 1) % len(stations)
+    return stations[idx]
 
 # ------------------------------------------------------------
 # Public API
