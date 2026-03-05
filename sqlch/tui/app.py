@@ -1,26 +1,13 @@
 # sqlch/sqlch/tui/app.py
 
-_CACHE_DIR = None
-
-def _cache_dir():
-    global _CACHE_DIR
-    if _CACHE_DIR is None:
-        import os
-        from pathlib import Path
-        base = os.environ.get("XDG_CACHE_HOME")
-        if not base:
-            base = str(Path.home() / ".cache")
-        p = Path(base) / "sqlch"
-        p.mkdir(parents=True, exist_ok=True)
-        _CACHE_DIR = p
-    return _CACHE_DIR
-
 import threading
+
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Header, Footer, Input, ListView, ListItem, Label, SelectionList, Static
 from textual.binding import Binding
 from textual.reactive import reactive
+
 from sqlch.core.discover import search as rb_search
 from sqlch.core import player, library
 
@@ -217,7 +204,7 @@ class SQLCH(App):
             url = st.get("url")
             if not url:
                 continue
-            name = (st.get("name") or "Unknown").strip()
+            name    = (st.get("name") or "Unknown").strip()
             codec   = st.get("codec")
             bitrate = st.get("bitrate")
             country = st.get("country")
@@ -304,6 +291,7 @@ class SQLCH(App):
 
 def main():
     SQLCH().run()
+
 
 if __name__ == "__main__":
     main()

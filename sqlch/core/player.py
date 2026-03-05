@@ -8,37 +8,13 @@ import time
 from pathlib import Path
 from typing import Any
 
-from sqlch.core import config, enrich, library, notify
-
-# ------------------------------------------------------------
-# Lazy cache resolution (Nix-safe)
-# ------------------------------------------------------------
-
-_CACHE_DIR: Path | None = None
-
-
-def _cache_dir() -> Path:
-    global _CACHE_DIR
-    if _CACHE_DIR is None:
-        base = os.environ.get("XDG_CACHE_HOME")
-        if not base:
-            base = str(Path.home() / ".cache")
-        p = Path(base) / "sqlch"
-        p.mkdir(parents=True, exist_ok=True)
-        _CACHE_DIR = p
-    return _CACHE_DIR
+from sqlch.core import enrich, library, notify
+from sqlch.core.paths import runtime_dir
 
 
 # ------------------------------------------------------------
 # Runtime + mpv plumbing
 # ------------------------------------------------------------
-
-def runtime_dir() -> Path:
-    base = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
-    p = Path(base) / "sqlch"
-    p.mkdir(parents=True, exist_ok=True)
-    return p
-
 
 def mpv_socket() -> Path:
     return runtime_dir() / "mpv.sock"
@@ -338,7 +314,6 @@ def preview(url: str, duration: int = 10) -> None:
         def _ducked_preview() -> None:
             _fade_volume(20, steps=20, duration=1.0)
 
-            # use ffplay instead of mpv — won't touch mpv socket or conflict
             proc = subprocess.Popen(
                 [
                     "ffplay",
@@ -375,9 +350,10 @@ def current() -> dict[str, Any] | None:
 
 def status_string() -> str:
     if mpv_socket().exists():
-        d = config.load()
-        lp = d.get("last_played")
-        if lp:
-            return f"Now playing: {lp.get('name')}"
+        stations = library.list_stations()
+        played = [s for s in stations if s.get("last_played")]
+        if played:
+            st = max(played, key=lambda s: s["last_played"])
+            return f"Now playing: {st.get('name')}"
         return "Now playing"
     return "sqlch: Not Playing"

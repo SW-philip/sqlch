@@ -1,26 +1,14 @@
-_CACHE_DIR = None
+from __future__ import annotations
 
-def _cache_dir():
-    global _CACHE_DIR
-    if _CACHE_DIR is None:
-        import os
-        from pathlib import Path
-        base = os.environ.get('XDG_CACHE_HOME')
-        if not base:
-            base = str(Path.home() / '.cache')
-        p = Path(base) / 'sqlch'
-        p.mkdir(parents=True, exist_ok=True)
-        _CACHE_DIR = p
-    return _CACHE_DIR
-
-
-import time
 import json
-import requests
+import time
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+import requests
+
 from sqlch.core import spoti
+from sqlch.core.paths import cache_dir
 
 
 # How long before a cached result is considered stale (30 days)
@@ -31,7 +19,7 @@ _QUALITY_FIELDS = ('album', 'year', 'cover', 'genres', 'isrc')
 
 
 def _cache_file() -> Path:
-    return _cache_dir() / "enriched.json"
+    return cache_dir() / "enriched.json"
 
 
 def _now() -> int:
@@ -85,10 +73,11 @@ def _save_cache(db: Dict[str, Any]) -> None:
 
 
 def _enrich_musicbrainz(artist: str, track: str) -> Dict[str, Any]:
+    base = _mb_base_url()
     result: Dict[str, Any] = {}
     try:
         r = requests.get(
-            'https://musicbrainz.org/ws/2/recording/',
+            f'{base}/recording/',
             params={
                 'query': f'artist:"{artist}" AND recording:"{track}"',
                 'fmt': 'json',
@@ -111,7 +100,6 @@ def _enrich_musicbrainz(artist: str, track: str) -> Dict[str, Any]:
             if rel.get('date'):
                 result['year'] = rel['date'].split('-')[0]
 
-        # Fetch genres/tags from the recording itself
         genres = _mb_genres_for_recording(rec.get('id'))
         if genres:
             result['genres'] = genres
@@ -124,24 +112,25 @@ def _enrich_musicbrainz(artist: str, track: str) -> Dict[str, Any]:
     return result
 
 
+def _mb_base_url() -> str:
+    import os
+    return os.environ.get("SQLCH_MUSICBRAINZ_BASE", "https://musicbrainz.org/ws/2")
+
+
 def _mb_genres_for_recording(recording_id: Optional[str]) -> list:
     """Fetch MusicBrainz tags for a recording and return the top genre tags."""
     if not recording_id:
         return []
     try:
+        base = _mb_base_url()
         r = requests.get(
-            f'https://musicbrainz.org/ws/2/recording/{recording_id}',
+            f'{base}/recording/{recording_id}',
             params={'fmt': 'json', 'inc': 'tags+genres'},
             headers={'User-Agent': 'sqlch/1.0'},
             timeout=8,
         )
         r.raise_for_status()
         data = r.json()
-
-        # Prefer explicit genres, fall back to tags
-        genres = [g['name'] for g in (data.get('genres') or []) if g.get('count', 0) > 0]
-        if not genres:
-            genres = [t['name'] for t in (data.get('tags') or []) if t.get('count', 0) > 0]
 
         # Sort by vote count descending, cap at 5
         genres_with_votes = [

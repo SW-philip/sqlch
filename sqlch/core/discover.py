@@ -7,30 +7,17 @@ from typing import List, Dict
 
 import requests
 
-# ------------------------------------------------------------
-# Lazy cache resolution (Nix-safe)
-# ------------------------------------------------------------
-
-_CACHE_DIR: Path | None = None
-
-
-def _cache_dir() -> Path:
-    global _CACHE_DIR
-    if _CACHE_DIR is None:
-        base = os.environ.get("XDG_CACHE_HOME")
-        if not base:
-            base = str(Path.home() / ".cache")
-        p = Path(base) / "sqlch"
-        p.mkdir(parents=True, exist_ok=True)
-        _CACHE_DIR = p
-    return _CACHE_DIR
+from sqlch.core.paths import cache_dir
 
 
 def _last_search_path() -> Path:
-    return _cache_dir() / "last_search.json"
+    return cache_dir() / "last_search.json"
 
 
-BASE = "https://de1.api.radio-browser.info/json"
+def _base_url() -> str:
+    return os.environ.get(
+        "SQLCH_RADIOBROWSER_BASE", "https://de1.api.radio-browser.info/json"
+    )
 
 
 # ------------------------------------------------------------
@@ -45,7 +32,7 @@ def search(query: str, limit: int = 10) -> List[Dict]:
         "order": "votes",
         "reverse": "true",
     }
-    r = requests.get(f"{BASE}/stations/search", params=params, timeout=8)
+    r = requests.get(f"{_base_url()}/stations/search", params=params, timeout=8)
     r.raise_for_status()
 
     results: List[Dict] = []

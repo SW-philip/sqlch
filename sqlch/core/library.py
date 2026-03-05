@@ -1,39 +1,19 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import time
 from pathlib import Path
 from typing import List, Optional
 
+from sqlch.core.paths import data_dir
+
 APP_NAME = "sqlch"
 LIBRARY_VERSION = 1
 
 
-# ------------------------------------------------------------
-# Lazy path resolution (Nix-safe)
-# ------------------------------------------------------------
-
-_DATA_DIR: Path | None = None
-_LIBRARY_PATH: Path | None = None
-
-
-def _data_dir() -> Path:
-    global _DATA_DIR
-    if _DATA_DIR is None:
-        base = os.environ.get("XDG_DATA_HOME")
-        if not base:
-            base = str(Path.home() / ".local" / "share")
-        _DATA_DIR = Path(base) / APP_NAME
-    return _DATA_DIR
-
-
 def _library_path() -> Path:
-    global _LIBRARY_PATH
-    if _LIBRARY_PATH is None:
-        _LIBRARY_PATH = _data_dir() / "library.json"
-    return _LIBRARY_PATH
+    return data_dir() / "library.json"
 
 
 # ------------------------------------------------------------
@@ -42,10 +22,6 @@ def _library_path() -> Path:
 
 def _now() -> int:
     return int(time.time())
-
-
-def _ensure_dirs():
-    _data_dir().mkdir(parents=True, exist_ok=True)
 
 
 def _atomic_write(path: Path, data: dict):
@@ -89,6 +65,7 @@ def _normalize_station(st: dict) -> dict:
     )
     return st
 
+
 def next_station(current_id: str) -> Optional[dict]:
     stations = list_stations()
     ids = [s["id"] for s in stations]
@@ -96,6 +73,7 @@ def next_station(current_id: str) -> Optional[dict]:
         return stations[0] if stations else None
     idx = (ids.index(current_id) + 1) % len(stations)
     return stations[idx]
+
 
 def prev_station(current_id: str) -> Optional[dict]:
     stations = list_stations()
@@ -105,12 +83,12 @@ def prev_station(current_id: str) -> Optional[dict]:
     idx = (ids.index(current_id) - 1) % len(stations)
     return stations[idx]
 
+
 # ------------------------------------------------------------
 # Public API
 # ------------------------------------------------------------
 
 def load() -> dict:
-    _ensure_dirs()
     path = _library_path()
 
     if not path.exists():
@@ -131,7 +109,6 @@ def load() -> dict:
 
 
 def save(lib: dict):
-    _ensure_dirs()
     _atomic_write(_library_path(), lib)
 
 

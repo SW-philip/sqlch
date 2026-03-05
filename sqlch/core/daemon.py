@@ -1,42 +1,22 @@
-# ------------------------------------------------------------
-# Lazy cache resolution (Nix-safe)
-# ------------------------------------------------------------
-
-_CACHE_DIR = None
-
-def _cache_dir():
-    global _CACHE_DIR
-    if _CACHE_DIR is None:
-        import os
-        from pathlib import Path
-        base = os.environ.get("XDG_CACHE_HOME")
-        if not base:
-            base = str(Path.home() / ".cache")
-        p = Path(base) / "sqlch"
-        p.mkdir(parents=True, exist_ok=True)
-        _CACHE_DIR = p
-    return _CACHE_DIR
-
 import json
 import os
 import socket
 import threading
 from pathlib import Path
 from typing import Any
-from sqlch.core import library, notify, player, discover, config
 
-def runtime_dir() -> Path:
-    base = os.environ.get('XDG_RUNTIME_DIR') or '/tmp'
-    p = Path(base) / 'sqlch'
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+from sqlch.core import library, notify, player, discover, config
+from sqlch.core.paths import runtime_dir
+
 
 def control_sock() -> Path:
     return runtime_dir() / "control.sock"
 
+
 def _reply(conn: socket.socket, obj: dict[str, Any]):
     data = (json.dumps(obj) + '\n').encode()
     conn.sendall(data)
+
 
 def _handle(msg: dict[str, Any]) -> dict[str, Any]:
     cmd = msg.get('cmd')
@@ -54,11 +34,15 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
         q = (msg.get('query') or '').strip()
         if not q:
             return {'ok': False, 'error': 'missing query'}
-
-        # Try library first
+        if q == '__last__':
+            stations = library.list_stations()
+            played = [s for s in stations if s.get('last_played')]
+            if not played:
+                return {'ok': False, 'error': 'no last played station'}
+            st = max(played, key=lambda s: s['last_played'])
+            player.play_station(st)
+            return {'ok': True}
         st = library.find_station(q)
-
-        # Fallback: discovery search
         if not st:
             results = discover.search(q)
             if len(results) == 1:
@@ -73,10 +57,8 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
                     'error': f'could not resolve: {q}',
                     'results': results[:10],
                 }
-
         player.play_station(st)
         return {'ok': True, 'station': {'id': st.get('id'), 'name': st.get('name')}}
-
     if cmd == 'preview':
         url = (msg.get('url') or '').strip()
         if not url:
@@ -84,34 +66,35 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
         dur = int(msg.get('duration') or 12)
         player.preview(url, duration=dur)
         return {'ok': True}
-    return {'ok': False, 'error': f'unknown cmd: {cmd}'}
-
     if cmd == 'next':
         current = player.current()
         if current:
             sid = current.get('item', {}).get('id')
             st = library.next_station(sid)
         else:
-            st = library.list_stations()[0] if library.list_stations() else None
+            stations = library.list_stations()
+            st = stations[0] if stations else None
         if st:
             player.play_station(st)
         return {'ok': True}
-
     if cmd == 'prev':
         current = player.current()
         if current:
             sid = current.get('item', {}).get('id')
             st = library.prev_station(sid)
         else:
-            st = library.list_stations()[-1] if library.list_stations() else None
+            stations = library.list_stations()
+            st = stations[-1] if stations else None
         if st:
             player.play_station(st)
-    return {'ok': True}
+        return {'ok': True}
+    return {'ok': False, 'error': f'unknown cmd: {cmd}'}
+
 
 def run_daemon():
     sock = control_sock()
     print("RUN_DAEMON ENTERED", sock, flush=True)
-    
+
     # Start MPRIS daemon in background thread
     from sqlch.core import mpris_daemon
     threading.Thread(target=mpris_daemon.main, daemon=True, name="mpris").start()

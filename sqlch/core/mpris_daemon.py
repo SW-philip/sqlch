@@ -27,9 +27,8 @@ from sqlch.core.player import mpv_socket
 # Constants
 # ---------------------------------------------------------------------------
 
-MPV_SOCKET = mpv_socket()
-BUS_NAME   = "org.mpris.MediaPlayer2.sqlch"
-OBJ_PATH   = "/org/mpris/MediaPlayer2"
+BUS_NAME = "org.mpris.MediaPlayer2.sqlch"
+OBJ_PATH = "/org/mpris/MediaPlayer2"
 
 MPRIS_XML = """
 <node>
@@ -77,10 +76,10 @@ MPRIS_XML = """
     <property name="Volume"         type="d"  access="readwrite"/>
     <property name="Position"       type="x"  access="read"/>
     <property name="CanControl"     type="b"  access="read"/>
-    <property type="b" name="CanPlay"     access="read"/>
-    <property type="b" name="CanPause"    access="read"/>
-    <property type="b" name="CanSeek"     access="read"/>
-    <property type="b" name="CanGoNext"   access="read"/>
+    <property type="b" name="CanPlay"       access="read"/>
+    <property type="b" name="CanPause"      access="read"/>
+    <property type="b" name="CanSeek"       access="read"/>
+    <property type="b" name="CanGoNext"     access="read"/>
     <property type="b" name="CanGoPrevious" access="read"/>
   </interface>
 </node>
@@ -143,12 +142,13 @@ def wrap_metadata(meta: Dict[str, Any]) -> GLib.Variant:
 
 def _mpv_ipc(cmd: dict, timeout: float = 0.5) -> Optional[dict]:
     """Send a JSON command to the MPV IPC socket and return the response."""
-    if not MPV_SOCKET.exists():
+    sock = mpv_socket()
+    if not sock.exists():
         return None
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
             s.settimeout(timeout)
-            s.connect(str(MPV_SOCKET))
+            s.connect(str(sock))
             s.sendall((json.dumps(cmd) + "\n").encode())
             buf = b""
             while not buf.endswith(b"\n"):
@@ -224,6 +224,7 @@ class SQLCHMPRIS:
     CanSeek             = False
     CanGoNext           = False
     CanGoPrevious       = False
+
     def __init__(self) -> None:
         self._playback_status: str = "Stopped"
         self._metadata: Dict[str, Any] = {}
@@ -267,6 +268,7 @@ class SQLCHMPRIS:
 
     def Introspect(self):
         return MPRIS_XML
+
     # --- Player properties ---
 
     @property
@@ -341,10 +343,10 @@ class SQLCHMPRIS:
         meta = enrich.enrich_track(artist or "", track)
 
         mpris_meta: Dict[str, Any] = {
-            "mpris:trackid":         self._last_trackid,
-            "xesam:title":           meta.get("track") or track,
-            "xesam:artist":          [meta.get("artist") or artist] if (meta.get("artist") or artist) else [],
-            "xesam:album":           meta.get("album") or station_name,
+            "mpris:trackid": self._last_trackid,
+            "xesam:title":   meta.get("track") or track,
+            "xesam:artist":  [meta.get("artist") or artist] if (meta.get("artist") or artist) else [],
+            "xesam:album":   meta.get("album") or station_name,
         }
         if meta.get("genres"):
             mpris_meta["xesam:genre"] = meta["genres"]
