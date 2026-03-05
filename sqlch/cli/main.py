@@ -97,6 +97,14 @@ def dispatch_command(cmd: str, args: list[str]) -> None:
     if cmd == 'preview':
         preview_cmd(args)
         return
+    if cmd == 'next':
+        if daemon_call({'cmd': 'next'}) is None:
+            print("sqlch: daemon not running")
+        return
+    if cmd == 'prev':
+        if daemon_call({'cmd': 'prev'}) is None:
+            print("sqlch: daemon not running")
+        return
     print(f'Unknown command: {cmd}', file=sys.stderr)
     sys.exit(1)
 
