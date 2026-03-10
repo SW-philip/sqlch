@@ -348,12 +348,41 @@ def current() -> dict[str, Any] | None:
     return _current
 
 
-def status_string() -> str:
-    if mpv_socket().exists():
+def now_playing_info() -> dict:
+    """Return structured now-playing info pulled from live MPV ICY metadata."""
+    if not mpv_socket().exists():
+        return {"status": "stopped"}
+
+    station_name = None
+    if _current:
+        station_name = _current.get("item", {}).get("name")
+    if not station_name:
         stations = library.list_stations()
         played = [s for s in stations if s.get("last_played")]
         if played:
             st = max(played, key=lambda s: s["last_played"])
-            return f"Now playing: {st.get('name')}"
-        return "Now playing"
-    return "sqlch: Not Playing"
+            station_name = st.get("name")
+
+    meta = mpv_get("metadata") or {}
+    icy = meta.get("icy-title") or meta.get("title")
+
+    info: dict = {"status": "playing", "station": station_name}
+    if icy:
+        artist, track = _parse_icy(icy)
+        info["artist"] = artist
+        info["track"] = track
+    return info
+
+
+def status_string() -> str:
+    info = now_playing_info()
+    if info["status"] == "stopped":
+        return "Not playing"
+    lines = []
+    if info.get("station"):
+        lines.append(f"\u266b {info['station']}")
+    if info.get("track"):
+        artist = info.get("artist")
+        track = info["track"]
+        lines.append(f"  {artist} \u2014 {track}" if artist else f"  {track}")
+    return "\n".join(lines) if lines else "Playing"

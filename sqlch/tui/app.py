@@ -10,6 +10,7 @@ from textual.reactive import reactive
 
 from sqlch.core.discover import search as rb_search
 from sqlch.core import player, library
+from sqlch.core.player import now_playing_info
 
 
 # Sqrlch mascot: a squirrel wearing headphones.
@@ -52,9 +53,19 @@ class TransportBar(Static):
         color: $accent;
         text-style: bold;
     }
-    .now-playing {
+    .np-station {
+        color: $success;
+        text-style: bold;
+        margin-top: 1;
+    }
+    .np-track {
         color: $success;
         text-style: italic;
+        margin-bottom: 1;
+    }
+    .np-stopped {
+        color: $text-muted;
+        text-style: dim;
         margin-top: 1;
         margin-bottom: 1;
     }
@@ -66,7 +77,8 @@ class TransportBar(Static):
 
     def compose(self) -> ComposeResult:
         yield Label("Transport", classes="transport-title")
-        yield Label("", id="now-playing-label", classes="now-playing")
+        yield Label("", id="np-station")
+        yield Label("", id="np-track")
         yield Label("space  pause / resume",      classes="transport-hint")
         yield Label("s      stop",                classes="transport-hint")
         yield Label("enter  play highlighted",    classes="transport-hint")
@@ -80,10 +92,32 @@ class TransportBar(Static):
 
     def refresh_status(self) -> None:
         try:
-            status = player.status_string()
+            info = now_playing_info()
         except Exception:
-            status = "stopped"
-        self.query_one("#now-playing-label", Label).update(status)
+            info = {"status": "stopped"}
+
+        station_lbl = self.query_one("#np-station", Label)
+        track_lbl   = self.query_one("#np-track", Label)
+
+        if info["status"] == "stopped":
+            station_lbl.set_classes("np-stopped")
+            station_lbl.update("Not playing")
+            track_lbl.update("")
+            return
+
+        station = info.get("station") or ""
+        artist  = info.get("artist")
+        track   = info.get("track")
+
+        station_lbl.set_classes("np-station")
+        station_lbl.update(f"\u266b {station}" if station else "\u266b")
+
+        if track:
+            track_lbl.set_classes("np-track")
+            track_lbl.update(f"{artist} \u2014 {track}" if artist else track)
+        else:
+            track_lbl.set_classes("np-stopped")
+            track_lbl.update("No track info")
 
 
 class SQLCH(App):
