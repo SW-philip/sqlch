@@ -223,20 +223,21 @@ def _kill_existing() -> None:
 
 
 def _spawn_mpv(url: str, *, video: bool = False, preview: bool = False) -> None:
-    mpris = _need_env("SQLCH_MPRIS_PLUGIN", mpris_plugin())
     sock = mpv_socket()
     sock.parent.mkdir(parents=True, exist_ok=True)
 
     args: list[str] = [
         mpv_bin(),
         f"--input-ipc-server={sock}",
-        f"--script={mpris}",
         "--idle=yes",
         "--keep-open=yes",
         "--force-window=no",
         "--no-terminal",
         "--cache=yes",
     ]
+    mpris = mpris_plugin()
+    if mpris:
+        args.insert(2, f"--script={mpris}")
     if not video:
         args.append("--no-video")
     if preview:
