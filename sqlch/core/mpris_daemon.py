@@ -12,7 +12,7 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from gi.repository import GLib
 from pydbus import SessionBus
@@ -104,7 +104,7 @@ def _to_variant(value: Any) -> GLib.Variant:
     return V("s", str(value))
 
 
-def dict_to_a_sv(d: Dict[str, Any]) -> GLib.Variant:
+def dict_to_a_sv(d: dict[str, Any]) -> GLib.Variant:
     out = {}
     for k, v in d.items():
         if v is None:
@@ -116,12 +116,12 @@ def dict_to_a_sv(d: Dict[str, Any]) -> GLib.Variant:
     return V("a{sv}", out)
 
 
-def wrap_metadata(meta: Dict[str, Any]) -> GLib.Variant:
+def wrap_metadata(meta: dict[str, Any]) -> GLib.Variant:
     """
     Convert an MPRIS metadata dict to a GLib a{sv} Variant.
     Handles the special case of mpris:trackid (object path).
     """
-    out: Dict[str, GLib.Variant] = {}
+    out: dict[str, GLib.Variant] = {}
     for k, v in meta.items():
         if v is None:
             continue
@@ -165,9 +165,9 @@ class SQLCHMPRIS:
 
     def __init__(self) -> None:
         self._playback_status: str = "Stopped"
-        self._metadata: Dict[str, Any] = {}
+        self._metadata: dict[str, Any] = {}
         self._volume: float = 1.0
-        self._last_icy: Optional[str] = None
+        self._last_icy: str | None = None
         self._last_trackid: str = "/org/mpris/MediaPlayer2/Track/0"
         self._stop = threading.Event()
 
@@ -187,8 +187,8 @@ class SQLCHMPRIS:
             return
         raise Exception("org.freedesktop.DBus.Error.PropertyReadOnly")
 
-    def GetAll(self, interface: str) -> Dict[str, GLib.Variant]:
-        props: Dict[str, GLib.Variant] = {}
+    def GetAll(self, interface: str) -> dict[str, GLib.Variant]:
+        props: dict[str, GLib.Variant] = {}
         for attr in dir(self):
             if attr.startswith("_"):
                 continue
@@ -214,7 +214,7 @@ class SQLCHMPRIS:
         return self._playback_status
 
     @property
-    def Metadata(self) -> Dict[str, Any]:
+    def Metadata(self) -> dict[str, Any]:
         return self._metadata
 
     @property
@@ -262,7 +262,7 @@ class SQLCHMPRIS:
             self._playback_status = status
             self._emit_changed({"PlaybackStatus": V("s", self._playback_status)})
 
-    def _emit_changed(self, changed: Dict[str, GLib.Variant]) -> None:
+    def _emit_changed(self, changed: dict[str, GLib.Variant]) -> None:
         """Emit PropertiesChanged on the GLib main loop."""
         def _emit() -> bool:
             self.PropertiesChanged("org.mpris.MediaPlayer2.Player", changed, [])
@@ -280,7 +280,7 @@ class SQLCHMPRIS:
 
         meta = enrich.enrich_track(artist or "", track)
 
-        mpris_meta: Dict[str, Any] = {
+        mpris_meta: dict[str, Any] = {
             "mpris:trackid": self._last_trackid,
             "xesam:title":   meta.get("track") or track,
             "xesam:artist":  [meta.get("artist") or artist] if (meta.get("artist") or artist) else [],

@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import List, Dict
 
 import requests
 
@@ -24,7 +23,7 @@ def _base_url() -> str:
 # Public API
 # ------------------------------------------------------------
 
-def search(query: str, limit: int = 10) -> List[Dict]:
+def search(query: str, limit: int = 10) -> list[dict]:
     params = {
         "name": query,
         "limit": limit,
@@ -35,7 +34,7 @@ def search(query: str, limit: int = 10) -> List[Dict]:
     r = requests.get(f"{_base_url()}/stations/search", params=params, timeout=8)
     r.raise_for_status()
 
-    results: List[Dict] = []
+    results: list[dict] = []
     for st in r.json():
         results.append(
             {
@@ -51,12 +50,12 @@ def search(query: str, limit: int = 10) -> List[Dict]:
     return results
 
 
-def save_last_search(results: List[Dict]) -> None:
+def save_last_search(results: list[dict]) -> None:
     path = _last_search_path()
     path.write_text(json.dumps(results, indent=2))
 
 
-def load_last_search() -> List[Dict]:
+def load_last_search() -> list[dict]:
     path = _last_search_path()
     try:
         return json.loads(path.read_text())

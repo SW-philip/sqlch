@@ -4,7 +4,7 @@ import os
 import time
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any
 
 import requests
 
@@ -60,7 +60,7 @@ def _save_json(path: Path, data: dict):
     path.write_text(json.dumps(data, indent=2))
 
 
-def _get_token() -> Optional[str]:
+def _get_token() -> str | None:
     if _token_cache().exists():
         try:
             tok = json.loads(_token_cache().read_text())
@@ -86,7 +86,7 @@ def _get_token() -> Optional[str]:
     return tok['access_token']
 
 
-def _search_track(artist: str, track: str, token: str) -> Optional[dict]:
+def _search_track(artist: str, track: str, token: str) -> dict | None:
     q = f'artist:"{artist}" track:"{track}"'
     r = requests.get(
         f'{_spotify_base()}/search',
@@ -126,7 +126,7 @@ def _artist_genres(artist_id: str, token: str) -> list[str]:
     return genres
 
 
-def enrich(artist: str, track: str) -> Optional[Dict[str, Any]]:
+def enrich(artist: str, track: str) -> dict[str, Any] | None:
     """
     Cache-first Spotify enrichment.
 

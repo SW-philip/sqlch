@@ -4,7 +4,6 @@ import json
 import re
 import time
 from pathlib import Path
-from typing import List, Optional
 
 from sqlch.core.paths import data_dir
 
@@ -67,7 +66,7 @@ def _normalize_station(st: dict) -> dict:
     return st
 
 
-def next_station(current_id: str) -> Optional[dict]:
+def next_station(current_id: str) -> dict | None:
     stations = list_stations()
     ids = [s["id"] for s in stations]
     if current_id not in ids:
@@ -76,7 +75,7 @@ def next_station(current_id: str) -> Optional[dict]:
     return stations[idx]
 
 
-def prev_station(current_id: str) -> Optional[dict]:
+def prev_station(current_id: str) -> dict | None:
     stations = list_stations()
     ids = [s["id"] for s in stations]
     if current_id not in ids:
@@ -119,7 +118,7 @@ def save(lib: dict):
     _atomic_write(_library_path(), lib)
 
 
-def list_stations(category: Optional[str] = None) -> List[dict]:
+def list_stations(category: str | None = None) -> list[dict]:
     lib = load()
     stations = lib["stations"]
     if category:
@@ -127,7 +126,7 @@ def list_stations(category: Optional[str] = None) -> List[dict]:
     return stations
 
 
-def find_station(query: str) -> Optional[dict]:
+def find_station(query: str) -> dict | None:
     q = query.lower()
     lib = load()
 
@@ -146,10 +145,10 @@ def add_station(
     *,
     name: str,
     url: str,
-    category: Optional[str] = None,
-    tags: Optional[List[str]] = None,
-    stream: Optional[dict] = None,
-    source: Optional[dict] = None,
+    category: str | None = None,
+    tags: list[str] | None = None,
+    stream: dict | None = None,
+    source: dict | None = None,
     allow_existing: bool = False,
 ) -> dict:
     lib = load()

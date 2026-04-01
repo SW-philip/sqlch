@@ -35,7 +35,7 @@ def _cache_key(artist: str, track: str) -> str:
     return f'{_norm(artist)}::{_norm(track)}'
 
 
-def _empty_result(artist: str, track: str) -> Dict[str, Any]:
+def _empty_result(artist: str, track: str) -> dict[str, Any]:
     return {
         'artist': artist,
         'track': track,
@@ -48,7 +48,7 @@ def _empty_result(artist: str, track: str) -> Dict[str, Any]:
     }
 
 
-def _quality_score(result: Dict[str, Any]) -> int:
+def _quality_score(result: dict[str, Any]) -> int:
     """Count how many quality fields are populated."""
     score = 0
     for f in _QUALITY_FIELDS:
@@ -58,24 +58,24 @@ def _quality_score(result: Dict[str, Any]) -> int:
     return score
 
 
-def _is_stale(result: Dict[str, Any]) -> bool:
+def _is_stale(result: dict[str, Any]) -> bool:
     return (_now() - result.get('ts', 0)) > CACHE_TTL
 
 
-def _load_cache() -> Dict[str, Any]:
+def _load_cache() -> dict[str, Any]:
     try:
         return json.loads(_cache_file().read_text())
     except Exception:
         return {}
 
 
-def _save_cache(db: Dict[str, Any]) -> None:
+def _save_cache(db: dict[str, Any]) -> None:
     _cache_file().write_text(json.dumps(db, indent=2))
 
 
-def _enrich_musicbrainz(artist: str, track: str) -> Dict[str, Any]:
+def _enrich_musicbrainz(artist: str, track: str) -> dict[str, Any]:
     base = _mb_base_url()
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
     try:
         r = requests.get(
             f'{base}/recording/',
@@ -117,7 +117,7 @@ def _mb_base_url() -> str:
     return os.environ.get("SQLCH_MUSICBRAINZ_BASE", "https://musicbrainz.org/ws/2")
 
 
-def _mb_genres_for_recording(recording_id: Optional[str]) -> list:
+def _mb_genres_for_recording(recording_id: str | None) -> list:
     """Fetch MusicBrainz tags for a recording and return the top genre tags."""
     if not recording_id:
         return []
@@ -144,7 +144,7 @@ def _mb_genres_for_recording(recording_id: Optional[str]) -> list:
         return []
 
 
-def enrich_track(artist: str, track: str) -> Dict[str, Any]:
+def enrich_track(artist: str, track: str) -> dict[str, Any]:
     """
     Enrich track metadata using:
       1. Local enriched cache (skipped if stale)
