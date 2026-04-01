@@ -287,7 +287,7 @@ class SQLCH(App):
 
     def action_play(self) -> None:
         self._with_selected_station(
-            lambda url, st: player.play_station(st),
+            lambda url, st: player.play_station(library.add_discovered_station(st)),
             "Playing",
         )
 
