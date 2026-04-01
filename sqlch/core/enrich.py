@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any
 
 import requests
 
@@ -52,7 +53,7 @@ def _quality_score(result: Dict[str, Any]) -> int:
     score = 0
     for f in _QUALITY_FIELDS:
         v = result.get(f)
-        if v and v != [] and v != '':
+        if v:
             score += 1
     return score
 
@@ -113,7 +114,6 @@ def _enrich_musicbrainz(artist: str, track: str) -> Dict[str, Any]:
 
 
 def _mb_base_url() -> str:
-    import os
     return os.environ.get("SQLCH_MUSICBRAINZ_BASE", "https://musicbrainz.org/ws/2")
 
 

@@ -193,7 +193,7 @@ def info_cmd(args: list[str]) -> None:
     print(json.dumps(st, indent=2))
 
 
-def add_cmd(args):
+def add_cmd(args: list[str]) -> None:
     if not args:
         print("Usage: sqlch add <number|name>")
         return

@@ -16,17 +16,16 @@ def daemon_available() -> bool:
 
 def send(msg: dict[str, Any], timeout: float = 1.5) -> dict[str, Any]:
     sock = _control_sock()
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.settimeout(timeout)
-    s.connect(str(sock))
-    s.sendall((json.dumps(msg) + '\n').encode())
-    data = b''
-    while not data.endswith(b'\n'):
-        chunk = s.recv(4096)
-        if not chunk:
-            break
-        data += chunk
-    s.close()
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        s.settimeout(timeout)
+        s.connect(str(sock))
+        s.sendall((json.dumps(msg) + '\n').encode())
+        data = b''
+        while not data.endswith(b'\n'):
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            data += chunk
     if not data:
         return {'ok': False, 'error': 'no response'}
     return json.loads(data.decode('utf-8', errors='replace'))
