@@ -45,6 +45,7 @@ def search(query: str, limit: int = 10) -> List[Dict]:
                 "country": st.get("country"),
                 "codec": st.get("codec"),
                 "bitrate": st.get("bitrate"),
+                "stationuuid": st.get("stationuuid"),
             }
         )
     return results

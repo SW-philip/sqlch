@@ -52,6 +52,7 @@ def _normalize_station(st: dict) -> dict:
     st.setdefault("added_at", _now())
     st.setdefault("last_played", None)
     st.setdefault("play_count", 0)
+    st.setdefault("rb_uuid", None)
     st.setdefault("source", {"type": "manual", "origin": "user"})
     st.setdefault(
         "stream",
@@ -229,6 +230,6 @@ def add_discovered_station(st: dict) -> dict:
             "validated": False,
             "last_checked": None,
         },
-        source={"type": "radiobrowser", "origin": st.get("url")},
+        source={"type": "radiobrowser", "origin": st.get("stationuuid")},
         allow_existing=True,
     )
