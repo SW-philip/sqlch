@@ -8,9 +8,7 @@ SQLCH MPRIS daemon
 
 from __future__ import annotations
 
-import json
 import os
-import socket
 import threading
 import time
 from pathlib import Path
@@ -21,7 +19,7 @@ from pydbus import SessionBus
 from pydbus.generic import signal
 
 from sqlch.core import enrich
-from sqlch.core.player import mpv_socket
+from sqlch.core.player import mpv_socket, mpv_get, mpv_command
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -137,46 +135,6 @@ def wrap_metadata(meta: Dict[str, Any]) -> GLib.Variant:
 
 
 # ---------------------------------------------------------------------------
-# MPV IPC helpers
-# ---------------------------------------------------------------------------
-
-def _mpv_ipc(cmd: dict, timeout: float = 0.5) -> Optional[dict]:
-    """Send a JSON command to the MPV IPC socket and return the response."""
-    sock = mpv_socket()
-    if not sock.exists():
-        return None
-    try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-            s.settimeout(timeout)
-            s.connect(str(sock))
-            s.sendall((json.dumps(cmd) + "\n").encode())
-            buf = b""
-            while not buf.endswith(b"\n"):
-                chunk = s.recv(4096)
-                if not chunk:
-                    break
-                buf += chunk
-        if buf.strip():
-            return json.loads(buf.decode())
-    except Exception:
-        return None
-    return None
-
-
-def mpv_get(prop: str) -> Any:
-    """Read a property from MPV. Returns None on failure."""
-    r = _mpv_ipc({"command": ["get_property", prop]})
-    if r and r.get("error") == "success":
-        return r.get("data")
-    return None
-
-
-def mpv_cmd(*args: str) -> None:
-    """Send a fire-and-forget command to MPV."""
-    _mpv_ipc({"command": list(args)})
-
-
-# ---------------------------------------------------------------------------
 # ICY title parsing
 # ---------------------------------------------------------------------------
 
@@ -286,7 +244,7 @@ class SQLCHMPRIS:
     @Volume.setter
     def Volume(self, v: float) -> None:
         self._volume = max(0.0, float(v))
-        mpv_cmd("set_property", "volume", str(self._volume * 100))
+        mpv_command("set_property", "volume", str(self._volume * 100))
         self._emit_changed({"Volume": V("d", self._volume)})
 
     @property
@@ -297,19 +255,19 @@ class SQLCHMPRIS:
     # --- Player commands ---
 
     def Play(self) -> None:
-        mpv_cmd("set_property", "pause", "no")
+        mpv_command("set_property", "pause", "no")
         self._set_status("Playing")
 
     def Pause(self) -> None:
-        mpv_cmd("set_property", "pause", "yes")
+        mpv_command("set_property", "pause", "yes")
         self._set_status("Paused")
 
     def Stop(self) -> None:
-        mpv_cmd("quit")
+        mpv_command("quit")
         self._set_status("Stopped")
 
     def PlayPause(self) -> None:
-        mpv_cmd("cycle", "pause")
+        mpv_command("cycle", "pause")
 
     def Raise(self) -> None:
         pass

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import subprocess
 import threading
 import time
@@ -48,24 +49,26 @@ _metadata_stop = threading.Event()
 # MPV IPC helpers
 # ------------------------------------------------------------
 
-def _mpv_ipc(cmd: dict[str, Any], timeout: float = 0.4) -> dict[str, Any] | None:
+def _mpv_ipc(cmd: dict[str, Any], timeout: float = 0.5) -> dict[str, Any] | None:
     sock = mpv_socket()
     if not sock.exists():
         return None
     try:
-        proc = subprocess.run(
-            ["socat", "-", str(sock)],
-            input=(json.dumps(cmd) + "\n").encode("utf-8"),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            timeout=timeout,
-            check=False,
-        )
-        if not proc.stdout:
-            return None
-        return json.loads(proc.stdout.decode("utf-8", errors="replace"))
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(timeout)
+            s.connect(str(sock))
+            s.sendall((json.dumps(cmd) + "\n").encode())
+            buf = b""
+            while not buf.endswith(b"\n"):
+                chunk = s.recv(4096)
+                if not chunk:
+                    break
+                buf += chunk
+        if buf.strip():
+            return json.loads(buf.decode())
     except Exception:
         return None
+    return None
 
 
 def mpv_get(prop: str) -> Any:
