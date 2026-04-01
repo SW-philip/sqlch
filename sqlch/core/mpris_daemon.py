@@ -19,7 +19,7 @@ from pydbus import SessionBus
 from pydbus.generic import signal
 
 from sqlch.core import enrich
-from sqlch.core.player import mpv_socket, mpv_get, mpv_command
+from sqlch.core.player import mpv_socket, mpv_get, mpv_command, _parse_icy
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -132,26 +132,6 @@ def wrap_metadata(meta: Dict[str, Any]) -> GLib.Variant:
         else:
             out[k] = V("s", str(v))
     return V("a{sv}", out)
-
-
-# ---------------------------------------------------------------------------
-# ICY title parsing
-# ---------------------------------------------------------------------------
-
-def parse_icy_title(s: str) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Parse an ICY stream title into (artist, track).
-    Handles 'Artist - Track', 'Artist-Track', and bare track titles.
-    """
-    if not s:
-        return None, None
-    if " - " in s:
-        artist, track = s.split(" - ", 1)
-    elif "-" in s:
-        artist, track = s.split("-", 1)
-    else:
-        return None, s.strip()
-    return artist.strip() or None, track.strip() or None
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +274,7 @@ class SQLCHMPRIS:
         Parse the ICY title, enrich via Spotify/MusicBrainz, and publish
         updated MPRIS metadata + PropertiesChanged signal.
         """
-        artist, track = parse_icy_title(icy_title)
+        artist, track = _parse_icy(icy_title)
         if not track:
             return
 

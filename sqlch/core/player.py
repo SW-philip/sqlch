@@ -127,10 +127,15 @@ def mpv_set_metadata(key: str, value: Any) -> None:
 
 
 def _parse_icy(title: str) -> tuple[str | None, str | None]:
-    if not title or "-" not in title:
-        return (None, None)
-    artist, track = title.split("-", 1)
-    return (artist.strip() or None, track.strip() or None)
+    if not title:
+        return None, None
+    if " - " in title:
+        artist, track = title.split(" - ", 1)
+    elif "-" in title:
+        artist, track = title.split("-", 1)
+    else:
+        return None, title.strip()
+    return artist.strip() or None, track.strip() or None
 
 
 def _apply_enrichment_now(artist: str | None, track: str, station_name: str) -> None:
