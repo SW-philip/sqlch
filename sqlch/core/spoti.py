@@ -10,6 +10,8 @@ import requests
 
 from sqlch.core.paths import cache_dir
 
+CACHE_TTL = 60 * 60 * 24 * 30  # 30 days
+
 
 def _track_cache() -> Path:
     return cache_dir() / 'spotify_tracks.json'
@@ -133,7 +135,9 @@ def enrich(artist: str, track: str) -> Optional[Dict[str, Any]]:
     cache = _load_json(_track_cache())
     k = _key(artist, track)
     if k in cache:
-        return cache[k]
+        entry = cache[k]
+        if (_now() - entry.get('cached_at', 0)) < CACHE_TTL:
+            return entry
     token = _get_token()
     if not token:
         return None
