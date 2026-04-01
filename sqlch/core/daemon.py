@@ -35,11 +35,9 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
         if not q:
             return {'ok': False, 'error': 'missing query'}
         if q == '__last__':
-            stations = library.list_stations()
-            played = [s for s in stations if s.get('last_played')]
-            if not played:
+            st = library.last_played_station()
+            if not st:
                 return {'ok': False, 'error': 'no last played station'}
-            st = max(played, key=lambda s: s['last_played'])
             player.play_station(st)
             return {'ok': True}
         st = library.find_station(q)

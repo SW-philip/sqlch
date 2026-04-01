@@ -85,6 +85,12 @@ def prev_station(current_id: str) -> Optional[dict]:
     return stations[idx]
 
 
+def last_played_station() -> dict | None:
+    stations = list_stations()
+    played = [s for s in stations if s.get("last_played")]
+    return max(played, key=lambda s: s["last_played"]) if played else None
+
+
 # ------------------------------------------------------------
 # Public API
 # ------------------------------------------------------------

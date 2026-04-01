@@ -86,10 +86,8 @@ def dispatch_command(cmd: str, args: list[str]) -> None:
     if cmd == 'play-last':
         resp = daemon_call({'cmd': 'play', 'query': '__last__'})
         if resp is None:
-            stations = library.list_stations()
-            played = [s for s in stations if s.get('last_played')]
-            if played:
-                st = max(played, key=lambda s: s['last_played'])
+            st = library.last_played_station()
+            if st:
                 player.play_station(st)
             else:
                 print('sqlch: no last played station', file=sys.stderr)

@@ -365,10 +365,8 @@ def now_playing_info() -> dict:
     if _current:
         station_name = _current.get("item", {}).get("name")
     if not station_name:
-        stations = library.list_stations()
-        played = [s for s in stations if s.get("last_played")]
-        if played:
-            st = max(played, key=lambda s: s["last_played"])
+        st = library.last_played_station()
+        if st:
             station_name = st.get("name")
 
     meta = mpv_get("metadata") or {}
