@@ -267,20 +267,9 @@ def stop() -> None:
 
 
 def pause() -> None:
-    sock = mpv_socket()
-    if not sock.exists():
+    if not mpv_socket().exists():
         return
-    try:
-        subprocess.run(
-            ["socat", "-", str(sock)],
-            input=b"cycle pause\n",
-            timeout=0.2,
-            stderr=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            check=False,
-        )
-    except Exception:
-        pass
+    mpv_command("cycle", "pause")
 
 
 def play_station(station: dict[str, Any]) -> None:
