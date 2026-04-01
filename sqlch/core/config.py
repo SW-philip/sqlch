@@ -1,10 +1,7 @@
 import json
-import os
 from pathlib import Path
 
 from sqlch.core.paths import config_dir
-
-APP_NAME = 'sqlch'
 
 
 def config_path() -> Path:

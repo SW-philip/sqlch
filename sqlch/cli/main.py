@@ -148,7 +148,7 @@ def play_cmd(args: list[str]) -> None:
         st = results[idx]
         tags = st.get('tags') or []
         if isinstance(tags, str):
-            tags = [t for t in tags.split(',') if t]
+            tags = [t.strip() for t in tags.split(',') if t.strip()]
         station = library.add_station(
             name=st.get('name') or 'unknown',
             url=st.get('url'),

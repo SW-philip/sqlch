@@ -5,7 +5,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from sqlch.core import library, notify, player, discover, config
+from sqlch.core import library, notify, player, discover
 from sqlch.core.paths import runtime_dir
 
 
@@ -91,8 +91,6 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
 
 def run_daemon():
     sock = control_sock()
-    print("RUN_DAEMON ENTERED", sock, flush=True)
-
     # Start MPRIS daemon in background thread
     from sqlch.core import mpris_daemon
     threading.Thread(target=mpris_daemon.main, daemon=True, name="mpris").start()
