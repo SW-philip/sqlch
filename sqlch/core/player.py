@@ -257,14 +257,15 @@ def _spawn_mpv(url: str, *, video: bool = False, preview: bool = False) -> None:
 # Public API
 # ------------------------------------------------------------
 
-def stop() -> None:
+def stop(notify_user: bool = True) -> None:
     global _current, _preview_timer
     if _preview_timer:
         _preview_timer.cancel()
         _preview_timer = None
     _kill_existing()
     _current = None
-    notify.notify("sqlch", "Playback stopped")
+    if notify_user:
+        notify.notify("sqlch", "Playback stopped")
 
 
 def pause() -> None:
@@ -281,8 +282,8 @@ def play_station(station: dict[str, Any]) -> None:
         notify.notify("sqlch error", "Station missing URL")
         return
 
-    stop()
-    notify.notify("Now Playing", station.get("name", "Unknown Station"))
+    stop(notify_user=False)
+    notify.notify("sqlch", f"NOW PLAYING\n{station.get('name', 'Unknown Station')}")
     _spawn_mpv(url)
     _current = {"type": "station", "item": station}
 
@@ -331,7 +332,7 @@ def preview(url: str, duration: int = 10) -> None:
         threading.Thread(target=_ducked_preview, daemon=True).start()
 
     else:
-        stop()
+        stop(notify_user=False)
         _spawn_mpv(url, preview=True)
 
         def _end_preview() -> None:
