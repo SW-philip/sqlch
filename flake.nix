@@ -16,6 +16,8 @@
       default = self.packages.${system}.sqlch;
     };
 
+    homeManagerModules.default = import ./nix/home.nix;
+
     apps.${system}.default = {
       type = "app";
       program = "${self.packages.${system}.sqlch}/bin/sqlch";
