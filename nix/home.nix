@@ -7,6 +7,7 @@ let
   launcher = pkgs.writeShellScriptBin "sqlch-gui" ''
     export GI_TYPELIB_PATH="${pkgs.gtk4-layer-shell}/lib/girepository-1.0:${pkgs.gtk4}/lib/girepository-1.0:${pkgs.gdk-pixbuf}/lib/girepository-1.0:${pkgs.pango}/lib/girepository-1.0:${pkgs.graphene}/lib/girepository-1.0:${pkgs.harfbuzz}/lib/girepository-1.0:$GI_TYPELIB_PATH"
     export LD_LIBRARY_PATH="${pkgs.gtk4-layer-shell}/lib:${pkgs.graphene}/lib:$LD_LIBRARY_PATH"
+    export LD_PRELOAD="${pkgs.gtk4-layer-shell}/lib/libgtk4-layer-shell.so:$LD_PRELOAD"
     export SQLCH_GUI_PALETTE="${cfg.palettePath}"
     export PYTHONPATH="${../.}:$PYTHONPATH"
     exec ${sqlchGuiPython}/bin/python3 -m sqlch_gui "$@"
