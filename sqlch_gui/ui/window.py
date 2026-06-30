@@ -1,6 +1,9 @@
 """Core structural surface frame container initialized via Wayland Layer Shell bindings."""
 
 import threading
+import gi
+gi.require_version('Gtk', '4.0')
+gi.require_version('Gtk4LayerShell', '1.0')
 from gi.repository import Gtk, GLib, Gtk4LayerShell
 
 from .. import daemon
