@@ -9,6 +9,9 @@ def load_custom_css():
     """Load and inject dynamically computed CSS using the parsed runtime palette."""
     colors = palette.load()
     
+    outline = colors['SCORE']
+    shadow  = "rgba(0,0,0,0.9)"
+
     css = f"""
     window {{
         background: transparent;
@@ -17,13 +20,13 @@ def load_custom_css():
     box.popup-window {{
         background-color: {colors['HALL']};
         color: {colors['SCORE']};
-        border: 3px solid {colors['WING']};
-        border-radius: 12px;
-        box-shadow: 10px 10px 0 rgba(0,0,0,0.75);
+        border: 3px solid {outline};
+        border-radius: 10px;
+        box-shadow: 10px 10px 0 {shadow};
     }}
     .sidebar {{
         background-color: {colors['STAGE']};
-        border-right: 1px solid {colors['WING']};
+        border-right: 3px solid {outline};
         padding: 6px;
     }}
     .nav-btn {{
@@ -32,36 +35,44 @@ def load_custom_css():
         border-radius: 6px;
         color: {colors['REST']};
         background: transparent;
-        border: none;
+        border: 2px solid transparent;
     }}
     .nav-btn:hover {{
         background-color: {colors['WING']};
         color: {colors['SCORE']};
+        border: 2px solid {outline};
+        box-shadow: 2px 2px 0 {shadow};
     }}
     .nav-btn.active {{
         background-color: {colors['ROOT']};
         color: {colors['HALL']};
         font-weight: bold;
-        box-shadow: 3px 3px 0 rgba(0,0,0,0.5);
+        border: 2px solid {outline};
+        box-shadow: 3px 3px 0 {shadow};
     }}
     .card {{
         background-color: {colors['STAGE']};
-        border: 2px solid {colors['WING']};
+        border: 2px solid {outline};
         border-radius: 8px;
         padding: 12px;
-        box-shadow: 4px 4px 0 rgba(0,0,0,0.55);
+        box-shadow: 5px 5px 0 {shadow};
     }}
     .station-row {{
         padding: 8px 12px;
         border-radius: 6px;
         margin-bottom: 2px;
+        border: 2px solid transparent;
     }}
     .station-row:hover {{
         background-color: {colors['WING']};
+        border: 2px solid {outline};
+        box-shadow: 2px 2px 0 {shadow};
     }}
     .station-row.active {{
         background-color: {colors['SEVENTH']};
         color: {colors['HALL']};
+        border: 2px solid {outline};
+        box-shadow: 3px 3px 0 {shadow};
     }}
     .station-freq {{
         color: {colors['PIANO']};
@@ -78,15 +89,15 @@ def load_custom_css():
         padding: 0;
         background-color: {colors['WING']};
         color: {colors['SCORE']};
-        border: 2px solid rgba(0,0,0,0.3);
-        box-shadow: 3px 3px 0 rgba(0,0,0,0.6);
+        border: 2px solid {outline};
+        box-shadow: 4px 4px 0 {shadow};
     }}
     .control-btn:hover {{
         background-color: {colors['MUTE']};
-        box-shadow: 4px 4px 0 rgba(0,0,0,0.65);
+        box-shadow: 5px 5px 0 {shadow};
     }}
     .control-btn:active {{
-        box-shadow: 1px 1px 0 rgba(0,0,0,0.6);
+        box-shadow: 1px 1px 0 {shadow};
     }}
     .vol-slider scale contents trough highlight {{
         background-color: {colors['ROOT']};
@@ -95,6 +106,7 @@ def load_custom_css():
     .vol-slider scale contents trough {{
         background-color: {colors['WING']};
         border-radius: 3px;
+        border: 1px solid {outline};
     }}
     .meta-title {{
         font-size: 1.1em;
@@ -117,7 +129,8 @@ def load_custom_css():
         background-color: {colors['WING']};
         padding: 2px 6px;
         border-radius: 4px;
-        box-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+        border: 1px solid {outline};
+        box-shadow: 2px 2px 0 {shadow};
     }}
     """
     
