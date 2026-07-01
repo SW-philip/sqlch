@@ -4,6 +4,9 @@ import threading
 from gi.repository import Gtk, GLib
 from .. import radiobrowser
 
+GENRE_TAGS = ["Jazz", "News", "Rock", "Electronic", "Classical", "Talk", "Ambient", "Sports", "80s"]
+
+
 class DiscoverPanel(Gtk.Box):
     def __init__(self, parent_window):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -18,31 +21,56 @@ class DiscoverPanel(Gtk.Box):
         self.ent_query = Gtk.Entry(placeholder_text="Search worldwide directory...")
         self.ent_query.set_hexpand(True)
         self.ent_query.connect("activate", self.on_search)
-        
+
         btn_go = Gtk.Button(icon_name="edit-find-symbolic")
         btn_go.connect("clicked", self.on_search)
-        
+
         search_box.append(self.ent_query)
         search_box.append(btn_go)
         self.append(search_box)
+
+        # Genre browse grid, shown until the first search of any kind
+        self.tag_grid = Gtk.FlowBox()
+        self.tag_grid.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.tag_grid.set_max_children_per_line(4)
+        self.tag_grid.set_row_spacing(6)
+        self.tag_grid.set_column_spacing(6)
+        for tag in GENRE_TAGS:
+            btn = Gtk.Button(label=tag)
+            btn.add_css_class("tag-chip")
+            btn.connect("clicked", lambda b, t=tag: self.on_tag_clicked(t))
+            self.tag_grid.append(btn)
+        self.append(self.tag_grid)
 
         # Output catalog matrix viewport
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        
+
         self.results_box = Gtk.ListBox()
         self.results_box.set_selection_mode(Gtk.SelectionMode.NONE)
         scroll.set_child(self.results_box)
         self.append(scroll)
-        
+
         self.spinner = Gtk.Spinner()
         self.append(self.spinner)
+
+    def on_tag_clicked(self, tag: str):
+        self.tag_grid.set_visible(False)
+        self.spinner.start()
+        while child := self.results_box.get_first_child():
+            self.results_box.remove(child)
+        threading.Thread(target=self._async_search_by_tag, args=(tag,), daemon=True).start()
+
+    def _async_search_by_tag(self, tag: str):
+        results = radiobrowser.run_search_by_tag(tag)
+        GLib.idle_add(self._apply_results, results)
 
     def on_search(self, widget):
         q = self.ent_query.get_text().strip()
         if not q:
             return
+        self.tag_grid.set_visible(False)
         self.spinner.start()
         while child := self.results_box.get_first_child():
             self.results_box.remove(child)
@@ -64,28 +92,28 @@ class DiscoverPanel(Gtk.Box):
             row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
             row.set_margin_top(4)
             row.set_margin_bottom(4)
-            
+
             meta = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
             meta.set_hexpand(True)
-            
+
             title = Gtk.Label(label=r["name"], xalign=0.0)
             title.set_ellipsize(3)
-            
+
             sub = Gtk.Label(xalign=0.0)
             sub.add_css_class("meta-genre")
             tag_str = r.get("tags", "")[:40]
             cc = r.get("country", "")
             sub.set_text(f"[{cc}] {tag_str}" if cc else tag_str)
-            
+
             meta.append(title)
             meta.append(sub)
             row.append(meta)
-            
+
             btn_import = Gtk.Button(icon_name="bookmark-new-symbolic")
             btn_import.set_tooltip_text("Import into local station library")
             btn_import.connect("clicked", lambda b, idx=r["index"]: self.on_import(idx))
             row.append(btn_import)
-            
+
             self.results_box.append(row)
         return False
 
