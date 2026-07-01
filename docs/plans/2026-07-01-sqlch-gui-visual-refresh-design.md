@@ -30,6 +30,8 @@ Keep the window footprint at 440x500. The bold, hard-shadow neubrutalist look st
 
 This was validated visually via mockup: side-by-side comparison of border/shadow weights, then a composed full-panel mockup of all three views, both approved by the user.
 
+**Background texture:** `.popup-window` and `.sidebar` switch from a flat background-color fill to a subtle diagonal `linear-gradient(160deg, hi, lo)` using palette pairs that already exist but are unused today: `GRAD_HALL_HI`/`GRAD_HALL_LO` for the main window, `GRAD_STAGE_HI`/`GRAD_STAGE_LO` for the sidebar. No new colors are introduced. `sqlch_gui/palette.py`'s `_DEFAULTS` needs fallback entries added for these four keys (matching the Rosé Pine Moon defaults already there) since they aren't currently in `_DEFAULTS`, only in the active raven theme's `palette.sh`.
+
 ---
 
 ## Now Playing panel: hero cover art
