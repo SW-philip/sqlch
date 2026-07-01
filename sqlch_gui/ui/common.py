@@ -19,7 +19,7 @@ def load_custom_css():
         background-color: transparent;
     }}
     box.popup-window {{
-        background-color: {colors['HALL']};
+        background-image: linear-gradient(160deg, {colors['GRAD_HALL_HI']}, {colors['GRAD_HALL_LO']});
         color: {colors['SCORE']};
         border: 3px solid {outline};
         border-radius: 10px;
@@ -27,7 +27,7 @@ def load_custom_css():
         margin: 4px 18px 18px 4px;
     }}
     .sidebar {{
-        background-color: {colors['STAGE']};
+        background-image: linear-gradient(160deg, {colors['GRAD_STAGE_HI']}, {colors['GRAD_STAGE_LO']});
         border: 3px solid {outline};
         border-radius: 10px;
         padding: 6px;
@@ -46,29 +46,29 @@ def load_custom_css():
         background-color: {colors['WING']};
         color: {colors['SCORE']};
         border: 2px solid {outline};
-        box-shadow: 2px 2px 0 {shadow};
+        box-shadow: 4px 4px 0 {shadow};
     }}
     .nav-btn.active {{
         background-color: {colors['ROOT']};
         color: {colors['HALL']};
         font-weight: bold;
         border: 2px solid {outline};
-        box-shadow: 3px 3px 0 {shadow};
+        box-shadow: 5px 5px 0 {shadow};
     }}
     .card {{
         background-color: {colors['STAGE']};
         border: 2px solid {outline};
         border-radius: 8px;
         padding: 12px;
-        box-shadow: 5px 5px 0 {shadow};
+        box-shadow: 4px 4px 0 {shadow};
     }}
     .cover-art {{
         background-color: {colors['WING']};
         border: 2px solid {outline};
         border-radius: 6px;
-        min-width: 80px;
-        min-height: 80px;
-        box-shadow: 3px 3px 0 {shadow};
+        min-width: 120px;
+        min-height: 120px;
+        box-shadow: 4px 4px 0 {shadow};
     }}
     .list-header {{
         background-color: {colors['WING']};
@@ -78,7 +78,7 @@ def load_custom_css():
         border-radius: 6px;
         padding: 8px 12px;
         margin-bottom: 12px;
-        box-shadow: 3px 3px 0 {shadow};
+        box-shadow: 4px 4px 0 {shadow};
     }}
     .station-row {{
         padding: 8px 12px;
@@ -89,13 +89,13 @@ def load_custom_css():
     .station-row:hover {{
         background-color: {colors['WING']};
         border: 2px solid {outline};
-        box-shadow: 2px 2px 0 {shadow};
+        box-shadow: 4px 4px 0 {shadow};
     }}
     .station-row.active {{
         background-color: {colors['SEVENTH']};
         color: {colors['HALL']};
         border: 2px solid {outline};
-        box-shadow: 3px 3px 0 {shadow};
+        box-shadow: 4px 4px 0 {shadow};
     }}
     .station-row.active label {{
         color: {colors['HALL']};
@@ -120,7 +120,7 @@ def load_custom_css():
     }}
     .control-btn:hover {{
         background-color: {colors['MUTE']};
-        box-shadow: 5px 5px 0 {shadow};
+        box-shadow: 4px 4px 0 {shadow};
     }}
     .control-btn:active {{
         transform: translate(3px, 3px);
@@ -158,6 +158,26 @@ def load_custom_css():
         border-radius: 4px;
         border: 1px solid {outline};
         box-shadow: 2px 2px 0 {shadow};
+    }}
+    .tag-chip {{
+        background-color: {colors['WING']};
+        color: {colors['SCORE']};
+        border: 1.5px solid {outline};
+        border-radius: 12px;
+        padding: 4px 10px;
+        font-size: 0.75em;
+        box-shadow: 2px 2px 0 {shadow};
+    }}
+    .tag-chip:hover {{
+        background-color: {colors['MUTE']};
+    }}
+    .station-live {{
+        font-size: 0.8em;
+        font-style: italic;
+        color: {colors['FIFTH']};
+    }}
+    .station-row.active .station-live {{
+        color: {colors['HALL']};
     }}
     """
 
