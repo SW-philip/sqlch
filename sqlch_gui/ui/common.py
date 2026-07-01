@@ -12,12 +12,14 @@ def load_custom_css():
     css = f"""
     window {{
         background: transparent;
+        padding: 4px 18px 18px 4px;
     }}
     box.popup-window {{
         background-color: {colors['HALL']};
         color: {colors['SCORE']};
-        border: 2px solid {colors['WING']};
+        border: 3px solid {colors['WING']};
         border-radius: 12px;
+        box-shadow: 10px 10px 0 rgba(0,0,0,0.75);
     }}
     .sidebar {{
         background-color: {colors['STAGE']};

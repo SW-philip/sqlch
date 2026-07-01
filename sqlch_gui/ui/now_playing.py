@@ -151,6 +151,10 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_genre.set_visible(bool(genre))
 
     def _async_fetch_cover(self, artist: str, title: str):
+        import time
+        time.sleep(3.0)  # give sqlch-enrich time to write enriched.json
+        if self._cur_artist != artist or self._cur_title != title:
+            return  # track already changed, bail
         path, mode = metadata.get_cover_info(artist, title)
         if mode == "remote" and path:
             import hashlib
