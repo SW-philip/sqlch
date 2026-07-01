@@ -61,13 +61,19 @@ class StationListPanel(Gtk.Box):
             lbl.set_margin_bottom(4)
             self.list_box.append(lbl)
 
-            for s in sorted(groups[g_name], key=lambda x: float(x.get("frequency") or 0)):
+            def _freq(v):
+                try:
+                    return float(str(v or "0").split()[0])
+                except (ValueError, IndexError):
+                    return 0.0
+
+            for s in sorted(groups[g_name], key=lambda x: _freq(x.get("frequency"))):
                 row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
                 row.add_css_class("station-row")
 
                 freq_lbl = Gtk.Label()
                 freq_lbl.add_css_class("station-freq")
-                freq_lbl.set_text(f"{float(s.get('frequency') or 0):.1f}")
+                freq_lbl.set_text(f"{_freq(s.get('frequency')):.1f}")
                 
                 name_lbl = Gtk.Label(label=s.get("name"), xalign=0.0)
                 name_lbl.set_hexpand(True)
