@@ -17,31 +17,33 @@ class NowPlayingPanel(Gtk.Box):
         self.win = parent_window
 
         # Header card
-        card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         card.add_css_class("card")
-        
-        # Cover Art
+
+        # Hero cover art, centered
         self.cover_img = Gtk.Image()
-        self.cover_img.set_pixel_size(80)
+        self.cover_img.set_pixel_size(120)
         self.cover_img.add_css_class("cover-art")
+        self.cover_img.set_halign(Gtk.Align.CENTER)
         self.clear_cover()
         card.append(self.cover_img)
 
-        # Meta details text stack
+        # Meta details text stack, centered below the art
         text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        self.lbl_title = Gtk.Label(xalign=0.0)
+        text_box.set_halign(Gtk.Align.CENTER)
+        self.lbl_title = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
         self.lbl_title.add_css_class("meta-title")
         self.lbl_title.set_wrap(True)
         self.lbl_title.set_max_width_chars(28)
-        
-        self.lbl_artist = Gtk.Label(xalign=0.0)
+
+        self.lbl_artist = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
         self.lbl_artist.add_css_class("meta-artist")
         self.lbl_artist.set_wrap(True)
         self.lbl_artist.set_max_width_chars(28)
-        
-        self.lbl_genre = Gtk.Label(xalign=0.0)
+
+        self.lbl_genre = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
         self.lbl_genre.add_css_class("meta-genre")
-        
+
         text_box.append(self.lbl_title)
         text_box.append(self.lbl_artist)
         text_box.append(self.lbl_genre)
@@ -118,6 +120,9 @@ class NowPlayingPanel(Gtk.Box):
 
     def get_current_id(self) -> str | None:
         return self._cur_station_id
+
+    def get_current_track(self) -> tuple[str | None, str | None]:
+        return self._cur_artist, self._cur_title
 
     def update(self, resp: dict | None, icy: tuple[str | None, str | None]):
         if not resp or not resp.get("ok") or not resp.get("current"):
