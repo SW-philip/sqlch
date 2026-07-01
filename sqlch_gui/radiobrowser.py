@@ -55,42 +55,62 @@ def download_logo(station_id: str, logo_url: str) -> str | None:
     return None
 
 
-def search(query: str, limit: int = 20) -> list[dict]:
-    """Execute generic title metadata directory lookup inside open streaming databases."""
-    if not query.strip():
-        return []
-    url = f"https://{_RB_API}/json/stations/byname/{urllib.parse.quote(query)}"
+def _fetch_stations(url: str, limit: int) -> list[dict]:
+    """Fetch and normalize a RadioBrowser station listing from a full query URL."""
     try:
         req = urllib.request.Request(
             url, headers={"User-Agent": "sqlch-gui/1.0"}
         )
         with urllib.request.urlopen(req, timeout=4) as resp:
             raw = json.loads(resp.read().decode("utf-8", errors="replace"))
-            results = []
-            for item in raw[:limit]:
-                results.append(
-                    {
-                        "name": item.get("name", "Unknown").strip(),
-                        "url": item.get("url_resolved", item.get("url", "")),
-                        "favicon": item.get("favicon", ""),
-                        "tags": item.get("tags", ""),
-                        "country": item.get("countrycode", ""),
-                    }
-                )
-            return results
+            return [
+                {
+                    "name": item.get("name", "Unknown").strip(),
+                    "url": item.get("url_resolved", item.get("url", "")),
+                    "favicon": item.get("favicon", ""),
+                    "tags": item.get("tags", ""),
+                    "country": item.get("countrycode", ""),
+                }
+                for item in raw[:limit]
+            ]
     except Exception:
         return []
 
 
-def run_search(query: str) -> list[dict]:
-    """Execute structure scans across the tracking registry array and load them index-mapped."""
+def search(query: str, limit: int = 20) -> list[dict]:
+    """Execute generic title metadata directory lookup inside open streaming databases."""
+    if not query.strip():
+        return []
+    url = f"https://{_RB_API}/json/stations/byname/{urllib.parse.quote(query)}"
+    return _fetch_stations(url, limit)
+
+
+def search_by_tag(tag: str, limit: int = 20) -> list[dict]:
+    """Execute genre/tag directory lookup, sorted by station popularity."""
+    if not tag.strip():
+        return []
+    url = f"https://{_RB_API}/json/stations/bytag/{urllib.parse.quote(tag)}?order=votes&reverse=true"
+    return _fetch_stations(url, limit)
+
+
+def _cache_results(items: list[dict]) -> list[dict]:
+    """Index-map a result list into the module-level search cache used by add_from_search()."""
     global _search_cache
     _search_cache.clear()
-    items = search(query, limit=25)
     for i, item in enumerate(items, start=1):
         item["index"] = i
         _search_cache.append(item)
     return _search_cache
+
+
+def run_search(query: str) -> list[dict]:
+    """Execute structure scans across the tracking registry array and load them index-mapped."""
+    return _cache_results(search(query, limit=25))
+
+
+def run_search_by_tag(tag: str) -> list[dict]:
+    """Execute a tag-based structure scan and load it index-mapped."""
+    return _cache_results(search_by_tag(tag, limit=25))
 
 
 def add_from_search(number: int) -> str | None:
