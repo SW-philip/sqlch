@@ -22,7 +22,8 @@ class NowPlayingPanel(Gtk.Box):
         
         # Cover Art
         self.cover_img = Gtk.Image()
-        self.cover_img.set_pixel_size(96)
+        self.cover_img.set_pixel_size(80)
+        self.cover_img.add_css_class("cover-art")
         self.clear_cover()
         card.append(self.cover_img)
 

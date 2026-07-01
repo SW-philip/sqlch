@@ -14,6 +14,7 @@ class StationListPanel(Gtk.Box):
 
         # Add manual configuration trigger bar
         add_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        add_box.add_css_class("list-header")
         self.ent_name = Gtk.Entry(placeholder_text="Station Name")
         self.ent_name.set_hexpand(True)
         self.ent_url = Gtk.Entry(placeholder_text="Stream URL")

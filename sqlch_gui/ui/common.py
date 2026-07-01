@@ -19,17 +19,20 @@ def load_custom_css():
         background-color: transparent;
     }}
     box.popup-window {{
-        margin: 4px 18px 18px 4px;
         background-color: {colors['HALL']};
         color: {colors['SCORE']};
         border: 3px solid {outline};
         border-radius: 10px;
         box-shadow: 10px 10px 0 {shadow};
+        margin: 4px 18px 18px 4px;
     }}
     .sidebar {{
         background-color: {colors['STAGE']};
-        border-right: 3px solid {outline};
+        border: 3px solid {outline};
+        border-radius: 10px;
         padding: 6px;
+        box-shadow: 6px 6px 0 {shadow};
+        margin-right: 4px;
     }}
     .nav-btn {{
         padding: 10px;
@@ -58,6 +61,24 @@ def load_custom_css():
         border-radius: 8px;
         padding: 12px;
         box-shadow: 5px 5px 0 {shadow};
+    }}
+    .cover-art {{
+        background-color: {colors['WING']};
+        border: 2px solid {outline};
+        border-radius: 6px;
+        min-width: 80px;
+        min-height: 80px;
+        box-shadow: 3px 3px 0 {shadow};
+    }}
+    .list-header {{
+        background-color: {colors['WING']};
+        color: {colors['SCORE']};
+        font-weight: bold;
+        border: 2px solid {outline};
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin-bottom: 12px;
+        box-shadow: 3px 3px 0 {shadow};
     }}
     .station-row {{
         padding: 8px 12px;
