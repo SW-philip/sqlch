@@ -19,6 +19,10 @@ _DEFAULTS: dict[str, str] = {
     "ROOT": "#c4a7e7",
     "PIANO": "#f6c177",
     "SHADOW": "#0f0e17",
+    "GRAD_HALL_HI": "#282544",
+    "GRAD_HALL_LO": "#1a1828",
+    "GRAD_STAGE_HI": "#302c4d",
+    "GRAD_STAGE_LO": "#211f36",
     "STAFF": "15,14,23",
 }
 
