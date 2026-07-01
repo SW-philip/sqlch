@@ -42,12 +42,14 @@ def load_custom_css():
         background-color: {colors['ROOT']};
         color: {colors['HALL']};
         font-weight: bold;
+        box-shadow: 3px 3px 0 rgba(0,0,0,0.5);
     }}
     .card {{
         background-color: {colors['STAGE']};
-        border: 1px solid {colors['WING']};
+        border: 2px solid {colors['WING']};
         border-radius: 8px;
         padding: 12px;
+        box-shadow: 4px 4px 0 rgba(0,0,0,0.55);
     }}
     .station-row {{
         padding: 8px 12px;
@@ -76,10 +78,15 @@ def load_custom_css():
         padding: 0;
         background-color: {colors['WING']};
         color: {colors['SCORE']};
-        border: none;
+        border: 2px solid rgba(0,0,0,0.3);
+        box-shadow: 3px 3px 0 rgba(0,0,0,0.6);
     }}
     .control-btn:hover {{
         background-color: {colors['MUTE']};
+        box-shadow: 4px 4px 0 rgba(0,0,0,0.65);
+    }}
+    .control-btn:active {{
+        box-shadow: 1px 1px 0 rgba(0,0,0,0.6);
     }}
     .vol-slider scale contents trough highlight {{
         background-color: {colors['ROOT']};
@@ -110,6 +117,7 @@ def load_custom_css():
         background-color: {colors['WING']};
         padding: 2px 6px;
         border-radius: 4px;
+        box-shadow: 2px 2px 0 rgba(0,0,0,0.5);
     }}
     """
     

@@ -2,56 +2,19 @@
 
 import hashlib
 import json
-import os
 import re
 import socket
-import subprocess
+import threading
 import urllib.request
 from pathlib import Path
 
 from . import COVERS_DIR, ENRICHED_JSON, MPV_SOCK
 
 
-def _find_sqlch_python() -> dict[str, str]:
-    env = os.environ.copy()
-    try:
-        r = subprocess.run(["which", "sqlch-enrich"], capture_output=True, text=True)
-        if r.returncode == 0:
-            return env
-    except Exception:
-        pass
-
-    for p in [
-        "~/.config/nixos",
-        "~/nixos",
-        "~/dotfiles",
-        "~/.config/home-manager",
-    ]:
-        expanded = Path(p).expanduser()
-        if expanded.exists():
-            for script in expanded.glob("**/sqlch-enrich"):
-                if script.is_file():
-                    try:
-                        text = script.read_text()
-                        m = re.search(r"exec\s+([^\s]+python[^\s]*)\s+", text)
-                        if m:
-                            env["SQLCH_ENRICH_PYTHON"] = m.group(1)
-                            return env
-                    except Exception:
-                        pass
-    return env
-
-
-_SQLCH_PY_ENV = _find_sqlch_python()
-
-
 def download_cover(url: str, dest_path: Path) -> bool:
-    """Download cover art image payload with the current package agent identification."""
     try:
         dest_path.parent.mkdir(parents=True, exist_ok=True)
-        req = urllib.request.Request(
-            url, headers={"User-Agent": "sqlch-gui/1.0"}
-        )
+        req = urllib.request.Request(url, headers={"User-Agent": "sqlch-gui/1.0"})
         with urllib.request.urlopen(req, timeout=3) as response:
             dest_path.write_bytes(response.read())
         return True
@@ -67,6 +30,10 @@ def _strip_live_qualifier(title: str) -> str:
     ).strip()
 
 
+def _norm(s: str) -> str:
+    return " ".join(s.lower().strip().split())
+
+
 def _resolve_cover_entry(artist: str, title: str) -> str | None:
     if not artist or not title:
         return None
@@ -79,17 +46,11 @@ def _resolve_cover_entry(artist: str, title: str) -> str | None:
 
 
 def run_enrich(artist: str, title: str):
-    """Trigger the enrichment engine subprocess to harvest artwork metadata links asynchronously."""
     if not artist or not title:
         return
     try:
-        cmd = ["sqlch-enrich", artist, title]
-        subprocess.Popen(
-            cmd,
-            env=_SQLCH_PY_ENV,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        from sqlch.core.enrich import enrich_track
+        threading.Thread(target=enrich_track, args=(artist, title), daemon=True).start()
     except Exception:
         pass
 
@@ -121,6 +82,7 @@ def _mpv_metadata() -> tuple[str | None, str | None]:
 
 
 def _playerctl_track() -> tuple[str | None, str | None]:
+    import subprocess
     try:
         r = subprocess.run(
             ["playerctl", "-p", "mpv", "metadata", "--format", "{{artist}}||{{title}}"],
@@ -139,7 +101,6 @@ def _playerctl_track() -> tuple[str | None, str | None]:
 
 
 def get_icy_track() -> tuple[str | None, str | None]:
-    """Retrieve raw streaming metadata using direct socket checking or shell playerctl tools."""
     a, t = _mpv_metadata()
     if a or t:
         return a, t
@@ -147,7 +108,6 @@ def get_icy_track() -> tuple[str | None, str | None]:
 
 
 def get_icy_genre() -> str | None:
-    """Retrieve station genre info field strings from current live audio streams."""
     if not MPV_SOCK.exists():
         return None
     try:
@@ -179,24 +139,22 @@ def get_icy_genre() -> str | None:
 
 
 def get_enriched_meta(artist: str, title: str) -> dict | None:
-    """Check storage layers for enriched details matched to active tracks."""
     if not artist or not title or not ENRICHED_JSON.exists():
         return None
     try:
         data = json.loads(ENRICHED_JSON.read_text())
         clean_t = _strip_live_qualifier(title)
-        key = f"{artist.lower()}|{clean_t.lower()}"
+        key = f"{_norm(artist)}::{_norm(clean_t)}"
         return data.get(key)
     except Exception:
         return None
 
 
 def get_cover_info(artist: str, title: str) -> tuple[str | None, str | None]:
-    """Resolve full asset location pointers for local or external media graphic thumbnails."""
     local = _resolve_cover_entry(artist, title)
     if local:
         return local, "local"
     meta = get_enriched_meta(artist, title)
-    if meta and meta.get("cover_url"):
-        return meta["cover_url"], "remote"
+    if meta and meta.get("cover"):
+        return meta["cover"], "remote"
     return None, None
