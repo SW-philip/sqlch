@@ -176,7 +176,7 @@ class NowPlayingPanel(Gtk.Box):
     def _apply_cover_path(self, path: str, artist: str, title: str) -> bool:
         if self._cur_artist == artist and self._cur_title == title:
             try:
-                pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 96, 96, True)
+                pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 120, 120, True)
                 self.cover_img.set_from_pixbuf(pb)
             except Exception:
                 self.clear_cover()
