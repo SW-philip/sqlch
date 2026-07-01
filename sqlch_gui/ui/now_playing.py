@@ -98,6 +98,7 @@ class NowPlayingPanel(Gtk.Box):
         self._cur_station_id = None
         self._cur_artist = None
         self._cur_title = None
+        self._loaded = False
         self.reset_ui()
 
     def clear_cover(self):
@@ -172,6 +173,7 @@ class NowPlayingPanel(Gtk.Box):
         return False
 
     def update_indicators(self, bitrate: int | None, vol: float, muted: bool, bt: bool, playing: bool, channels: int | None):
+        self._loaded = playing
         self.btn_toggle.set_icon_name("media-playback-pause-symbolic" if playing else "media-playback-start-symbolic")
         
         self.vol_scale.handler_block(self._vol_handler)
@@ -209,13 +211,18 @@ class NowPlayingPanel(Gtk.Box):
         self.tech_box.set_visible(has_tech)
 
     def on_toggle_play(self, btn):
-        daemon.send({"command": "toggle"})
+        if self._loaded:
+            daemon.send({"cmd": "pause"})
+        else:
+            daemon.send({"cmd": "play", "query": "__last__"})
 
     def on_stop(self, btn):
-        daemon.send({"command": "stop"})
+        daemon.send({"cmd": "stop"})
 
     def on_toggle_mute(self, btn):
-        daemon.send({"command": "mute"})
+        import subprocess
+        subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"],
+                       stdout=subprocess.DEVNULL)
 
     def on_vol_changed(self, scale):
         val = scale.get_value()

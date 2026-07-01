@@ -100,7 +100,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         import time
         from .. import metadata
         while self._keep_running:
-            resp = daemon.send({"command": "status"})
+            resp = daemon.send({"cmd": "status"})
             icy = metadata.get_icy_track()
             vol, muted = daemon.get_vol_state()
             bitrate = daemon.get_stream_bitrate()

@@ -94,7 +94,7 @@ class StationListPanel(Gtk.Box):
     def on_row_clicked(self, gesture, n_press, x, y, station):
         button = gesture.get_current_button()
         if button == Gdk.BUTTON_PRIMARY:
-            daemon.send({"command": "play", "station": station["id"]})
+            daemon.send({"cmd": "play", "query": station["id"]})
         elif button == Gdk.BUTTON_SECONDARY:
             self.show_context_menu(gesture.get_widget(), station)
 
