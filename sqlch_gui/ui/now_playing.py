@@ -74,7 +74,7 @@ class NowPlayingPanel(Gtk.Box):
         self.vol_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=self.vol_adj)
         self.vol_scale.set_hexpand(True)
         self.vol_scale.set_draw_value(False)
-        self.vol_scale.connect("value-changed", self.on_vol_changed)
+        self._vol_handler = self.vol_scale.connect("value-changed", self.on_vol_changed)
         
         vol_box.append(self.btn_mute)
         vol_box.append(self.vol_scale)
@@ -174,10 +174,9 @@ class NowPlayingPanel(Gtk.Box):
     def update_indicators(self, bitrate: int | None, vol: float, muted: bool, bt: bool, playing: bool, channels: int | None):
         self.btn_toggle.set_icon_name("media-playback-pause-symbolic" if playing else "media-playback-start-symbolic")
         
-        # Lock volume signal circular execution updates
-        self.vol_scale.block_signals()
+        self.vol_scale.handler_block(self._vol_handler)
         self.vol_adj.set_value(vol)
-        self.vol_scale.unblock_signals()
+        self.vol_scale.handler_unblock(self._vol_handler)
 
         if muted:
             self.btn_mute.set_icon_name("audio-volume-muted-symbolic")

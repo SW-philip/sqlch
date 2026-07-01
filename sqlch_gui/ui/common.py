@@ -10,7 +10,10 @@ def load_custom_css():
     colors = palette.load()
     
     css = f"""
-    window.popup-window {{
+    window {{
+        background: transparent;
+    }}
+    box.popup-window {{
         background-color: {colors['HALL']};
         color: {colors['SCORE']};
         border: 2px solid {colors['WING']};
@@ -76,11 +79,11 @@ def load_custom_css():
     .control-btn:hover {{
         background-color: {colors['MUTE']};
     }}
-    .vol-slider scale trough highlight {{
+    .vol-slider scale contents trough highlight {{
         background-color: {colors['ROOT']};
         border-radius: 3px;
     }}
-    .vol-slider scale trough {{
+    .vol-slider scale contents trough {{
         background-color: {colors['WING']};
         border-radius: 3px;
     }}

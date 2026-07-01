@@ -92,7 +92,7 @@ class StationListPanel(Gtk.Box):
                 self._rows_map[s["id"]] = row
 
     def on_row_clicked(self, gesture, n_press, x, y, station):
-        button = gesture.get_current_event().get_button()
+        button = gesture.get_current_button()
         if button == Gdk.BUTTON_PRIMARY:
             daemon.send({"command": "play", "station": station["id"]})
         elif button == Gdk.BUTTON_SECONDARY:
@@ -107,7 +107,12 @@ class StationListPanel(Gtk.Box):
         # Modification entries
         ent_edit_name = Gtk.Entry(text=station["name"])
         ent_edit_url = Gtk.Entry(text=station["url"])
-        ent_edit_freq = Gtk.Entry(text=f"{station['frequency']:.1f}")
+        def _freq(v):
+            try:
+                return float(str(v or "0").split()[0])
+            except (ValueError, IndexError):
+                return 0.0
+        ent_edit_freq = Gtk.Entry(text=f"{_freq(station.get('frequency')):.1f}")
         ent_edit_group = Gtk.Entry(text=station.get("group", "Unsorted"))
         
         btn_save = Gtk.Button(label="Save Modifications")
