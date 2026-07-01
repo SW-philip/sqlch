@@ -1,7 +1,13 @@
 """Interactive Station Library interface with grouped lists and inline CRUD editing."""
 
 from gi.repository import Gtk, Gdk
-from .. import library, daemon
+from .. import library, daemon, palette
+
+def format_live_text(artist: str | None, title: str | None) -> str:
+    parts = [p for p in (artist, title) if p]
+    if not parts:
+        return ""
+    return "♫ " + " — ".join(parts)
 
 class StationListPanel(Gtk.Box):
     def __init__(self, parent_window):
@@ -54,10 +60,11 @@ class StationListPanel(Gtk.Box):
             g = s.get("group", "Unsorted")
             groups.setdefault(g, []).append(s)
 
+        colors = palette.load()
         for g_name in sorted(groups.keys()):
             # Inject structural separator heading label
             lbl = Gtk.Label(xalign=0.0)
-            lbl.set_markup(f"<span foreground='#6e6a86' weight='bold'>{g_name}</span>")
+            lbl.set_markup(f"<span foreground='{colors['BAR']}' weight='bold'>{g_name}</span>")
             lbl.set_margin_top(8)
             lbl.set_margin_bottom(4)
             self.list_box.append(lbl)
@@ -75,13 +82,24 @@ class StationListPanel(Gtk.Box):
                 freq_lbl = Gtk.Label()
                 freq_lbl.add_css_class("station-freq")
                 freq_lbl.set_text(f"{_freq(s.get('frequency')):.1f}")
-                
+
+                body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+                body.set_hexpand(True)
                 name_lbl = Gtk.Label(label=s.get("name"), xalign=0.0)
-                name_lbl.set_hexpand(True)
                 name_lbl.set_ellipsize(3) # Pango.EllipsizeMode.END
-                
+                live_lbl = Gtk.Label(xalign=0.0)
+                live_lbl.add_css_class("station-live")
+                live_lbl.set_ellipsize(3)
+                live_lbl.set_visible(False)
+                body.append(name_lbl)
+                body.append(live_lbl)
+
+                tag_lbl = Gtk.Label(label=s.get("group", "Unsorted"))
+                tag_lbl.add_css_class("tag-chip")
+
                 row.append(freq_lbl)
-                row.append(name_lbl)
+                row.append(body)
+                row.append(tag_lbl)
 
                 # Secondary click binding context setup
                 click_gesture = Gtk.GestureClick()
@@ -90,7 +108,7 @@ class StationListPanel(Gtk.Box):
                 row.add_controller(click_gesture)
 
                 self.list_box.append(row)
-                self._rows_map[s["id"]] = row
+                self._rows_map[s["id"]] = (row, live_lbl)
 
     def on_row_clicked(self, gesture, n_press, x, y, station):
         button = gesture.get_current_button()
@@ -163,9 +181,13 @@ class StationListPanel(Gtk.Box):
                 self.ent_url.set_text("")
                 self.refresh()
 
-    def set_active(self, active_id: str | None):
-        for s_id, row in self._rows_map.items():
+    def set_active(self, active_id: str | None, icy_artist: str | None = None, icy_title: str | None = None):
+        for s_id, (row, live_lbl) in self._rows_map.items():
             if s_id == active_id:
                 row.add_css_class("active")
+                text = format_live_text(icy_artist, icy_title)
+                live_lbl.set_text(text)
+                live_lbl.set_visible(bool(text))
             else:
                 row.remove_css_class("active")
+                live_lbl.set_visible(False)
