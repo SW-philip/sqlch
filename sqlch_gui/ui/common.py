@@ -5,19 +5,21 @@ gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, Gdk
 from .. import palette
 
+_css_provider: Gtk.CssProvider | None = None
+
 def load_custom_css():
-    """Load and inject dynamically computed CSS using the parsed runtime palette."""
+    global _css_provider
     colors = palette.load()
-    
+
     outline = colors['SCORE']
     shadow  = "rgba(0,0,0,0.9)"
 
     css = f"""
     window {{
-        background: transparent;
-        padding: 4px 18px 18px 4px;
+        background-color: transparent;
     }}
     box.popup-window {{
+        margin: 4px 18px 18px 4px;
         background-color: {colors['HALL']};
         color: {colors['SCORE']};
         border: 3px solid {outline};
@@ -74,6 +76,9 @@ def load_custom_css():
         border: 2px solid {outline};
         box-shadow: 3px 3px 0 {shadow};
     }}
+    .station-row.active label {{
+        color: {colors['HALL']};
+    }}
     .station-freq {{
         color: {colors['PIANO']};
         font-weight: bold;
@@ -97,13 +102,14 @@ def load_custom_css():
         box-shadow: 5px 5px 0 {shadow};
     }}
     .control-btn:active {{
+        transform: translate(3px, 3px);
         box-shadow: 1px 1px 0 {shadow};
     }}
-    .vol-slider scale contents trough highlight {{
+    .vol-slider scale trough highlight {{
         background-color: {colors['ROOT']};
         border-radius: 3px;
     }}
-    .vol-slider scale contents trough {{
+    .vol-slider scale trough {{
         background-color: {colors['WING']};
         border-radius: 3px;
         border: 1px solid {outline};
@@ -133,11 +139,14 @@ def load_custom_css():
         box-shadow: 2px 2px 0 {shadow};
     }}
     """
-    
-    provider = Gtk.CssProvider()
-    provider.load_from_data(css.encode('utf-8'))
+
+    display = Gdk.Display.get_default()
+    if _css_provider is not None:
+        Gtk.StyleContext.remove_provider_for_display(display, _css_provider)
+    _css_provider = Gtk.CssProvider()
+    _css_provider.load_from_string(css)
     Gtk.StyleContext.add_provider_for_display(
-        Gdk.Display.get_default(),
-        provider,
+        display,
+        _css_provider,
         Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
     )
