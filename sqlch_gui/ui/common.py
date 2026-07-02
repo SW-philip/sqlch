@@ -8,7 +8,6 @@ from gi.repository import Gtk, Gdk
 from .. import palette
 
 _css_provider: Gtk.CssProvider | None = None
-_GRAIN_PATH = Path(__file__).resolve().parent.parent / "assets" / "paper_grain.png"
 
 def load_custom_css():
     global _css_provider
@@ -16,16 +15,29 @@ def load_custom_css():
 
     outline = colors['SCORE']
     shadow  = f"rgba({colors['STAFF']},0.9)"
-    grain   = f"url('{_GRAIN_PATH.as_uri()}')"
+
+    # A microscopic procedural SVG noise filter to mimic paper pulp grain texture
+    # baseFrequency="0.65" creates a highly dense, microscopic grid of dots.
+    # numOctaves="3" adds chaotic variability to the grain's clump formation.
+    svg_grain_filter = (
+        "url(\"data:image/svg+xml;utf8,"
+        "<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'>"
+        "<filter id='paper-grain'>"
+        "<feTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' result='noise'/>"
+        "<feColorMatrix type='matrix' values='0 0 0 0 0   0 0 0 0 0   0 0 0 0 0  0 0 0 0.04 0' in='noise' result='coloredNoise'/>"
+        "<feBlend mode='multiply' in='SourceGraphic' in2='coloredNoise'/>"
+        "</filter>"
+        "<rect width='100%25' height='100%25' filter='url(%23paper-grain)' fill='transparent'/>"
+        "</svg>\")"
+    )
 
     css = f"""
     window {{
         background-color: transparent;
     }}
     .popup-window {{
-        background-image: {grain}, linear-gradient(160deg, {colors['GRAD_HALL_HI']}, {colors['GRAD_HALL_LO']});
+        background-image: {svg_grain_filter}, linear-gradient(160deg, {colors['GRAD_HALL_HI']}, {colors['GRAD_HALL_LO']});
         background-repeat: repeat, no-repeat;
-        background-blend-mode: multiply;
         color: {colors['SCORE']};
         border: 3px solid {outline};
         border-radius: 10px;
@@ -33,9 +45,8 @@ def load_custom_css():
         margin: 4px 18px 18px 4px;
     }}
     .sidebar {{
-        background-image: {grain}, linear-gradient(160deg, {colors['GRAD_STAGE_HI']}, {colors['GRAD_STAGE_LO']});
+        background-image: {svg_grain_filter}, linear-gradient(160deg, {colors['GRAD_STAGE_HI']}, {colors['GRAD_STAGE_LO']});
         background-repeat: repeat, no-repeat;
-        background-blend-mode: multiply;
         border: 2px solid {outline};
         border-radius: 10px;
         padding: 6px;
@@ -65,9 +76,8 @@ def load_custom_css():
     }}
     .card {{
         background-color: {colors['STAGE']};
-        background-image: {grain};
+        background-image: {svg_grain_filter};
         background-repeat: repeat;
-        background-blend-mode: multiply;
         border: 2px solid {outline};
         border-radius: 8px;
         padding: 12px;

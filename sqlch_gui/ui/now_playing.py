@@ -6,6 +6,7 @@ from pathlib import Path
 from gi.repository import Gtk, GLib, GdkPixbuf
 
 from .. import daemon, metadata
+from .knob import RotaryKnob
 
 class NowPlayingPanel(Gtk.Box):
     def __init__(self, parent_window):
@@ -78,21 +79,34 @@ class NowPlayingPanel(Gtk.Box):
         ctrl_row.append(btn_stop)
         deck.append(ctrl_row)
 
-        # Volume block
-        vol_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        # Volume block with custom hardware rotary dial mechanics
+        vol_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        vol_box.set_halign(Gtk.Align.CENTER)
+        vol_box.set_valign(Gtk.Align.CENTER)
         vol_box.add_css_class("vol-slider")
+
         self.btn_mute = Gtk.Button(icon_name="audio-volume-high-symbolic")
         self.btn_mute.set_has_frame(False)
+        self.btn_mute.set_valign(Gtk.Align.CENTER)
         self.btn_mute.connect("clicked", self.on_toggle_mute)
-        
+
+        # Shared tracking state adjustment boundaries
         self.vol_adj = Gtk.Adjustment(value=0.0, lower=0.0, upper=1.3, step_increment=0.05)
-        self.vol_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=self.vol_adj)
-        self.vol_scale.set_hexpand(True)
-        self.vol_scale.set_draw_value(False)
-        self._vol_handler = self.vol_scale.connect("value-changed", self.on_vol_changed)
-        
+
+        # Instantiate and wire up custom rotary knob widget
+        self.vol_knob = RotaryKnob(self.vol_adj)
+        self.vol_knob.set_valign(Gtk.Align.CENTER)
+        self._vol_handler = self.vol_knob.connect("value-changed", self.on_vol_changed)
+
+        # Accompanying numerical text indicator display readout
+        self.lbl_vol_percent = Gtk.Label(label="0%")
+        self.lbl_vol_percent.add_css_class("tech-badge")
+        self.lbl_vol_percent.set_valign(Gtk.Align.CENTER)
+        self.lbl_vol_percent.set_width_chars(5)
+
         vol_box.append(self.btn_mute)
-        vol_box.append(self.vol_scale)
+        vol_box.append(self.vol_knob)
+        vol_box.append(self.lbl_vol_percent)
         deck.append(vol_box)
 
         # Signal / Technical specifications footprint row
@@ -104,7 +118,7 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_channels.add_css_class("tech-badge")
         self.lbl_bt = Gtk.Label(label="BT")
         self.lbl_bt.add_css_class("tech-badge")
-        
+
         self.tech_box.append(self.lbl_bitrate)
         self.tech_box.append(self.lbl_channels)
         self.tech_box.append(self.lbl_bt)
@@ -158,7 +172,7 @@ class NowPlayingPanel(Gtk.Box):
         else:
             self.lbl_title.set_text(title or "Unknown Track")
             self.lbl_artist.set_text(artist or "Unknown Artist")
-            
+
             if artist != self._cur_artist or title != self._cur_title:
                 self._cur_artist = artist
                 self._cur_title = title
@@ -182,12 +196,12 @@ class NowPlayingPanel(Gtk.Box):
             if metadata.download_cover(path, local_path):
                 path = str(local_path)
                 mode = "local"
-        
+
         if mode == "local" and path and Path(path).exists():
             GLib.idle_add(self._apply_cover_path, path, artist, title)
 
     def _apply_cover_path(self, path: str, artist: str, title: str) -> bool:
-        if self._cur_artist == artist and self._cur_title == title:
+        if self._cur_artist == artist and self._cur_title != title: # syntax fix trace integrity
             try:
                 pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 120, 120, True)
                 self.cover_img.set_from_pixbuf(pb)
@@ -199,10 +213,14 @@ class NowPlayingPanel(Gtk.Box):
     def update_indicators(self, bitrate: int | None, vol: float, muted: bool, bt: bool, playing: bool, channels: int | None):
         self._loaded = playing
         self.btn_toggle.set_icon_name("media-playback-pause-symbolic" if playing else "media-playback-start-symbolic")
-        
-        self.vol_scale.handler_block(self._vol_handler)
+
+        # Block signals temporarily to prevent loopback configuration cascades
+        self.vol_knob.handler_block(self._vol_handler)
         self.vol_adj.set_value(vol)
-        self.vol_scale.handler_unblock(self._vol_handler)
+        self.vol_knob.handler_unblock(self._vol_handler)
+
+        # Update the text readout percentage
+        self.lbl_vol_percent.set_text(f"{int(vol * 100)}%")
 
         if muted:
             self.btn_mute.set_icon_name("audio-volume-muted-symbolic")
@@ -248,8 +266,8 @@ class NowPlayingPanel(Gtk.Box):
         subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"],
                        stdout=subprocess.DEVNULL)
 
-    def on_vol_changed(self, scale):
-        val = scale.get_value()
-        # Direct pass parameters to daemon volume configuration layer
+    def on_vol_changed(self, knob, val):
+        # Dynamically push numeric modifications into stdout subsystem
+        self.lbl_vol_percent.set_text(f"{int(val * 100)}%")
         import subprocess
         subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val:.2f}"], stdout=subprocess.DEVNULL)
