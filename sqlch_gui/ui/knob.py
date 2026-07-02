@@ -36,7 +36,7 @@ class RotaryKnob(Gtk.DrawingArea):
         scroll_gest.connect("scroll", self._on_scroll)
         self.add_controller(scroll_gest)
 
-    def _on_draw(self, area, cr, width, height, user_data):
+    def _on_draw(self, area, cr, width, height, user_data=None):
         cx = width / 2.0
         cy = height / 2.0
         radius = min(width, height) / 2.0 - 6.0
