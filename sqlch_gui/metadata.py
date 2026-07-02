@@ -11,6 +11,34 @@ from pathlib import Path
 from . import COVERS_DIR, ENRICHED_JSON, MPV_SOCK
 
 
+def _parse_iheart(title: str) -> tuple[str | None, str | None]:
+    """iHeart wraps titles in tracking attrs: Artist - text="Song" song_spot="M" ..."""
+    spot = re.search(r'song_spot="(\w)"', title)
+    if spot and spot.group(1).upper() != "M":
+        return None, None  # promo/ad spot, not music
+    song_m = re.search(r'text="([^"]*)"', title)
+    artist_m = re.match(r'^(.*?)\s*-\s*text=', title)
+    song = song_m.group(1).strip() if song_m else ""
+    artist = artist_m.group(1).strip() if artist_m else ""
+    if not artist and not song:
+        return None, None
+    return artist or None, song or None
+
+
+def parse_icy(title: str) -> tuple[str | None, str | None]:
+    if not title:
+        return None, None
+    if "song_spot=" in title:
+        return _parse_iheart(title)
+    if " - " in title:
+        artist, track = title.split(" - ", 1)
+    elif "-" in title:
+        artist, track = title.split("-", 1)
+    else:
+        return None, title.strip()
+    return artist.strip() or None, track.strip() or None
+
+
 def download_cover(url: str, dest_path: Path) -> bool:
     try:
         dest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -75,7 +103,9 @@ def _mpv_metadata() -> tuple[str | None, str | None]:
             resp = json.loads(buf.decode())
             if resp.get("error") == "success" and resp.get("data"):
                 d = resp["data"]
-                return d.get("artist"), d.get("title")
+                icy = d.get("icy-title") or d.get("title")
+                if icy:
+                    return parse_icy(icy)
     except Exception:
         pass
     return None, None
@@ -85,16 +115,13 @@ def _playerctl_track() -> tuple[str | None, str | None]:
     import subprocess
     try:
         r = subprocess.run(
-            ["playerctl", "-p", "mpv", "metadata", "--format", "{{artist}}||{{title}}"],
+            ["playerctl", "-p", "mpv", "metadata", "--format", "{{title}}"],
             capture_output=True,
             text=True,
             timeout=0.5,
         )
-        if r.returncode == 0 and "||" in r.stdout:
-            parts = r.stdout.strip().split("||", 1)
-            a = parts[0].strip() if parts[0].strip() else None
-            t = parts[1].strip() if parts[1].strip() else None
-            return a, t
+        if r.returncode == 0 and r.stdout.strip():
+            return parse_icy(r.stdout.strip())
     except Exception:
         pass
     return None, None

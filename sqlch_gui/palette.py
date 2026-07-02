@@ -27,14 +27,19 @@ _DEFAULTS: dict[str, str] = {
 }
 
 
+def palette_path() -> str:
+    """The palette.sh path load() reads by default."""
+    return os.environ.get(
+        "SQLCH_GUI_PALETTE",
+        str(Path.home() / ".config" / "waybar" / "palette.sh"),
+    )
+
+
 def load(path: str | None = None) -> dict[str, str]:
     """Parse a palette.sh file into a color dict. Falls back to Rosé Pine Moon."""
     p = dict(_DEFAULTS)
     if path is None:
-        path = os.environ.get(
-            "SQLCH_GUI_PALETTE",
-            str(Path.home() / ".config" / "waybar" / "palette.sh"),
-        )
+        path = palette_path()
     try:
         for line in Path(path).read_text().splitlines():
             m = re.match(r'^export\s+(\w+)="([^"]*)"', line)

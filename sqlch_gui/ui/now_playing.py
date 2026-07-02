@@ -14,19 +14,25 @@ class NowPlayingPanel(Gtk.Box):
         self.set_margin_end(14)
         self.set_margin_top(14)
         self.set_margin_bottom(14)
+        self.set_valign(Gtk.Align.CENTER)
         self.win = parent_window
 
         # Header card
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         card.add_css_class("card")
 
-        # Hero cover art, centered
+        # Hero cover art, centered; palette glyph placeholder until real art arrives
         self.cover_img = Gtk.Image()
         self.cover_img.set_pixel_size(120)
-        self.cover_img.add_css_class("cover-art")
-        self.cover_img.set_halign(Gtk.Align.CENTER)
+        self.cover_placeholder = Gtk.Label(label="♪")
+        self.cover_placeholder.add_css_class("cover-glyph")
+        self.cover_stack = Gtk.Stack()
+        self.cover_stack.add_css_class("cover-art")
+        self.cover_stack.set_halign(Gtk.Align.CENTER)
+        self.cover_stack.add_named(self.cover_placeholder, "placeholder")
+        self.cover_stack.add_named(self.cover_img, "art")
         self.clear_cover()
-        card.append(self.cover_img)
+        card.append(self.cover_stack)
 
         # Meta details text stack, centered below the art
         text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
@@ -50,21 +56,27 @@ class NowPlayingPanel(Gtk.Box):
         card.append(text_box)
         self.append(card)
 
+        # Control deck card: playback row + volume + tech badges grouped on one plate
+        deck = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        deck.add_css_class("card")
+
         # Playback controllers row
         ctrl_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         ctrl_row.set_halign(Gtk.Align.CENTER)
-        
+
         self.btn_toggle = Gtk.Button()
         self.btn_toggle.add_css_class("control-btn")
+        self.btn_toggle.add_css_class("primary")
         self.btn_toggle.connect("clicked", self.on_toggle_play)
-        
+
         btn_stop = Gtk.Button(icon_name="media-playback-stop-symbolic")
         btn_stop.add_css_class("control-btn")
         btn_stop.connect("clicked", self.on_stop)
-        
+        btn_stop.set_valign(Gtk.Align.CENTER)
+
         ctrl_row.append(self.btn_toggle)
         ctrl_row.append(btn_stop)
-        self.append(ctrl_row)
+        deck.append(ctrl_row)
 
         # Volume block
         vol_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -81,7 +93,7 @@ class NowPlayingPanel(Gtk.Box):
         
         vol_box.append(self.btn_mute)
         vol_box.append(self.vol_scale)
-        self.append(vol_box)
+        deck.append(vol_box)
 
         # Signal / Technical specifications footprint row
         self.tech_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -96,7 +108,8 @@ class NowPlayingPanel(Gtk.Box):
         self.tech_box.append(self.lbl_bitrate)
         self.tech_box.append(self.lbl_channels)
         self.tech_box.append(self.lbl_bt)
-        self.append(self.tech_box)
+        deck.append(self.tech_box)
+        self.append(deck)
 
         self._cur_station_id = None
         self._cur_artist = None
@@ -105,7 +118,7 @@ class NowPlayingPanel(Gtk.Box):
         self.reset_ui()
 
     def clear_cover(self):
-        self.cover_img.set_from_icon_name("audio-x-generic-symbolic")
+        self.cover_stack.set_visible_child_name("placeholder")
 
     def reset_ui(self):
         self.lbl_title.set_markup("<b>Not Playing</b>")
@@ -178,6 +191,7 @@ class NowPlayingPanel(Gtk.Box):
             try:
                 pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 120, 120, True)
                 self.cover_img.set_from_pixbuf(pb)
+                self.cover_stack.set_visible_child_name("art")
             except Exception:
                 self.clear_cover()
         return False

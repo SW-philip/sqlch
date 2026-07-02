@@ -4,9 +4,9 @@ import threading
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Gtk4LayerShell', '1.0')
-from gi.repository import Gtk, GLib, Gtk4LayerShell
+from gi.repository import Gtk, GLib, Gio, Gtk4LayerShell
 
-from .. import daemon
+from .. import daemon, palette
 from .common import load_custom_css
 from .now_playing import NowPlayingPanel
 from .station_list import StationListPanel
@@ -29,22 +29,31 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         Gtk4LayerShell.set_anchor(self, Gtk4LayerShell.Edge.RIGHT, True)
         Gtk4LayerShell.set_margin(self, Gtk4LayerShell.Edge.TOP, 48)
         Gtk4LayerShell.set_margin(self, Gtk4LayerShell.Edge.RIGHT, 12)
-        Gtk4LayerShell.set_keyboard_mode(self, Gtk4LayerShell.KeyboardMode.NONE)
+        Gtk4LayerShell.set_keyboard_mode(self, Gtk4LayerShell.KeyboardMode.ON_DEMAND)
 
-        # Top box structure setup
-        main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        main_box.add_css_class("popup-window")
-        self.set_child(main_box)
-
-        # Navigation column sidebar container
-        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        sidebar.add_css_class("sidebar")
-        main_box.append(sidebar)
+        # Top surface: an Overlay (not Box) so the sidebar pill's drop shadow
+        # is guaranteed to paint above the stack/card layer beneath it. Plain
+        # Box paints children in append order, so the card always won the
+        # overlap regardless of margins; Overlay always draws overlay
+        # children above the main child.
+        main_overlay = Gtk.Overlay()
+        main_overlay.add_css_class("popup-window")
+        self.set_child(main_overlay)
 
         self.stack = Gtk.Stack()
         self.stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         self.stack.set_transition_duration(200)
-        main_box.append(self.stack)
+        # Reserve the sidebar's footprint (minus the intentional overlap)
+        # so real panel content still starts clear of the floating sidebar.
+        self.stack.set_margin_start(50)
+        main_overlay.set_child(self.stack)
+
+        # Navigation column sidebar container, floated above the stack
+        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        sidebar.add_css_class("sidebar")
+        sidebar.set_halign(Gtk.Align.START)
+        sidebar.set_valign(Gtk.Align.START)
+        main_overlay.add_overlay(sidebar)
 
         # Instantiating presentation views
         self.now_playing = NowPlayingPanel(self)
@@ -79,6 +88,12 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         threading.Thread(target=self._daemon_monitor_loop, daemon=True).start()
         threading.Thread(target=self._bluetooth_monitor_loop, daemon=True).start()
 
+        # Re-skin live when the system theme rewrites palette.sh
+        self._pal_reload_pending = False
+        pal_file = Gio.File.new_for_path(palette.palette_path())
+        self._pal_monitor = pal_file.monitor_file(Gio.FileMonitorFlags.NONE, None)
+        self._pal_monitor.connect("changed", self._on_palette_changed)
+
         # Connect focus destruction patterns
         self.connect("close-request", self.on_close_request)
 
@@ -89,9 +104,24 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
                 btn.add_css_class("active")
             else:
                 btn.remove_css_class("active")
+        if name == "station_list":
+            self.station_list.on_shown()
 
     def trigger_library_refresh(self):
         self.station_list.refresh()
+
+    def _on_palette_changed(self, monitor, file, other_file, event_type):
+        # Theme switchers rewrite/rename the file in bursts; debounce to one reload
+        if self._pal_reload_pending:
+            return
+        self._pal_reload_pending = True
+        GLib.timeout_add(300, self._reload_palette)
+
+    def _reload_palette(self) -> bool:
+        self._pal_reload_pending = False
+        load_custom_css()
+        self.station_list.refresh()  # group headers bake palette hex into markup
+        return False
 
     def on_close_request(self, win):
         self._keep_running = False

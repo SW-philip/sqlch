@@ -1,7 +1,14 @@
 """Interactive Station Library interface with grouped lists and inline CRUD editing."""
 
-from gi.repository import Gtk, Gdk
-from .. import library, daemon, palette
+import threading
+import time
+
+from gi.repository import Gtk, Gdk, GLib
+from .. import library, daemon, icyprobe, metadata, palette
+
+PROBE_STALE_SECS = 45
+PROBE_TICK_SECS = 60
+PROBE_WORKERS = 4
 
 def format_live_text(artist: str | None, title: str | None) -> str:
     parts = [p for p in (artist, title) if p]
@@ -44,6 +51,11 @@ class StationListPanel(Gtk.Box):
         self.append(scroll)
 
         self._rows_map = {}
+        self._active_id = None
+        self._probe_titles: dict[str, str] = {}
+        self._probe_running = False
+        self._last_probe = 0.0
+        GLib.timeout_add_seconds(PROBE_TICK_SECS, self._probe_tick)
         self.refresh()
 
     def refresh(self):
@@ -110,6 +122,13 @@ class StationListPanel(Gtk.Box):
                 self.list_box.append(row)
                 self._rows_map[s["id"]] = (row, live_lbl)
 
+        # Re-apply any already-probed live lines to the rebuilt rows
+        for s_id, (row, live_lbl) in self._rows_map.items():
+            text = self._probe_titles.get(s_id, "")
+            if text and s_id != self._active_id:
+                live_lbl.set_text(text)
+                live_lbl.set_visible(True)
+
     def on_row_clicked(self, gesture, n_press, x, y, station):
         button = gesture.get_current_button()
         if button == Gdk.BUTTON_PRIMARY:
@@ -119,10 +138,11 @@ class StationListPanel(Gtk.Box):
 
     def show_context_menu(self, widget, station):
         popover = Gtk.Popover()
+        popover.add_css_class("context-menu")
         popover.set_parent(widget)
-        
+
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        
+
         # Modification entries
         ent_edit_name = Gtk.Entry(text=station["name"])
         ent_edit_url = Gtk.Entry(text=station["url"])
@@ -133,11 +153,13 @@ class StationListPanel(Gtk.Box):
                 return 0.0
         ent_edit_freq = Gtk.Entry(text=f"{_freq(station.get('frequency')):.1f}")
         ent_edit_group = Gtk.Entry(text=station.get("group", "Unsorted"))
-        
+
         btn_save = Gtk.Button(label="Save Modifications")
+        btn_save.add_css_class("menu-btn")
         btn_save.connect("clicked", lambda b: self.on_save_edit(popover, station["id"], ent_edit_name.get_text(), ent_edit_url.get_text(), ent_edit_freq.get_text(), ent_edit_group.get_text()))
-        
+
         btn_del = Gtk.Button(label="Delete Station")
+        btn_del.add_css_class("menu-btn")
         btn_del.add_css_class("destructive-action")
         btn_del.connect("clicked", lambda b: self.on_delete_station(popover, station["id"]))
 
@@ -182,12 +204,67 @@ class StationListPanel(Gtk.Box):
                 self.refresh()
 
     def set_active(self, active_id: str | None, icy_artist: str | None = None, icy_title: str | None = None):
+        self._active_id = active_id
         for s_id, (row, live_lbl) in self._rows_map.items():
             if s_id == active_id:
                 row.add_css_class("active")
-                text = format_live_text(icy_artist, icy_title)
-                live_lbl.set_text(text)
-                live_lbl.set_visible(bool(text))
+                text = format_live_text(icy_artist, icy_title) or self._probe_titles.get(s_id, "")
             else:
                 row.remove_css_class("active")
-                live_lbl.set_visible(False)
+                text = self._probe_titles.get(s_id, "")
+            live_lbl.set_text(text)
+            live_lbl.set_visible(bool(text))
+
+    # --- Live track probing for non-playing stations ---
+
+    def on_shown(self):
+        """Called when the panel becomes visible; sweep if results are stale."""
+        if time.monotonic() - self._last_probe > PROBE_STALE_SECS:
+            self._probe_all()
+
+    def _probe_tick(self) -> bool:
+        if self.get_mapped():
+            self.on_shown()
+        return True
+
+    def _probe_all(self):
+        if self._probe_running:
+            return
+        self._probe_running = True
+        stations = [
+            s for s in library.get_station_list() if s["id"] != self._active_id
+        ]
+
+        sem = threading.Semaphore(PROBE_WORKERS)
+
+        def probe_one(st):
+            with sem:
+                title = icyprobe.fetch_stream_title(st["url"])
+            artist, track = metadata.parse_icy(title) if title else (None, None)
+            GLib.idle_add(self._apply_probe, st["id"], format_live_text(artist, track))
+
+        def run():
+            workers = [
+                threading.Thread(target=probe_one, args=(s,), daemon=True)
+                for s in stations
+            ]
+            for w in workers:
+                w.start()
+            for w in workers:
+                w.join()
+            self._last_probe = time.monotonic()
+            self._probe_running = False
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _apply_probe(self, s_id: str, text: str) -> bool:
+        if text:
+            self._probe_titles[s_id] = text
+        else:
+            self._probe_titles.pop(s_id, None)
+        entry = self._rows_map.get(s_id)
+        if entry and s_id != self._active_id:
+            _row, live_lbl = entry
+            live_lbl.set_text(text)
+            live_lbl.set_visible(bool(text))
+        return False
