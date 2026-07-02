@@ -25,6 +25,11 @@ class StationListPanel(Gtk.Box):
         self.set_margin_bottom(10)
         self.win = parent_window
 
+        # Inline catalog text filtering bar
+        self.filter_entry = Gtk.Entry(placeholder_text="Filter local library...")
+        self.filter_entry.connect("changed", self.on_filter_changed)
+        self.append(self.filter_entry)
+
         # Add manual configuration trigger bar
         add_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         add_box.add_css_class("list-header")
@@ -34,7 +39,7 @@ class StationListPanel(Gtk.Box):
         self.ent_url.set_hexpand(True)
         btn_add = Gtk.Button(icon_name="list-add-symbolic")
         btn_add.connect("clicked", self.on_add_station)
-        
+
         add_box.append(self.ent_name)
         add_box.append(self.ent_url)
         add_box.append(btn_add)
@@ -44,9 +49,10 @@ class StationListPanel(Gtk.Box):
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        
+
         self.list_box = Gtk.ListBox()
         self.list_box.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.list_box.set_filter_func(self.filter_station_rows)
         scroll.set_child(self.list_box)
         self.append(scroll)
 
@@ -58,6 +64,31 @@ class StationListPanel(Gtk.Box):
         GLib.timeout_add_seconds(PROBE_TICK_SECS, self._probe_tick)
         self.refresh()
 
+    def filter_station_rows(self, row) -> bool:
+        search_text = self.filter_entry.get_text().lower().strip()
+        if not search_text:
+            return True
+
+        child = row.get_child()
+        # Let explicit structural heading text rows through without suppression
+        if not isinstance(child, Gtk.Box):
+            return True
+
+        # Extract textual tags or names hidden in sub-elements
+        for widget in child:
+            if isinstance(widget, Gtk.Box): # Primary center box
+                for label in widget:
+                    if isinstance(label, Gtk.Label) and search_text in label.get_text().lower():
+                        return True
+            elif isinstance(widget, Gtk.Label): # Side info chips
+                if search_text in widget.get_text().lower():
+                    return True
+
+        return False
+
+    def on_filter_changed(self, entry):
+        self.list_box.invalidate_filter()
+
     def refresh(self):
         """Rebuild entire listing catalog mapping."""
         while child := self.list_box.get_first_child():
@@ -65,7 +96,7 @@ class StationListPanel(Gtk.Box):
         self._rows_map.clear()
 
         stations = library.get_station_list()
-        
+
         # Sort catalog entries cleanly by grouping parameters
         groups = {}
         for s in stations:
@@ -174,7 +205,7 @@ class StationListPanel(Gtk.Box):
         vbox.append(btn_save)
         vbox.append(Gtk.Separator())
         vbox.append(btn_del)
-        
+
         popover.set_child(vbox)
         popover.popup()
 

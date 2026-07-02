@@ -69,6 +69,10 @@ def load_custom_css():
         border-radius: 8px;
         padding: 12px;
         box-shadow: 4px 4px 0 {shadow};
+        transform: rotate(0.5deg);
+    }}
+    .card:nth-child(even) {{
+        transform: rotate(-0.5deg);
     }}
     .cover-art {{
         background-color: {colors['WING']};
@@ -210,9 +214,16 @@ def load_custom_css():
         color: {colors['FIFTH']};
         background-color: {colors['WING']};
         padding: 3px 8px;
-        border-radius: 6px;
+        border-radius: 4px;
         border: 2px solid {outline};
-        box-shadow: 3px 3px 0 {shadow};
+        box-shadow: 2px 2px 0 {shadow};
+        transition: all 150ms ease-in-out;
+    }}
+    .tech-badge:hover {{
+        background-color: {colors['SCORE']};
+        color: {colors['HALL']};
+        box-shadow: 0px 0px 0 {shadow};
+        transform: translate(1px, 1px);
     }}
     .tag-chip {{
         background-color: {colors['WING']};

@@ -29,18 +29,40 @@ class DiscoverPanel(Gtk.Box):
         search_box.append(btn_go)
         self.append(search_box)
 
-        # Genre browse grid, shown until the first search of any kind
+        # Scoped Container for Category Discovery
+        self.discovery_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.browse_title = Gtk.Label(xalign=0.0)
+        self.browse_title.set_markup("<span size='small' weight='bold' alpha='70%'>BROWSE CATEGORIES</span>")
+        self.discovery_container.append(self.browse_title)
+
+        # Genre browse grid
         self.tag_grid = Gtk.FlowBox()
         self.tag_grid.set_selection_mode(Gtk.SelectionMode.NONE)
         self.tag_grid.set_max_children_per_line(4)
         self.tag_grid.set_row_spacing(6)
         self.tag_grid.set_column_spacing(6)
         for tag in GENRE_TAGS:
-            btn = Gtk.Button(label=tag)
+            btn = Gtk.Button(label=tag.lower())
             btn.add_css_class("tag-chip")
             btn.connect("clicked", lambda b, t=tag: self.on_tag_clicked(t))
             self.tag_grid.append(btn)
-        self.append(self.tag_grid)
+        self.discovery_container.append(self.tag_grid)
+        self.append(self.discovery_container)
+
+        # Reset active selection banner
+        self.reset_banner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.reset_banner.set_visible(False)
+        self.lbl_active_filter = Gtk.Label(xalign=0.0)
+        self.lbl_active_filter.add_css_class("meta-genre")
+
+        btn_clear = Gtk.Button(icon_name="edit-clear-symbolic")
+        btn_clear.add_css_class("tag-chip")
+        btn_clear.set_tooltip_text("Clear filter and show directories")
+        btn_clear.connect("clicked", self.reset_discovery_view)
+
+        self.reset_banner.append(self.lbl_active_filter)
+        self.reset_banner.append(btn_clear)
+        self.append(self.reset_banner)
 
         # Output catalog matrix viewport
         scroll = Gtk.ScrolledWindow()
@@ -56,7 +78,9 @@ class DiscoverPanel(Gtk.Box):
         self.append(self.spinner)
 
     def on_tag_clicked(self, tag: str):
-        self.tag_grid.set_visible(False)
+        self.discovery_container.set_visible(False)
+        self.lbl_active_filter.set_markup(f"Active Genre: <b>{tag}</b>")
+        self.reset_banner.set_visible(True)
         self.spinner.start()
         while child := self.results_box.get_first_child():
             self.results_box.remove(child)
@@ -70,7 +94,9 @@ class DiscoverPanel(Gtk.Box):
         q = self.ent_query.get_text().strip()
         if not q:
             return
-        self.tag_grid.set_visible(False)
+        self.discovery_container.set_visible(False)
+        self.lbl_active_filter.set_markup(f"Search Query: <b>{q}</b>")
+        self.reset_banner.set_visible(True)
         self.spinner.start()
         while child := self.results_box.get_first_child():
             self.results_box.remove(child)
@@ -79,6 +105,13 @@ class DiscoverPanel(Gtk.Box):
     def _async_search(self, query: str):
         results = radiobrowser.run_search(query)
         GLib.idle_add(self._apply_results, results)
+
+    def reset_discovery_view(self, button=None):
+        self.reset_banner.set_visible(False)
+        self.ent_query.set_text("")
+        while child := self.results_box.get_first_child():
+            self.results_box.remove(child)
+        self.discovery_container.set_visible(True)
 
     def _apply_results(self, results: list[dict]) -> bool:
         self.spinner.stop()
