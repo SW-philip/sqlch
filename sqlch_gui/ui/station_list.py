@@ -105,12 +105,16 @@ class StationListPanel(Gtk.Box):
 
         colors = palette.load()
         for g_name in sorted(groups.keys()):
-            # Inject structural separator heading label
-            lbl = Gtk.Label(xalign=0.0)
-            lbl.set_markup(f"<span foreground='{colors['BAR']}' weight='bold'>{g_name}</span>")
-            lbl.set_margin_top(8)
-            lbl.set_margin_bottom(4)
-            self.list_box.append(lbl)
+            # Category Header Separator
+            header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            header_box.add_css_class("list-header")
+            header_box.set_margin_top(14)
+            header_box.set_margin_bottom(6)
+
+            group_lbl = Gtk.Label(xalign=0.0)
+            group_lbl.set_markup(f"<b>{g_name.upper()}</b>")
+            header_box.append(group_lbl)
+            self.list_box.append(header_box)
 
             def _freq(v):
                 try:

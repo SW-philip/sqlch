@@ -90,7 +90,7 @@ class DiscoverPanel(Gtk.Box):
         results = radiobrowser.run_search_by_tag(tag)
         GLib.idle_add(self._apply_results, results)
 
-    def on_search(self, widget):
+    def on_search(self, button=None, *args):
         q = self.ent_query.get_text().strip()
         if not q:
             return
