@@ -25,6 +25,7 @@ def load_custom_css():
     .popup-window {{
         background-image: {grain}, linear-gradient(160deg, {colors['GRAD_HALL_HI']}, {colors['GRAD_HALL_LO']});
         background-repeat: repeat, no-repeat;
+        background-blend-mode: multiply;
         color: {colors['SCORE']};
         border: 3px solid {outline};
         border-radius: 10px;
@@ -34,6 +35,7 @@ def load_custom_css():
     .sidebar {{
         background-image: {grain}, linear-gradient(160deg, {colors['GRAD_STAGE_HI']}, {colors['GRAD_STAGE_LO']});
         background-repeat: repeat, no-repeat;
+        background-blend-mode: multiply;
         border: 2px solid {outline};
         border-radius: 10px;
         padding: 6px;
@@ -65,6 +67,7 @@ def load_custom_css():
         background-color: {colors['STAGE']};
         background-image: {grain};
         background-repeat: repeat;
+        background-blend-mode: multiply;
         border: 2px solid {outline};
         border-radius: 8px;
         padding: 12px;
