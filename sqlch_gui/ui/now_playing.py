@@ -26,17 +26,17 @@ class NowPlayingPanel(Gtk.Box):
         deck_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         deck_box.set_halign(Gtk.Align.CENTER)
 
-        # Hero cover art elements (Front side)[cite: 10]
+        # Hero cover art elements (Front side)
         self.cover_img = Gtk.Image()
-        self.cover_img.set_pixel_size(120)[cite: 10]
-        self.cover_placeholder = Gtk.Label(label="♪")[cite: 10]
-        self.cover_placeholder.add_css_class("cover-glyph")[cite: 10]
+        self.cover_img.set_pixel_size(120)
+        self.cover_placeholder = Gtk.Label(label="♪")
+        self.cover_placeholder.add_css_class("cover-glyph")
 
-        self.cover_stack = Gtk.Stack()[cite: 10]
-        self.cover_stack.add_css_class("cover-art")[cite: 10]
-        self.cover_stack.add_named(self.cover_placeholder, "placeholder")[cite: 10]
-        self.cover_stack.add_named(self.cover_img, "art")[cite: 10]
-        self.clear_cover()[cite: 10]
+        self.cover_stack = Gtk.Stack()
+        self.cover_stack.add_css_class("cover-art")
+        self.cover_stack.add_named(self.cover_placeholder, "placeholder")
+        self.cover_stack.add_named(self.cover_img, "art")
+        self.clear_cover()
 
         # Tracklist Matrix Sheet (Back side)
         track_scroll = Gtk.ScrolledWindow()
@@ -70,118 +70,118 @@ class NowPlayingPanel(Gtk.Box):
 
         card.append(deck_box)
 
-        # Meta details text stack, centered below the art[cite: 10]
-        text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)[cite: 10]
-        text_box.set_halign(Gtk.Align.CENTER)[cite: 10]
-        self.lbl_title = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)[cite: 10]
-        self.lbl_title.add_css_class("meta-title")[cite: 10]
-        self.lbl_title.set_wrap(True)[cite: 10]
-        self.lbl_title.set_max_width_chars(36)[cite: 10]
+        # Meta details text stack, centered below the art
+        text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        text_box.set_halign(Gtk.Align.CENTER)
+        self.lbl_title = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
+        self.lbl_title.add_css_class("meta-title")
+        self.lbl_title.set_wrap(True)
+        self.lbl_title.set_max_width_chars(36)
 
-        self.lbl_artist = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)[cite: 10]
-        self.lbl_artist.add_css_class("meta-artist")[cite: 10]
-        self.lbl_artist.set_wrap(True)[cite: 10]
-        self.lbl_artist.set_max_width_chars(36)[cite: 10]
+        self.lbl_artist = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
+        self.lbl_artist.add_css_class("meta-artist")
+        self.lbl_artist.set_wrap(True)
+        self.lbl_artist.set_max_width_chars(36)
 
-        self.lbl_genre = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)[cite: 10]
-        self.lbl_genre.add_css_class("meta-genre")[cite: 10]
+        self.lbl_genre = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
+        self.lbl_genre.add_css_class("meta-genre")
 
-        text_box.append(self.lbl_title)[cite: 10]
-        text_box.append(self.lbl_artist)[cite: 10]
-        text_box.append(self.lbl_genre)[cite: 10]
-        card.append(text_box)[cite: 10]
-        self.append(card)[cite: 10]
+        text_box.append(self.lbl_title)
+        text_box.append(self.lbl_artist)
+        text_box.append(self.lbl_genre)
+        card.append(text_box)
+        self.append(card)
 
-        # Control deck card, organized as a hub[cite: 10]
-        deck = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)[cite: 10]
-        deck.add_css_class("card")[cite: 10]
+        # Control deck card, organized as a hub
+        deck = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        deck.add_css_class("card")
 
-        # Hub row[cite: 10]
-        hub_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)[cite: 10]
-        hub_row.set_halign(Gtk.Align.CENTER)[cite: 10]
+        # Hub row
+        hub_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        hub_row.set_halign(Gtk.Align.CENTER)
 
-        btn_stop = Gtk.Button(icon_name="media-playback-stop-symbolic")[cite: 10]
-        btn_stop.add_css_class("control-btn")[cite: 10]
-        btn_stop.connect("clicked", self.on_stop)[cite: 10]
-        btn_stop.set_valign(Gtk.Align.CENTER)[cite: 10]
+        btn_stop = Gtk.Button(icon_name="media-playback-stop-symbolic")
+        btn_stop.add_css_class("control-btn")
+        btn_stop.connect("clicked", self.on_stop)
+        btn_stop.set_valign(Gtk.Align.CENTER)
 
-        self.vol_adj = Gtk.Adjustment(value=0.0, lower=0.0, upper=1.3, step_increment=0.05)[cite: 10]
+        self.vol_adj = Gtk.Adjustment(value=0.0, lower=0.0, upper=1.3, step_increment=0.05)
 
-        self.vol_knob = RotaryKnob(self.vol_adj)[cite: 10]
-        self.vol_knob.set_valign(Gtk.Align.CENTER)[cite: 10]
-        self._vol_handler = self.vol_knob.connect("value-changed", self.on_vol_changed)[cite: 10]
+        self.vol_knob = RotaryKnob(self.vol_adj)
+        self.vol_knob.set_valign(Gtk.Align.CENTER)
+        self._vol_handler = self.vol_knob.connect("value-changed", self.on_vol_changed)
 
-        self.btn_mute = Gtk.Button(icon_name="audio-volume-high-symbolic")[cite: 10]
-        self.btn_mute.add_css_class("control-btn")[cite: 10]
-        self.btn_mute.set_valign(Gtk.Align.CENTER)[cite: 10]
-        self.btn_mute.connect("clicked", self.on_toggle_mute)[cite: 10]
+        self.btn_mute = Gtk.Button(icon_name="audio-volume-high-symbolic")
+        self.btn_mute.add_css_class("control-btn")
+        self.btn_mute.set_valign(Gtk.Align.CENTER)
+        self.btn_mute.connect("clicked", self.on_toggle_mute)
 
-        hub_row.append(btn_stop)[cite: 10]
-        hub_row.append(self.vol_knob)[cite: 10]
-        hub_row.append(self.btn_mute)[cite: 10]
-        deck.append(hub_row)[cite: 10]
+        hub_row.append(btn_stop)
+        hub_row.append(self.vol_knob)
+        hub_row.append(self.btn_mute)
+        deck.append(hub_row)
 
-        # Primary transport at 6 o'clock[cite: 10]
-        self.btn_toggle = Gtk.Button()[cite: 10]
-        self.btn_toggle.add_css_class("control-btn")[cite: 10]
-        self.btn_toggle.add_css_class("primary")[cite: 10]
-        self.btn_toggle.set_halign(Gtk.Align.CENTER)[cite: 10]
-        self.btn_toggle.connect("clicked", self.on_toggle_play)[cite: 10]
-        deck.append(self.btn_toggle)[cite: 10]
+        # Primary transport at 6 o'clock
+        self.btn_toggle = Gtk.Button()
+        self.btn_toggle.add_css_class("control-btn")
+        self.btn_toggle.add_css_class("primary")
+        self.btn_toggle.set_halign(Gtk.Align.CENTER)
+        self.btn_toggle.connect("clicked", self.on_toggle_play)
+        deck.append(self.btn_toggle)
 
-        # Readout strip[cite: 10]
-        self.tech_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)[cite: 10]
-        self.tech_box.set_halign(Gtk.Align.CENTER)[cite: 10]
+        # Readout strip
+        self.tech_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.tech_box.set_halign(Gtk.Align.CENTER)
 
-        self.lbl_vol_percent = Gtk.Label(label="0%")[cite: 10]
-        self.lbl_vol_percent.add_css_class("tech-badge")[cite: 10]
-        self.lbl_vol_percent.set_width_chars(5)[cite: 10]
+        self.lbl_vol_percent = Gtk.Label(label="0%")
+        self.lbl_vol_percent.add_css_class("tech-badge")
+        self.lbl_vol_percent.set_width_chars(5)
 
-        self.lbl_bitrate = Gtk.Label()[cite: 10]
-        self.lbl_bitrate.add_css_class("tech-badge")[cite: 10]
-        self.lbl_channels = Gtk.Label()[cite: 10]
-        self.lbl_channels.add_css_class("tech-badge")[cite: 10]
-        self.lbl_bt = Gtk.Label(label="BT")[cite: 10]
-        self.lbl_bt.add_css_class("tech-badge")[cite: 10]
+        self.lbl_bitrate = Gtk.Label()
+        self.lbl_bitrate.add_css_class("tech-badge")
+        self.lbl_channels = Gtk.Label()
+        self.lbl_channels.add_css_class("tech-badge")
+        self.lbl_bt = Gtk.Label(label="BT")
+        self.lbl_bt.add_css_class("tech-badge")
 
-        self.tech_box.append(self.lbl_vol_percent)[cite: 10]
-        self.tech_box.append(self.lbl_bitrate)[cite: 10]
-        self.tech_box.append(self.lbl_channels)[cite: 10]
-        self.tech_box.append(self.lbl_bt)[cite: 10]
-        deck.append(self.tech_box)[cite: 10]
-        self.append(deck)[cite: 10]
+        self.tech_box.append(self.lbl_vol_percent)
+        self.tech_box.append(self.lbl_bitrate)
+        self.tech_box.append(self.lbl_channels)
+        self.tech_box.append(self.lbl_bt)
+        deck.append(self.tech_box)
+        self.append(deck)
 
-        self._cur_station_id = None[cite: 10]
-        self._cur_artist = None[cite: 10]
-        self._cur_title = None[cite: 10]
-        self._loaded = False[cite: 10]
-        self.reset_ui()[cite: 10]
+        self._cur_station_id = None
+        self._cur_artist = None
+        self._cur_title = None
+        self._loaded = False
+        self.reset_ui()
 
     def clear_cover(self):
-        self.cover_stack.set_visible_child_name("placeholder")[cite: 10]
+        self.cover_stack.set_visible_child_name("placeholder")
 
     def reset_ui(self):
-        self.lbl_title.set_markup("<b>Not Playing</b>")[cite: 10]
-        self.lbl_artist.set_text("Select a station from the library")[cite: 10]
-        self.lbl_genre.set_text("")[cite: 10]
-        self.btn_toggle.set_icon_name("media-playback-start-symbolic")[cite: 10]
-        self.lbl_bitrate.set_visible(False)[cite: 10]
-        self.lbl_channels.set_visible(False)[cite: 10]
-        self.lbl_bt.set_visible(False)[cite: 10]
-        self.clear_cover()[cite: 10]
-        self._cur_station_id = None[cite: 10]
-        self._cur_artist = None[cite: 10]
-        self._cur_title = None[cite: 10]
+        self.lbl_title.set_markup("<b>Not Playing</b>")
+        self.lbl_artist.set_text("Select a station from the library")
+        self.lbl_genre.set_text("")
+        self.btn_toggle.set_icon_name("media-playback-start-symbolic")
+        self.lbl_bitrate.set_visible(False)
+        self.lbl_channels.set_visible(False)
+        self.lbl_bt.set_visible(False)
+        self.clear_cover()
+        self._cur_station_id = None
+        self._cur_artist = None
+        self._cur_title = None
 
         # Sync back-plate layout status
         self.stack_wrapper.remove_css_class("flipped")
         self.deck_stack.set_visible_child_name("front")
 
     def get_current_id(self) -> str | None:
-        return self._cur_station_id[cite: 10]
+        return self._cur_station_id
 
     def get_current_track(self) -> tuple[str | None, str | None]:
-        return self._cur_artist, self._cur_title[cite: 10]
+        return self._cur_artist, self._cur_title
 
     def _sync_back_plate(self, title: str, artist: str):
         """Safely cleans and updates the ledger back-plate markup strings."""
@@ -205,119 +205,119 @@ class NowPlayingPanel(Gtk.Box):
             self.deck_stack.set_visible_child_name("front")
 
     def update(self, resp: dict | None, icy: tuple[str | None, str | None]):
-        if not resp or not resp.get("ok") or not resp.get("current"):[cite: 10]
-            self.reset_ui()[cite: 10]
-            return[cite: 10]
+        if not resp or not resp.get("ok") or not resp.get("current"):
+            self.reset_ui()
+            return
 
-        curr = resp["current"][cite: 10]
-        self._cur_station_id = curr.get("id")[cite: 10]
-        station_name = curr.get("name", "Unknown Station")[cite: 10]
+        curr = resp["current"]
+        self._cur_station_id = curr.get("id")
+        station_name = curr.get("name", "Unknown Station")
 
-        raw_artist, raw_title = icy[cite: 10]
-        artist = raw_artist.strip() if raw_artist else ""[cite: 10]
-        title = raw_title.strip() if raw_title else ""[cite: 10]
+        raw_artist, raw_title = icy:
+        artist = raw_artist.strip() if raw_artist else ""
+        title = raw_title.strip() if raw_title else ""
 
-        if not artist and not title:[cite: 10]
-            self.lbl_title.set_markup(f"<b>{html.escape(station_name)}</b>")[cite: 10]
-            self.lbl_artist.set_text("Live Stream")[cite: 10]
-            self.clear_cover()[cite: 10]
-            self._cur_artist, self._cur_title = None, None[cite: 10]
+        if not artist and not title:
+            self.lbl_title.set_markup(f"<b>{html.escape(station_name)}</b>")
+            self.lbl_artist.set_text("Live Stream")
+            self.clear_cover()
+            self._cur_artist, self._cur_title = None, None
         else:
-            self.lbl_title.set_text(title or "Unknown Track")[cite: 10]
-            self.lbl_artist.set_text(artist or "Unknown Artist")[cite: 10]
+            self.lbl_title.set_text(title or "Unknown Track")
+            self.lbl_artist.set_text(artist or "Unknown Artist")
 
-            if artist != self._cur_artist or title != self._cur_title:[cite: 10]
-                self._cur_artist = artist[cite: 10]
-                self._cur_title = title[cite: 10]
-                metadata.run_enrich(artist, title)[cite: 10]
-                threading.Thread(target=self._async_fetch_cover, args=(artist, title), daemon=True).start()[cite: 10]
+            if artist != self._cur_artist or title != self._cur_title:
+                self._cur_artist = artist
+                self._cur_title = title
+                metadata.run_enrich(artist, title)
+                threading.Thread(target=self._async_fetch_cover, args=(artist, title), daemon=True).start()
 
         # Push real-time updates directly to the back ledger if open
         if self.deck_stack.get_visible_child_name() == "back":
             self._sync_back_plate(self._cur_title, self._cur_artist)
 
-        genre = metadata.get_icy_genre()[cite: 10]
-        self.lbl_genre.set_text(genre if genre else "")[cite: 10]
-        self.lbl_genre.set_visible(bool(genre))[cite: 10]
+        genre = metadata.get_icy_genre()
+        self.lbl_genre.set_text(genre if genre else "")
+        self.lbl_genre.set_visible(bool(genre))
 
     def _async_fetch_cover(self, artist: str, title: str):
-        import time[cite: 10]
-        time.sleep(3.0)  # give sqlch-enrich time to write enriched.json[cite: 10]
-        if self._cur_artist != artist or self._cur_title != title:[cite: 10]
-            return  # track already changed, bail[cite: 10]
-        path, mode = metadata.get_cover_info(artist, title)[cite: 10]
-        if mode == "remote" and path:[cite: 10]
-            import hashlib[cite: 10]
-            h = hashlib.md5(f"{artist.lower()}|{title.lower()}".encode()).hexdigest()[cite: 10]
-            local_path = metadata.COVERS_DIR / f"{h}.jpg"[cite: 10]
-            if metadata.download_cover(path, local_path):[cite: 10]
-                path = str(local_path)[cite: 10]
-                mode = "local"[cite: 10]
+        import time
+        time.sleep(3.0)  # give sqlch-enrich time to write enriched.json
+        if self._cur_artist != artist or self._cur_title != title:
+            return  # track already changed, bail
+        path, mode = metadata.get_cover_info(artist, title)
+        if mode == "remote" and path:
+            import hashlib
+            h = hashlib.md5(f"{artist.lower()}|{title.lower()}".encode()).hexdigest()
+            local_path = metadata.COVERS_DIR / f"{h}.jpg"
+            if metadata.download_cover(path, local_path):
+                path = str(local_path)
+                mode = "local"
 
-        if mode == "local" and path and Path(path).exists():[cite: 10]
-            GLib.idle_add(self._apply_cover_path, path, artist, title)[cite: 10]
+        if mode == "local" and path and Path(path).exists():
+            GLib.idle_add(self._apply_cover_path, path, artist, title)
 
     def _apply_cover_path(self, path: str, artist: str, title: str) -> bool:
-        if self._cur_artist == artist and self._cur_title == title:[cite: 10]
+        if self._cur_artist == artist and self._cur_title == title:
             try:
-                pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 120, 120, True)[cite: 10]
-                self.cover_img.set_from_pixbuf(pb)[cite: 10]
-                self.cover_stack.set_visible_child_name("art")[cite: 10]
-            except Exception:[cite: 10]
-                self.clear_cover()[cite: 10]
-        return False[cite: 10]
+                pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 120, 120, True)
+                self.cover_img.set_from_pixbuf(pb)
+                self.cover_stack.set_visible_child_name("art")
+            except Exception:
+                self.clear_cover()
+        return False
 
     def update_indicators(self, bitrate: int | None, vol: float, muted: bool, bt: bool, playing: bool, channels: int | None):
-        self._loaded = playing[cite: 10]
-        self.btn_toggle.set_icon_name("media-playback-pause-symbolic" if playing else "media-playback-start-symbolic")[cite: 10]
+        self._loaded = playing
+        self.btn_toggle.set_icon_name("media-playback-pause-symbolic" if playing else "media-playback-start-symbolic")
 
-        # Block signals temporarily to prevent loopback configuration cascades[cite: 10]
-        self.vol_knob.handler_block(self._vol_handler)[cite: 10]
-        self.vol_adj.set_value(vol)[cite: 10]
-        self.vol_knob.handler_unblock(self._vol_handler)[cite: 10]
+        # Block signals temporarily to prevent loopback configuration cascades
+        self.vol_knob.handler_block(self._vol_handler)
+        self.vol_adj.set_value(vol)
+        self.vol_knob.handler_unblock(self._vol_handler)
 
-        # Update the text readout percentage[cite: 10]
-        self.lbl_vol_percent.set_text(f"{int(vol * 100)}%")[cite: 10]
+        # Update the text readout percentage
+        self.lbl_vol_percent.set_text(f"{int(vol * 100)}%")
 
-        if muted:[cite: 10]
-            self.btn_mute.set_icon_name("audio-volume-muted-symbolic")[cite: 10]
-        elif vol < 0.4:[cite: 10]
-            self.btn_mute.set_icon_name("audio-volume-low-symbolic")[cite: 10]
-        elif vol < 0.8:[cite: 10]
-            self.btn_mute.set_icon_name("audio-volume-medium-symbolic")[cite: 10]
-        else:[cite: 10]
-            self.btn_mute.set_icon_name("audio-volume-high-symbolic")[cite: 10]
+        if muted:
+            self.btn_mute.set_icon_name("audio-volume-muted-symbolic")
+        elif vol < 0.4:
+            self.btn_mute.set_icon_name("audio-volume-low-symbolic")
+        elif vol < 0.8:
+            self.btn_mute.set_icon_name("audio-volume-medium-symbolic")
+        else:
+            self.btn_mute.set_icon_name("audio-volume-high-symbolic")
 
-        if bitrate:[cite: 10]
-            self.lbl_bitrate.set_text(f"{bitrate}k")[cite: 10]
-            self.lbl_bitrate.set_visible(True)[cite: 10]
-        else:[cite: 10]
-            self.lbl_bitrate.set_visible(False)[cite: 10]
+        if bitrate:
+            self.lbl_bitrate.set_text(f"{bitrate}k")
+            self.lbl_bitrate.set_visible(True)
+        else:
+            self.lbl_bitrate.set_visible(False)
 
-        if channels:[cite: 10]
-            self.lbl_channels.set_text("Stereo" if channels == 2 else "Mono" if channels == 1 else f"{channels}Ch")[cite: 10]
-            self.lbl_channels.set_visible(True)[cite: 10]
-        else:[cite: 10]
-            self.lbl_channels.set_visible(False)[cite: 10]
+        if channels:
+            self.lbl_channels.set_text("Stereo" if channels == 2 else "Mono" if channels == 1 else f"{channels}Ch")
+            self.lbl_channels.set_visible(True)
+        else:
+            self.lbl_channels.set_visible(False)
 
-        self.lbl_bt.set_visible(bt)[cite: 10]
+        self.lbl_bt.set_visible(bt)
 
     def on_toggle_play(self, btn):
-        if self._loaded:[cite: 10]
-            daemon.send({"cmd": "pause"})[cite: 10]
+        if self._loaded:
+            daemon.send({"cmd": "pause"})
         else:
-            daemon.send({"cmd": "play", "query": "__last__"})[cite: 10]
+            daemon.send({"cmd": "play", "query": "__last__"})
 
     def on_stop(self, btn):
-        daemon.send({"cmd": "stop"})[cite: 10]
+        daemon.send({"cmd": "stop"})
 
     def on_toggle_mute(self, btn):
-        import subprocess[cite: 10]
-        subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"],[cite: 10]
+        import subprocess
+        subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"],
                        stdout=subprocess.DEVNULL)
 
     def on_vol_changed(self, knob, val):
-        # Dynamically push numeric modifications into stdout subsystem[cite: 10]
-        self.lbl_vol_percent.set_text(f"{int(val * 100)}%")[cite: 10]
-        import subprocess[cite: 10]
-        subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val:.2f}"], stdout=subprocess.DEVNULL)[cite: 10]
+        # Dynamically push numeric modifications into stdout subsystem
+        self.lbl_vol_percent.set_text(f"{int(val * 100)}%")
+        import subprocess
+        subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val:.2f}"], stdout=subprocess.DEVNULL)
