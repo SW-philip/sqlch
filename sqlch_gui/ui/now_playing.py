@@ -6,7 +6,7 @@ from pathlib import Path
 from gi.repository import Gtk, GLib, GdkPixbuf
 
 from .. import daemon, metadata
-from .knob import RotaryKnob
+from .knob import RotaryKnob, RecordKnob
 
 class NowPlayingPanel(Gtk.Box):
     def __init__(self, parent_window):
@@ -116,6 +116,11 @@ class NowPlayingPanel(Gtk.Box):
         self.btn_mute.set_valign(Gtk.Align.CENTER)
         self.btn_mute.connect("clicked", self.on_toggle_mute)
 
+        self.rec_knob = RecordKnob()
+        self.rec_knob.set_valign(Gtk.Align.CENTER)
+        self.rec_knob.connect("record-toggled", self.on_record_toggled)
+
+        hub_row.append(self.rec_knob)
         hub_row.append(btn_stop)
         hub_row.append(self.vol_knob)
         hub_row.append(self.btn_mute)
@@ -137,6 +142,10 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_vol_percent.add_css_class("tech-badge")
         self.lbl_vol_percent.set_width_chars(5)
 
+        self.lbl_rec = Gtk.Label()
+        self.lbl_rec.add_css_class("tech-badge")
+        self.lbl_rec.add_css_class("rec-badge")
+
         self.lbl_bitrate = Gtk.Label()
         self.lbl_bitrate.add_css_class("tech-badge")
         self.lbl_channels = Gtk.Label()
@@ -144,6 +153,7 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_bt = Gtk.Label(label="BT")
         self.lbl_bt.add_css_class("tech-badge")
 
+        self.tech_box.append(self.lbl_rec)
         self.tech_box.append(self.lbl_vol_percent)
         self.tech_box.append(self.lbl_bitrate)
         self.tech_box.append(self.lbl_channels)
@@ -168,6 +178,8 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_bitrate.set_visible(False)
         self.lbl_channels.set_visible(False)
         self.lbl_bt.set_visible(False)
+        self.rec_knob.set_state(False, None)
+        self.lbl_rec.set_visible(False)
         self.clear_cover()
         self._cur_station_id = None
         self._cur_artist = None
@@ -236,15 +248,9 @@ class NowPlayingPanel(Gtk.Box):
             self.deck_stack.set_visible_child_name("front")
 
     def update(self, resp: dict | None, icy: tuple[str | None, str | None]):
-        # ... validation logic from lines 166-190 remains unchanged ...
-
-        # Push real-time updates directly to the back ledger if open
-        if self.deck_stack.get_visible_child_name() == "back":
-            self._sync_back_plate()
-
-        genre = metadata.get_icy_genre()
-        self.lbl_genre.set_text(genre if genre else "")
-        self.lbl_genre.set_visible(bool(genre))
+        if not resp or not resp.get("ok") or not resp.get("current"):
+            self.reset_ui()
+            return
 
         curr = resp["current"]
         self._cur_station_id = curr.get("id")
@@ -271,7 +277,7 @@ class NowPlayingPanel(Gtk.Box):
 
         # Push real-time updates directly to the back ledger if open
         if self.deck_stack.get_visible_child_name() == "back":
-            self._sync_back_plate(self._cur_title, self._cur_artist)
+            self._sync_back_plate()
 
         genre = metadata.get_icy_genre()
         self.lbl_genre.set_text(genre if genre else "")
@@ -304,7 +310,8 @@ class NowPlayingPanel(Gtk.Box):
                 self.clear_cover()
         return False
 
-    def update_indicators(self, bitrate: int | None, vol: float, muted: bool, bt: bool, playing: bool, channels: int | None):
+    def update_indicators(self, bitrate: int | None, vol: float, muted: bool, bt: bool, playing: bool,
+                          channels: int | None, recording: dict | None = None):
         self._loaded = playing
         self.btn_toggle.set_icon_name("media-playback-pause-symbolic" if playing else "media-playback-start-symbolic")
 
@@ -338,6 +345,17 @@ class NowPlayingPanel(Gtk.Box):
             self.lbl_channels.set_visible(False)
 
         self.lbl_bt.set_visible(bt)
+
+        rec = recording or {}
+        active = bool(rec.get("active"))
+        self.rec_knob.set_state(active, rec.get("mode"))
+        if active:
+            m, s = divmod(int(rec.get("elapsed", 0)), 60)
+            self.lbl_rec.set_text(f"REC {m:02d}:{s:02d}")
+        self.lbl_rec.set_visible(active)
+
+    def on_record_toggled(self, knob, mode):
+        daemon.send({"cmd": "record", "action": "toggle", "mode": mode})
 
     def on_toggle_play(self, btn):
         if self._loaded:

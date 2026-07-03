@@ -314,6 +314,12 @@ def load_custom_css():
         border: 1px dashed {thread};
         box-shadow: 0 0 0 1px {outline}, {slight_lift}, {hem(2, puff=False)};
     }}
+    .tech-badge.rec-badge {{
+        background-color: {colors.get('FORTE', '#8c3b3b')};
+        color: {colors.get('HALL', '#fdf8ee')};
+        text-shadow: 0 1px 0 rgba({staff}, 0.60);
+        outline: 1px dashed {thread_light};
+    }}
 
     popover.context-menu > contents {{
         background-color: {colors.get('GRAD_STAGE_LO', '#ece6da')};

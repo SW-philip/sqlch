@@ -143,7 +143,11 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
             return False
         self.now_playing.update(resp, icy=icy)
         playing = bool(resp and resp.get("ok") and resp.get("current"))
-        self.now_playing.update_indicators(bitrate, vol, muted, self._bt_active, playing, channels)
+        recording = resp.get("recording") if resp else None
+        self.now_playing.update_indicators(
+            bitrate, vol, muted, self._bt_active, playing, channels,
+            recording=recording,
+        )
         artist, title = self.now_playing.get_current_track()
         self.station_list.set_active(self.now_playing.get_current_id(), artist, title)
         return False
