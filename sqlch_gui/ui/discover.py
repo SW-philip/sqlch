@@ -10,10 +10,10 @@ GENRE_TAGS = ["Jazz", "News", "Rock", "Electronic", "Classical", "Talk", "Ambien
 class DiscoverPanel(Gtk.Box):
     def __init__(self, parent_window):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        self.set_margin_start(10)
-        self.set_margin_end(10)
-        self.set_margin_top(10)
-        self.set_margin_bottom(10)
+        self.set_margin_start(8)
+        self.set_margin_end(8)
+        self.set_margin_top(8)
+        self.set_margin_bottom(8)
         self.win = parent_window
 
         # Execution query controls
@@ -70,6 +70,7 @@ class DiscoverPanel(Gtk.Box):
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
 
         self.results_box = Gtk.ListBox()
+        self.results_box.add_css_class("list-plate")
         self.results_box.set_selection_mode(Gtk.SelectionMode.NONE)
         scroll.set_child(self.results_box)
         self.append(scroll)

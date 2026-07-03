@@ -10,11 +10,11 @@ from .knob import RotaryKnob
 
 class NowPlayingPanel(Gtk.Box):
     def __init__(self, parent_window):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=14)
-        self.set_margin_start(14)
-        self.set_margin_end(14)
-        self.set_margin_top(14)
-        self.set_margin_bottom(14)
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.set_margin_start(8)
+        self.set_margin_end(8)
+        self.set_margin_top(8)
+        self.set_margin_bottom(8)
         self.set_valign(Gtk.Align.CENTER)
         self.win = parent_window
 
@@ -41,12 +41,12 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_title = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
         self.lbl_title.add_css_class("meta-title")
         self.lbl_title.set_wrap(True)
-        self.lbl_title.set_max_width_chars(28)
+        self.lbl_title.set_max_width_chars(36)
 
         self.lbl_artist = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
         self.lbl_artist.add_css_class("meta-artist")
         self.lbl_artist.set_wrap(True)
-        self.lbl_artist.set_max_width_chars(28)
+        self.lbl_artist.set_max_width_chars(36)
 
         self.lbl_genre = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
         self.lbl_genre.add_css_class("meta-genre")
@@ -57,38 +57,20 @@ class NowPlayingPanel(Gtk.Box):
         card.append(text_box)
         self.append(card)
 
-        # Control deck card: playback row + volume + tech badges grouped on one plate
-        deck = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        # Control deck card, organized as a hub: volume knob at the center
+        # with stop/mute flanking it, primary transport at 6 o'clock, and a
+        # single readout strip along the bottom.
+        deck = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         deck.add_css_class("card")
 
-        # Playback controllers row
-        ctrl_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        ctrl_row.set_halign(Gtk.Align.CENTER)
-
-        self.btn_toggle = Gtk.Button()
-        self.btn_toggle.add_css_class("control-btn")
-        self.btn_toggle.add_css_class("primary")
-        self.btn_toggle.connect("clicked", self.on_toggle_play)
+        # Hub row: stop (9 o'clock) | rotary knob | mute (3 o'clock)
+        hub_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        hub_row.set_halign(Gtk.Align.CENTER)
 
         btn_stop = Gtk.Button(icon_name="media-playback-stop-symbolic")
         btn_stop.add_css_class("control-btn")
         btn_stop.connect("clicked", self.on_stop)
         btn_stop.set_valign(Gtk.Align.CENTER)
-
-        ctrl_row.append(self.btn_toggle)
-        ctrl_row.append(btn_stop)
-        deck.append(ctrl_row)
-
-        # Volume block with custom hardware rotary dial mechanics
-        vol_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        vol_box.set_halign(Gtk.Align.CENTER)
-        vol_box.set_valign(Gtk.Align.CENTER)
-        vol_box.add_css_class("vol-slider")
-
-        self.btn_mute = Gtk.Button(icon_name="audio-volume-high-symbolic")
-        self.btn_mute.set_has_frame(False)
-        self.btn_mute.set_valign(Gtk.Align.CENTER)
-        self.btn_mute.connect("clicked", self.on_toggle_mute)
 
         # Shared tracking state adjustment boundaries
         self.vol_adj = Gtk.Adjustment(value=0.0, lower=0.0, upper=1.3, step_increment=0.05)
@@ -98,20 +80,32 @@ class NowPlayingPanel(Gtk.Box):
         self.vol_knob.set_valign(Gtk.Align.CENTER)
         self._vol_handler = self.vol_knob.connect("value-changed", self.on_vol_changed)
 
-        # Accompanying numerical text indicator display readout
-        self.lbl_vol_percent = Gtk.Label(label="0%")
-        self.lbl_vol_percent.add_css_class("tech-badge")
-        self.lbl_vol_percent.set_valign(Gtk.Align.CENTER)
-        self.lbl_vol_percent.set_width_chars(5)
+        self.btn_mute = Gtk.Button(icon_name="audio-volume-high-symbolic")
+        self.btn_mute.add_css_class("control-btn")
+        self.btn_mute.set_valign(Gtk.Align.CENTER)
+        self.btn_mute.connect("clicked", self.on_toggle_mute)
 
-        vol_box.append(self.btn_mute)
-        vol_box.append(self.vol_knob)
-        vol_box.append(self.lbl_vol_percent)
-        deck.append(vol_box)
+        hub_row.append(btn_stop)
+        hub_row.append(self.vol_knob)
+        hub_row.append(self.btn_mute)
+        deck.append(hub_row)
 
-        # Signal / Technical specifications footprint row
+        # Primary transport at 6 o'clock, directly under the hub
+        self.btn_toggle = Gtk.Button()
+        self.btn_toggle.add_css_class("control-btn")
+        self.btn_toggle.add_css_class("primary")
+        self.btn_toggle.set_halign(Gtk.Align.CENTER)
+        self.btn_toggle.connect("clicked", self.on_toggle_play)
+        deck.append(self.btn_toggle)
+
+        # Readout strip: volume %, bitrate, channels, BT on one badge row
         self.tech_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.tech_box.set_halign(Gtk.Align.CENTER)
+
+        self.lbl_vol_percent = Gtk.Label(label="0%")
+        self.lbl_vol_percent.add_css_class("tech-badge")
+        self.lbl_vol_percent.set_width_chars(5)
+
         self.lbl_bitrate = Gtk.Label()
         self.lbl_bitrate.add_css_class("tech-badge")
         self.lbl_channels = Gtk.Label()
@@ -119,6 +113,7 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_bt = Gtk.Label(label="BT")
         self.lbl_bt.add_css_class("tech-badge")
 
+        self.tech_box.append(self.lbl_vol_percent)
         self.tech_box.append(self.lbl_bitrate)
         self.tech_box.append(self.lbl_channels)
         self.tech_box.append(self.lbl_bt)
@@ -139,7 +134,9 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_artist.set_text("Select a station from the library")
         self.lbl_genre.set_text("")
         self.btn_toggle.set_icon_name("media-playback-start-symbolic")
-        self.tech_box.set_visible(False)
+        self.lbl_bitrate.set_visible(False)
+        self.lbl_channels.set_visible(False)
+        self.lbl_bt.set_visible(False)
         self.clear_cover()
         self._cur_station_id = None
         self._cur_artist = None
@@ -231,26 +228,19 @@ class NowPlayingPanel(Gtk.Box):
         else:
             self.btn_mute.set_icon_name("audio-volume-high-symbolic")
 
-        has_tech = False
         if bitrate:
             self.lbl_bitrate.set_text(f"{bitrate}k")
             self.lbl_bitrate.set_visible(True)
-            has_tech = True
         else:
             self.lbl_bitrate.set_visible(False)
 
         if channels:
             self.lbl_channels.set_text("Stereo" if channels == 2 else "Mono" if channels == 1 else f"{channels}Ch")
             self.lbl_channels.set_visible(True)
-            has_tech = True
         else:
             self.lbl_channels.set_visible(False)
 
         self.lbl_bt.set_visible(bt)
-        if bt:
-            has_tech = True
-
-        self.tech_box.set_visible(has_tech)
 
     def on_toggle_play(self, btn):
         if self._loaded:

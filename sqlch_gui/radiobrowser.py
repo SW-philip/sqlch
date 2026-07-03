@@ -87,9 +87,12 @@ def search(query: str, limit: int = 20) -> list[dict]:
 
 def search_by_tag(tag: str, limit: int = 20) -> list[dict]:
     """Execute genre/tag directory lookup, sorted by station popularity."""
-    if not tag.strip():
+    tag = tag.strip().lower()
+    if not tag:
         return []
-    url = f"https://{_RB_API}/json/stations/bytag/{urllib.parse.quote(tag)}?order=votes&reverse=true"
+    # bytag matching is case-sensitive server-side; RadioBrowser tags are
+    # normalized lowercase, so "Rock" matches almost nothing (and garbage).
+    url = f"https://{_RB_API}/json/stations/bytag/{urllib.parse.quote(tag)}?order=votes&reverse=true&hidebroken=true"
     return _fetch_stations(url, limit)
 
 

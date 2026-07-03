@@ -16,7 +16,9 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app)
         self.set_title("sqlch-gui")
-        self.set_default_size(440, 500)
+        # Width sized so track/album lines usually fit un-ellipsized; the
+        # sidebar is content-sized, so extra width all goes to the stack.
+        self.set_default_size(450, 430)
         
         # Inject theme constants
         load_custom_css()
@@ -31,29 +33,23 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         Gtk4LayerShell.set_margin(self, Gtk4LayerShell.Edge.RIGHT, 12)
         Gtk4LayerShell.set_keyboard_mode(self, Gtk4LayerShell.KeyboardMode.ON_DEMAND)
 
-        # Top surface: an Overlay (not Box) so the sidebar pill's drop shadow
-        # is guaranteed to paint above the stack/card layer beneath it. Plain
-        # Box paints children in append order, so the card always won the
-        # overlap regardless of margins; Overlay always draws overlay
-        # children above the main child.
-        main_overlay = Gtk.Overlay()
-        main_overlay.add_css_class("popup-window")
-        self.set_child(main_overlay)
+        # Top surface: sidebar and stack are quilted side by side — patches
+        # butt against each other at a seam, nothing overlaps or floats.
+        main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        main_box.add_css_class("popup-window")
+        self.set_child(main_box)
+
+        # Navigation column sidebar patch
+        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        sidebar.add_css_class("sidebar")
+        sidebar.set_valign(Gtk.Align.START)
+        main_box.append(sidebar)
 
         self.stack = Gtk.Stack()
         self.stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         self.stack.set_transition_duration(200)
-        # Reserve the sidebar's footprint (minus the intentional overlap)
-        # so real panel content still starts clear of the floating sidebar.
-        self.stack.set_margin_start(50)
-        main_overlay.set_child(self.stack)
-
-        # Navigation column sidebar container, floated above the stack
-        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        sidebar.add_css_class("sidebar")
-        sidebar.set_halign(Gtk.Align.START)
-        sidebar.set_valign(Gtk.Align.START)
-        main_overlay.add_overlay(sidebar)
+        self.stack.set_hexpand(True)
+        main_box.append(self.stack)
 
         # Instantiating presentation views
         self.now_playing = NowPlayingPanel(self)

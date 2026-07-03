@@ -19,10 +19,10 @@ def format_live_text(artist: str | None, title: str | None) -> str:
 class StationListPanel(Gtk.Box):
     def __init__(self, parent_window):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        self.set_margin_start(10)
-        self.set_margin_end(10)
-        self.set_margin_top(10)
-        self.set_margin_bottom(10)
+        self.set_margin_start(8)
+        self.set_margin_end(8)
+        self.set_margin_top(8)
+        self.set_margin_bottom(8)
         self.win = parent_window
 
         # Inline catalog text filtering bar
@@ -51,6 +51,7 @@ class StationListPanel(Gtk.Box):
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
 
         self.list_box = Gtk.ListBox()
+        self.list_box.add_css_class("list-plate")
         self.list_box.set_selection_mode(Gtk.SelectionMode.NONE)
         self.list_box.set_filter_func(self.filter_station_rows)
         scroll.set_child(self.list_box)
@@ -108,8 +109,8 @@ class StationListPanel(Gtk.Box):
             # Category Header Separator
             header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
             header_box.add_css_class("list-header")
-            header_box.set_margin_top(14)
-            header_box.set_margin_bottom(6)
+            header_box.set_margin_top(8)
+            header_box.set_margin_bottom(4)
 
             group_lbl = Gtk.Label(xalign=0.0)
             group_lbl.set_markup(f"<b>{g_name.upper()}</b>")
