@@ -213,7 +213,7 @@ class NowPlayingPanel(Gtk.Box):
         self._cur_station_id = curr.get("id")
         station_name = curr.get("name", "Unknown Station")
 
-        raw_artist, raw_title = icy:
+        raw_artist, raw_title = icy
         artist = raw_artist.strip() if raw_artist else ""
         title = raw_title.strip() if raw_title else ""
 
