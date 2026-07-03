@@ -20,6 +20,8 @@ HELP = (
     '  sqlch play-last\n'
     '  sqlch pause\n'
     '  sqlch stop\n'
+    '  sqlch record [--full|--track]   (start; shows status if active)\n'
+    '  sqlch record stop\n'
     '  sqlch tui\n'
     '\n'
     'Library:\n'
@@ -115,6 +117,9 @@ def dispatch_command(cmd: str, args: list[str]) -> None:
         return
     if cmd == 'preview':
         preview_cmd(args)
+        return
+    if cmd == 'record':
+        record_cmd(args)
         return
     if cmd == 'next':
         if daemon_call({'cmd': 'next'}) is None:
@@ -284,6 +289,42 @@ def search_cmd(args: list[str]) -> None:
             f"     {st.get('country', '-')} | {st.get('codec', '-')} {st.get('bitrate', '-')}kbps\n"
             f"     url: {st.get('url', '-')}\n"
         )
+
+
+def record_cmd(args: list[str]) -> None:
+    if args and args[0] == 'stop':
+        resp = daemon_call({'cmd': 'record', 'action': 'stop'})
+        if resp is None:
+            print('sqlch: daemon not running (recording requires the daemon)',
+                  file=sys.stderr)
+            sys.exit(1)
+        if not resp.get('ok'):
+            print(resp.get('error', 'record stop failed'), file=sys.stderr)
+            sys.exit(1)
+        print('Recording stopped.')
+        return
+
+    mode = 'track' if '--track' in args else 'full'
+    status_resp = daemon_call({'cmd': 'record', 'action': 'status'})
+    if status_resp is None:
+        print('sqlch: daemon not running (recording requires the daemon)',
+              file=sys.stderr)
+        sys.exit(1)
+
+    rec = status_resp.get('recording') or {}
+    if rec.get('active'):
+        m, s = divmod(int(rec.get('elapsed', 0)), 60)
+        print(f"● recording ({rec.get('mode')}) "
+              f"{rec.get('station') or ''} — {m:02d}:{s:02d}")
+        print("  'sqlch record stop' to stop")
+        return
+
+    resp = daemon_call({'cmd': 'record', 'action': 'start', 'mode': mode})
+    if not resp or not resp.get('ok'):
+        print((resp or {}).get('error', 'record failed'), file=sys.stderr)
+        sys.exit(1)
+    st = (resp.get('recording') or {}).get('station')
+    print(f"● recording ({mode})" + (f": {st}" if st else ""))
 
 
 def preview_cmd(args: list[str]) -> None:

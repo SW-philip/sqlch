@@ -182,6 +182,11 @@ def _watch_metadata(station_name: str) -> None:
                     _apply_enrichment_now(artist, track, station_name)
                 except Exception:
                     pass
+                try:
+                    from sqlch.core import recorder
+                    recorder.on_track_change(artist, track)
+                except Exception:
+                    pass
         time.sleep(0.5)
 
 
@@ -262,6 +267,8 @@ def stop(notify_user: bool = True) -> None:
     if _preview_timer:
         _preview_timer.cancel()
         _preview_timer = None
+    from sqlch.core import recorder
+    recorder.stop()  # no-op {'ok': False} when idle
     _kill_existing()
     _current = None
     if notify_user:

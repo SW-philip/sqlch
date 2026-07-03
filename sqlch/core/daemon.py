@@ -23,7 +23,13 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
     if cmd == 'ping':
         return {'ok': True, 'msg': 'pong'}
     if cmd == 'status':
-        return {'ok': True, 'status': player.status_string(), 'current': player.current()}
+        from sqlch.core import recorder
+        return {
+            'ok': True,
+            'status': player.status_string(),
+            'current': player.current(),
+            'recording': recorder.status(),
+        }
     if cmd == 'stop':
         player.stop()
         return {'ok': True}
@@ -86,6 +92,23 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
         if st:
             player.play_station(st)
         return {'ok': True}
+    if cmd == 'record':
+        from sqlch.core import recorder
+        action = msg.get('action') or 'toggle'
+        mode = msg.get('mode') or 'full'
+        if action == 'status':
+            return {'ok': True, 'recording': recorder.status()}
+        if action == 'stop':
+            return recorder.stop()
+        if action == 'start':
+            cur = player.current() or {}
+            return recorder.start(mode, cur.get('item'))
+        if action == 'toggle':
+            if recorder.status()['active']:
+                return recorder.stop()
+            cur = player.current() or {}
+            return recorder.start(mode, cur.get('item'))
+        return {'ok': False, 'error': f'unknown record action: {action}'}
     return {'ok': False, 'error': f'unknown cmd: {cmd}'}
 
 

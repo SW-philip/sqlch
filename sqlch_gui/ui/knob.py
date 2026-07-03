@@ -106,3 +106,119 @@ class RotaryKnob(Gtk.DrawingArea):
 
         self.adj.set_value(new_val)
         self.emit('value-changed', new_val)
+
+
+class RecordKnob(Gtk.DrawingArea):
+    """Two-detent record switch drawn in the RotaryKnob idiom.
+
+    Right-click spins the pointer between the FULL and TRACK detents;
+    left-click emits 'record-toggled' with the selected mode. Recording
+    state is pushed in from the daemon poll via set_state() — the widget
+    never assumes its click succeeded.
+    """
+
+    __gsignals__ = {
+        'record-toggled': (GObject.SignalFlags.RUN_LAST, None, (str,)),
+    }
+
+    MODES = ("full", "track")
+    # Lower arc detents (y grows downward): FULL lower-left, TRACK lower-right
+    _ANGLES = {"full": 0.75 * math.pi, "track": 0.25 * math.pi}
+
+    def __init__(self):
+        super().__init__()
+        self.mode = "full"
+        self.recording = False
+        self.set_size_request(52, 52)
+        self.set_focusable(True)
+        self.set_draw_func(self._on_draw)
+        self._update_tooltip()
+
+        left = Gtk.GestureClick.new()
+        left.set_button(1)
+        left.connect("released", self._on_left_click)
+        self.add_controller(left)
+
+        right = Gtk.GestureClick.new()
+        right.set_button(3)
+        right.connect("released", self._on_right_click)
+        self.add_controller(right)
+
+    def set_state(self, recording: bool, mode: str | None):
+        """Reflect daemon truth from the status poll."""
+        changed = recording != self.recording
+        if recording and mode in self.MODES and mode != self.mode:
+            self.mode = mode
+            changed = True
+        self.recording = recording
+        if changed:
+            self._update_tooltip()
+            self.queue_draw()
+
+    def _update_tooltip(self):
+        action = "left-click to stop" if self.recording else "left-click to record"
+        self.set_tooltip_text(
+            f"REC {self.mode.upper()} · {action} · right-click: mode"
+        )
+
+    def _on_left_click(self, gesture, n_press, x, y):
+        self.emit('record-toggled', self.mode)
+
+    def _on_right_click(self, gesture, n_press, x, y):
+        if self.recording:
+            return  # mode locked while a take is rolling
+        i = self.MODES.index(self.mode)
+        self.mode = self.MODES[(i + 1) % len(self.MODES)]
+        self._update_tooltip()
+        self.queue_draw()
+
+    def _on_draw(self, area, cr, width, height, user_data=None):
+        cx = width / 2.0
+        cy = height / 2.0
+        radius = min(width, height) / 2.0 - 5.0
+        rec_red = (0.86, 0.20, 0.18)
+
+        # Hot ring while recording sits outside the bezel
+        if self.recording:
+            cr.set_line_width(2.5)
+            cr.set_source_rgba(*rec_red, 0.9)
+            cr.arc(cx, cy, radius + 2.0, 0, 2 * math.pi)
+            cr.stroke()
+
+        # Outer metal bezel + faceplate (matches RotaryKnob)
+        cr.set_line_width(3.0)
+        cr.set_source_rgba(0.12, 0.12, 0.14, 1.0)
+        cr.arc(cx, cy, radius, 0, 2 * math.pi)
+        cr.stroke()
+        cr.set_source_rgba(0.20, 0.20, 0.22, 1.0)
+        cr.arc(cx, cy, radius - 1, 0, 2 * math.pi)
+        cr.fill()
+
+        # Detent dots at both switch positions
+        for ang in self._ANGLES.values():
+            dx = cx + (radius - 4) * math.cos(ang)
+            dy = cy + (radius - 4) * math.sin(ang)
+            cr.set_source_rgba(0.1, 0.1, 0.1, 0.6)
+            cr.arc(dx, dy, 2.0, 0, 2 * math.pi)
+            cr.fill()
+
+        # Pointer snapped to the selected detent
+        angle = self._ANGLES[self.mode]
+        if self.recording:
+            cr.set_source_rgba(*rec_red, 1.0)
+        else:
+            cr.set_source_rgba(0.85, 0.61, 0.25, 1.0)  # RotaryKnob accent
+        cr.set_line_width(4.0)
+        mx = cx + (radius - 9) * math.cos(angle)
+        my = cy + (radius - 9) * math.sin(angle)
+        cr.move_to(cx, cy)
+        cr.line_to(mx, my)
+        cr.stroke()
+
+        # Center cap doubles as the recording lamp
+        if self.recording:
+            cr.set_source_rgba(*rec_red, 1.0)
+        else:
+            cr.set_source_rgba(0.12, 0.12, 0.14, 1.0)
+        cr.arc(cx, cy, radius * 0.28, 0, 2 * math.pi)
+        cr.fill()
