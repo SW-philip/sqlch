@@ -41,6 +41,9 @@ def load_custom_css():
     global _css_provider
     colors = palette.load()
 
+    bg_color = colors.get('GRAD_HALL_LO', '#cebfa5')
+    staff_vals = colors.get('STAFF', '20,20,24')
+    thread = get_adaptive_thread(bg_color, staff_vals)
     # Thick, sharp cartoon outlines (Paper Mario) - SHADOW stays dark ink
     outline = colors.get('SHADOW', '#121214')
     # Foreground text role: flips light/dark with the palette
@@ -54,9 +57,24 @@ def load_custom_css():
     shade_c = f"rgba({staff}, 0.25)"         # puff shade (bottom)
     lite_c = "rgba(255,255,255,0.40)"        # puff light catch (top)
 
-    # Calculate our smart dynamic threads
-    thread = get_dynamic_thread_color(score, staff)
-    thread_light = "rgba(255,255,255,0.60)"   # Kept intact for explicit high-contrast targets
+def get_adaptive_thread(bg_hex: str, staff_rgb: str) -> str:
+    """
+    Calculates thread color by checking the luminance of the background.
+    Returns a light 'chalk' thread for dark backgrounds, or dark 'ink'
+    for light backgrounds.
+    """
+    # Parse RGB from hex
+    hex_val = bg_hex.lstrip('#')
+    r, g, b = [int(hex_val[i:i+2], 16) for i in (0, 2, 4)]
+
+    # Calculate luminance (Y)
+    y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+    # Return light thread if background is dark, else dark thread
+    if y < 128:
+        return "rgba(255, 255, 255, 0.60)" # Light Chalk
+    else:
+        return f"rgba({staff_rgb}, 0.55)"   # Dark Ink
 
     # Inner pieces contact shadows
     slight = f"0 2px 3px rgba({staff}, 0.30)"
