@@ -160,7 +160,6 @@ def load_custom_css():
         min-height: 124px;
         border: 2px dashed {thread};
         box-shadow: 0 0 0 1px transparent, {slight}, {hem(5)};
-        transform: rotate(-3deg);
     }}
     .cover-glyph {{
         font-size: 58px;
@@ -379,6 +378,58 @@ def load_custom_css():
         background-color: {colors.get('FORTE', '#8c3b3b')};
         color: {colors.get('HALL', '#fdf8ee')};
         border-color: transparent;
+    }}
+
+    /* Album Deck Outer Container - baseline rotation state */
+    .album-deck-wrapper {{
+        border-radius: 12px;
+        transition: transform 250ms cubic-bezier(0.4, 0.0, 0.2, 1);
+        transform: rotate(-3deg);
+    }}
+
+    /* Subtle geometric physics push when flipped open */
+    .album-deck-wrapper.flipped {{
+        transform: rotate(2deg) scale(1.02);
+    }}
+
+    /* Back side styling - Looks like a typewriter ledger scrap pasted to cardboard */
+    .art-card-back {{
+        background-color: {colors.get('STAGE', '#f9f6f0')};
+        border-radius: 12px;
+        border: 2px dashed {thread};
+        box-shadow: inset 0 0 4px rgba({staff}, 0.15), {slight}, {hem(4, puff=False)};
+        padding: 6px;
+    }}
+
+    /* Track info container styling */
+    .tracklist-container label {{
+        font-family: "Courier New", monospace;
+        font-size: 0.72em;
+        font-weight: bold;
+        color: {colors.get('PIANO', '#2c2c30')};
+        padding: 2px;
+    }}
+
+    /* Flip Tab Button - Styled to look like a canvas tag sticking out of the seam */
+    .flip-tag-btn {{
+        background-color: {colors.get('ROOT', '#f4b84b')};
+        color: {outline};
+        border: 2px dashed {thread};
+        border-left: none;
+        border-radius: 0 8px 8px 0;
+        margin-left: -2px; /* Pulls it flush right against the main art frame */
+        padding: 0 4px;
+        min-height: 48px;
+        min-width: 24px;
+        box-shadow: 2px 2px 0 0 {outline};
+        transition: transform 120ms ease, background-color 120ms ease;
+    }}
+    .flip-tag-btn:hover {{
+        background-color: {colors.get('WING', '#fff5dd')};
+        transform: translateX(2px);
+    }}
+    .flip-tag-btn:active {{
+        transform: translateX(0px);
     }}
     """
 
