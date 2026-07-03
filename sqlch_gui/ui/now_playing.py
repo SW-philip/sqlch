@@ -58,7 +58,7 @@ class NowPlayingPanel(Gtk.Box):
         # Main stitched wrap framework
         self.stack_wrapper = Gtk.Box()
         self.stack_wrapper.add_css_class("album-deck-wrapper")
-        self.stack_wrapper.set_child(self.deck_stack)
+        self.stack_wrapper.append(self.deck_stack)
         deck_box.append(self.stack_wrapper)
 
         # Index Tag Toggle Button on the right
@@ -154,6 +154,7 @@ class NowPlayingPanel(Gtk.Box):
         self._cur_station_id = None
         self._cur_artist = None
         self._cur_title = None
+        self._track_history: list[tuple[str, str]] = []
         self._loaded = False
         self.reset_ui()
 
