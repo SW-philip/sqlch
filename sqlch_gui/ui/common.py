@@ -10,73 +10,56 @@ from .. import palette
 
 _css_provider: Gtk.CssProvider | None = None
 
-def get_dynamic_thread_color(score_hex: str, staff_rgba_str: str) -> str:
+def get_adaptive_thread(bg_hex: str, score_hex: str, staff_rgb: str) -> str:
     """
-    Parses the palette's SCORE color, isolates its hue, and builds a
-    translucent greyscale thread that preserves contrast across light/dark themes.
-    Falls back to a translucent STAFF-based alpha if hex parsing hits a snag.
+    Calculates thread color by checking background luminance and applying a subtle
+    tint matching the layout's active colorway to prevent wash-out.
     """
     try:
-        hex_str = score_hex.lstrip('#')
-        if len(hex_str) == 3:
-            hex_str = ''.join(c*2 for c in hex_str)
+        hex_val = bg_hex.lstrip('#')
+        if len(hex_val) == 3:
+            hex_val = ''.join(c*2 for c in hex_val)
+        r_bg, g_bg, b_bg = [int(hex_val[i:i+2], 16) for i in (0, 2, 4)]
 
-        r, g, b = [int(hex_str[i:i+2], 16) / 255.0 for i in range(0, 6, 2)]
-        h, s, v = colorsys.rgb_to_hsv(r, g, b)
+        # Perceived luminance formula (Y)
+        y = 0.2126 * r_bg + 0.7152 * g_bg + 0.0722 * b_bg
 
-        # Enforce threshold mapping (Light theme vs Dark theme sentinel scale)
-        is_light_theme = v > 0.65 and s < 0.35
+        # Isolate the active score hue for a subtle thread tint
+        score_clean = score_hex.lstrip('#')
+        if len(score_clean) == 3:
+            score_clean = ''.join(c*2 for c in score_clean)
+        r_s, g_s, b_s = [int(score_clean[i:i+2], 16) / 255.0 for i in (0, 2, 4)]
+        h, s, v = colorsys.rgb_to_hsv(r_s, g_s, b_s)
 
-        target_v = 0.25 if is_light_theme else 0.85
-        target_s = min(s * 0.12, 0.05)  # Soft micro-saturation hue whisper
-
-        tr, tg, tb = colorsys.hsv_to_rgb(h, target_s, target_v)
-        alpha = 0.50 if is_light_theme else 0.60
-        return f"rgba({int(tr*255)}, {int(tg*255)}, {int(tb*255)}, {alpha})"
+        if y < 128:
+            # Dark background: Light chalk thread with a faint hint of hue
+            tr, tg, tb = colorsys.hsv_to_rgb(h, min(s * 0.15, 0.06), 0.88)
+            return f"rgba({int(tr*255)}, {int(tg*255)}, {int(tb*255)}, 0.65)"
+        else:
+            # Light background: Deep ink thread derived from your base layout structure
+            tr, tg, tb = colorsys.hsv_to_rgb(h, min(s * 0.20, 0.08), 0.22)
+            return f"rgba({int(tr*255)}, {int(tg*255)}, {int(tb*255)}, 0.55)"
     except Exception:
-        # Fallback to the default baseline alpha blend if something fails
-        return f"rgba({staff_rgba_str}, 0.55)"
+        return f"rgba({staff_rgb}, 0.55)"
 
 def load_custom_css():
     global _css_provider
     colors = palette.load()
 
-    bg_color = colors.get('GRAD_HALL_LO', '#cebfa5')
-    staff_vals = colors.get('STAFF', '20,20,24')
-    thread = get_adaptive_thread(bg_color, staff_vals)
-    # Thick, sharp cartoon outlines (Paper Mario) - SHADOW stays dark ink
     outline = colors.get('SHADOW', '#121214')
-    # Foreground text role: flips light/dark with the palette
     score = colors.get('SCORE', '#121214')
-    # Soft, deep drop shadows mimicking overlapping layers of craft board
     staff = colors.get('STAFF', '20,20,24')
     shadow = f"rgba({staff}, 0.85)"
+    bg_color = colors.get('GRAD_HALL_LO', '#cebfa5')
 
-    # LittleBigPlanet hem kit setup
-    hem_c = f"rgba({staff}, 0.14)"           # folded-fabric band
-    shade_c = f"rgba({staff}, 0.25)"         # puff shade (bottom)
-    lite_c = "rgba(255,255,255,0.40)"        # puff light catch (top)
+    hem_c = f"rgba({staff}, 0.14)"
+    shade_c = f"rgba({staff}, 0.25)"
+    lite_c = "rgba(255,255,255,0.40)"
 
-def get_adaptive_thread(bg_hex: str, staff_rgb: str) -> str:
-    """
-    Calculates thread color by checking the luminance of the background.
-    Returns a light 'chalk' thread for dark backgrounds, or dark 'ink'
-    for light backgrounds.
-    """
-    # Parse RGB from hex
-    hex_val = bg_hex.lstrip('#')
-    r, g, b = [int(hex_val[i:i+2], 16) for i in (0, 2, 4)]
+    # Generate the dynamic thread using our adaptive utility
+    thread = get_adaptive_thread(bg_color, score, staff)
+    thread_light = "rgba(255,255,255,0.60)"
 
-    # Calculate luminance (Y)
-    y = 0.2126 * r + 0.7152 * g + 0.0722 * b
-
-    # Return light thread if background is dark, else dark thread
-    if y < 128:
-        return "rgba(255, 255, 255, 0.60)" # Light Chalk
-    else:
-        return f"rgba({staff_rgb}, 0.55)"   # Dark Ink
-
-    # Inner pieces contact shadows
     slight = f"0 2px 3px rgba({staff}, 0.30)"
     slight_lift = f"0 3px 4px rgba({staff}, 0.35)"
     slight_press = f"0 1px 2px rgba({staff}, 0.25)"
@@ -90,15 +73,12 @@ def get_adaptive_thread(bg_hex: str, staff_rgb: str) -> str:
             ]
         return ", ".join(layers)
 
-    # REVISED FILTER: Independent organic noise grids layered as multipliers.
     svg_tactile_filter = (
         "url(\"data:image/svg+xml;utf8,"
         "<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'>"
         "<filter id='craft-texture'>"
-        "  <!-- Fine textile thread weave mapping -->"
         "  <feTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='3' result='noise1'/>"
         "  <feColorMatrix type='matrix' values='0 0 0 0 0   0 0 0 0 0   0 0 0 0 0  0 0 0 0.10 0' in='noise1' result='fiber1'/>"
-        "  <!-- Coarser recycled pulp clumps -->"
         "  <feTurbulence type='turbulence' baseFrequency='0.08' numOctaves='2' result='noise2'/>"
         "  <feColorMatrix type='matrix' values='0 0 0 0 0   0 0 0 0 0   0 0 0 0 0  0 0 0 0.08 0' in='noise2' result='fiber2'/>"
         "  <feBlend mode='multiply' in='SourceGraphic' in2='fiber1' result='blend1'/>"
@@ -113,10 +93,9 @@ def get_adaptive_thread(bg_hex: str, staff_rgb: str) -> str:
         background-color: transparent;
     }}
 
-    /* Main Popup Frame - Inverted border-shadow layout for perfectly rounded stitches */
     .popup-window {{
-        background-color: {colors.get('GRAD_HALL_LO', '#cebfa5')};
-        background-image: {svg_tactile_filter}, linear-gradient(165deg, {colors.get('GRAD_HALL_HI', '#e6dfce')}, {colors.get('GRAD_HALL_LO', '#cebfa5')});
+        background-color: {bg_color};
+        background-image: {svg_tactile_filter}, linear-gradient(165deg, {colors.get('GRAD_HALL_HI', '#e6dfce')}, {bg_color});
         background-repeat: repeat, no-repeat;
         color: {score};
         border-radius: 16px;
@@ -126,7 +105,6 @@ def get_adaptive_thread(bg_hex: str, staff_rgb: str) -> str:
         padding: 4px;
     }}
 
-    /* Navigation Sidebar */
     .sidebar {{
         background-color: {colors.get('GRAD_STAGE_LO', '#b04343')};
         background-image: {svg_tactile_filter}, linear-gradient(130deg, {colors.get('GRAD_STAGE_HI', '#d35f5f')}, {colors.get('GRAD_STAGE_LO', '#b04343')});
@@ -137,7 +115,6 @@ def get_adaptive_thread(bg_hex: str, staff_rgb: str) -> str:
         box-shadow: 0 0 0 2px transparent, {slight}, {hem(5)};
     }}
 
-    /* Flat Vector Buttons with Curved Tactile Outlines */
     .nav-btn {{
         padding: 8px;
         margin: 3px 0px;
@@ -165,7 +142,6 @@ def get_adaptive_thread(bg_hex: str, staff_rgb: str) -> str:
         transform: scale(1.1);
     }}
 
-    /* Content Display Panels */
     .card {{
         background-color: {colors.get('STAGE', '#f9f6f0')};
         background-image: {svg_tactile_filter};
@@ -177,7 +153,6 @@ def get_adaptive_thread(bg_hex: str, staff_rgb: str) -> str:
         margin-bottom: 3px;
     }}
 
-    /* Cover Art Holder */
     .cover-art {{
         background-color: {colors.get('WING', '#e2dacf')};
         border-radius: 12px;
@@ -195,7 +170,6 @@ def get_adaptive_thread(bg_hex: str, staff_rgb: str) -> str:
         transform: rotate(-6deg);
     }}
 
-    /* Backing plate for scrolling lists */
     .list-plate {{
         background-color: {colors.get('HALL', '#fdf8ee')};
         background-image: {svg_tactile_filter};
@@ -209,7 +183,6 @@ def get_adaptive_thread(bg_hex: str, staff_rgb: str) -> str:
         background: transparent;
     }}
 
-    /* Structural Subheadings */
     .list-header {{
         background-color: {colors.get('WING', '#eaddca')};
         color: {score};
@@ -222,7 +195,6 @@ def get_adaptive_thread(bg_hex: str, staff_rgb: str) -> str:
         text-shadow: 0 -1px 0 rgba(255,255,255,0.40), 0 1px 1px rgba({staff},0.5);
     }}
 
-    /* Interactive Rows */
     .station-row {{
         padding: 7px 10px;
         border-radius: 10px;
@@ -268,7 +240,6 @@ def get_adaptive_thread(bg_hex: str, staff_rgb: str) -> str:
         text-shadow: none;
     }}
 
-    /* Playback Control Deck Circular Buttons */
     .control-btn {{
         border-radius: 16px;
         min-width: 44px;
@@ -303,27 +274,20 @@ def get_adaptive_thread(bg_hex: str, staff_rgb: str) -> str:
     .control-btn.primary:hover {{
         background-color: {colors.get('SOTTO', '#454549')};
         box-shadow: 0 0 0 2px {outline}, {slight_lift}, {hem(4)};
-    """ + f"""
     }}
 
-    /* Typography Overrides with Full Layered Embroidery Treatment */
     .meta-title {{
         font-family: "Fredoka", "Baloo 2", "Chalkboard SE", sans-serif;
         font-size: 1.25em;
         font-weight: 900;
         color: {score};
-        /* Thread Puffy Layer + Pinch Cavity Shadow + Hard Mario Canvas Shadow */
-        text-shadow: 0 -1px 0 rgba(255,255,255,0.45),
-                     0 1px 1px rgba({staff},0.6),
-                     1px 3px 0 {outline};
+        text-shadow: 0 -1px 0 rgba(255,255,255,0.45), 0 1px 1px rgba({staff},0.6), 1px 3px 0 {outline};
     }}
     .meta-artist {{
         font-family: "Fredoka", sans-serif;
         font-size: 1.0em;
         color: {colors.get('FORTE', '#8c3b3b')};
-        text-shadow: 0 -1px 0 rgba(255,255,255,0.35),
-                     0 1px 1px rgba({staff},0.4),
-                     1px 2px 0 {outline};
+        text-shadow: 0 -1px 0 rgba(255,255,255,0.35), 0 1px 1px rgba({staff},0.4), 1px 2px 0 {outline};
     }}
     .meta-genre {{
         font-family: "Fredoka", sans-serif;
@@ -333,7 +297,6 @@ def get_adaptive_thread(bg_hex: str, staff_rgb: str) -> str:
         text-shadow: 0 1px 0 {lite_c};
     }}
 
-    /* Sticker Tags */
     .tech-badge, .tag-chip {{
         font-family: "Courier New", monospace;
         font-weight: 900;
@@ -353,7 +316,6 @@ def get_adaptive_thread(bg_hex: str, staff_rgb: str) -> str:
         box-shadow: 0 0 0 1px {outline}, {slight_lift}, {hem(2, puff=False)};
     }}
 
-    /* Popover Context Overrides */
     popover.context-menu > contents {{
         background-color: {colors.get('GRAD_STAGE_LO', '#ece6da')};
         background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_STAGE_HI', '#fbf9f5')}, {colors.get('GRAD_STAGE_LO', '#ece6da')});
