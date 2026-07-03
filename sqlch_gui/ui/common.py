@@ -1,5 +1,6 @@
 """Shared UI styling and custom CSS loading utilities with a Paper-Craft & Fabric Vibe."""
 
+import colorsys
 from pathlib import Path
 
 import gi
@@ -9,36 +10,55 @@ from .. import palette
 
 _css_provider: Gtk.CssProvider | None = None
 
+def get_dynamic_thread_color(score_hex: str, staff_rgba_str: str) -> str:
+    """
+    Parses the palette's SCORE color, isolates its hue, and builds a
+    translucent greyscale thread that preserves contrast across light/dark themes.
+    Falls back to a translucent STAFF-based alpha if hex parsing hits a snag.
+    """
+    try:
+        hex_str = score_hex.lstrip('#')
+        if len(hex_str) == 3:
+            hex_str = ''.join(c*2 for c in hex_str)
+
+        r, g, b = [int(hex_str[i:i+2], 16) / 255.0 for i in range(0, 6, 2)]
+        h, s, v = colorsys.rgb_to_hsv(r, g, b)
+
+        # Enforce threshold mapping (Light theme vs Dark theme sentinel scale)
+        is_light_theme = v > 0.65 and s < 0.35
+
+        target_v = 0.25 if is_light_theme else 0.85
+        target_s = min(s * 0.12, 0.05)  # Soft micro-saturation hue whisper
+
+        tr, tg, tb = colorsys.hsv_to_rgb(h, target_s, target_v)
+        alpha = 0.50 if is_light_theme else 0.60
+        return f"rgba({int(tr*255)}, {int(tg*255)}, {int(tb*255)}, {alpha})"
+    except Exception:
+        # Fallback to the default baseline alpha blend if something fails
+        return f"rgba({staff_rgba_str}, 0.55)"
+
 def load_custom_css():
     global _css_provider
     colors = palette.load()
 
     # Thick, sharp cartoon outlines (Paper Mario) - SHADOW stays dark ink
-    # regardless of theme brightness, unlike SCORE which is a foreground/
-    # text role that flips light/dark depending on the palette.
     outline = colors.get('SHADOW', '#121214')
-    # Foreground text role: flips light/dark with the palette, unlike the
-    # ink outline which stays dark. Text must never use the ink directly or
-    # it vanishes on dark themes.
+    # Foreground text role: flips light/dark with the palette
     score = colors.get('SCORE', '#121214')
     # Soft, deep drop shadows mimicking overlapping layers of craft board
     staff = colors.get('STAFF', '20,20,24')
     shadow = f"rgba({staff}, 0.85)"
 
-    # LittleBigPlanet hem kit: every plate is "sewn" — a folded-over band of
-    # its own fabric (semi-transparent so the fiber weave shows through),
-    # a dashed thread stitched mid-hem, and light/shade insets that puff the
-    # center. All derived from STAFF/white alphas so palette swaps need no
-    # per-theme logic.
-    hem_c = f"rgba({staff}, 0.14)"            # folded-fabric band
-    shade_c = f"rgba({staff}, 0.25)"          # puff shade (bottom)
-    lite_c = "rgba(255,255,255,0.40)"         # puff light catch (top)
-    thread = f"rgba({staff}, 0.55)"           # stitch on light fills
-    thread_light = "rgba(255,255,255,0.60)"   # stitch on dark fills
+    # LittleBigPlanet hem kit setup
+    hem_c = f"rgba({staff}, 0.14)"           # folded-fabric band
+    shade_c = f"rgba({staff}, 0.25)"         # puff shade (bottom)
+    lite_c = "rgba(255,255,255,0.40)"        # puff light catch (top)
 
-    # Inner pieces are stitched to the sheet, not floating: no ink outline,
-    # just a slight soft contact shadow that deepens on lift and compresses
-    # on press. Only the window frame (and popovers) truly float.
+    # Calculate our smart dynamic threads
+    thread = get_dynamic_thread_color(score, staff)
+    thread_light = "rgba(255,255,255,0.60)"   # Kept intact for explicit high-contrast targets
+
+    # Inner pieces contact shadows
     slight = f"0 2px 3px rgba({staff}, 0.30)"
     slight_lift = f"0 3px 4px rgba({staff}, 0.35)"
     slight_press = f"0 1px 2px rgba({staff}, 0.25)"
@@ -52,8 +72,7 @@ def load_custom_css():
             ]
         return ", ".join(layers)
 
-    # REVISED FILTER: Uses independent organic noise grids layered as multipliers.
-    # This prevents the lighting-clipping bug causing the blinding white mask in image_886f80.jpg.
+    # REVISED FILTER: Independent organic noise grids layered as multipliers.
     svg_tactile_filter = (
         "url(\"data:image/svg+xml;utf8,"
         "<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'>"
@@ -76,85 +95,78 @@ def load_custom_css():
         background-color: transparent;
     }}
 
-    /* Main Popup Frame - Hand-cut backing sheet using targeted fallback hexes */
+    /* Main Popup Frame - Inverted border-shadow layout for perfectly rounded stitches */
     .popup-window {{
         background-color: {colors.get('GRAD_HALL_LO', '#cebfa5')};
         background-image: {svg_tactile_filter}, linear-gradient(165deg, {colors.get('GRAD_HALL_HI', '#e6dfce')}, {colors.get('GRAD_HALL_LO', '#cebfa5')});
         background-repeat: repeat, no-repeat;
         color: {score};
-        border: 4px solid {outline};
         border-radius: 16px;
-        box-shadow: 8px 8px 0 0 {outline}, 14px 14px 0 0 {shadow}, {hem(8)};
-        outline: 2px dashed {thread};
-        outline-offset: -8px;
+        border: 2px dashed {thread};
+        box-shadow: 0 0 0 4px {outline}, 8px 8px 0 4px {outline}, 14px 14px 0 4px {shadow}, {hem(8)};
         margin: 4px 20px 20px 4px;
         padding: 4px;
     }}
 
-    /* Navigation Sidebar - Suspended felt ribbon tab layout */
+    /* Navigation Sidebar */
     .sidebar {{
         background-color: {colors.get('GRAD_STAGE_LO', '#b04343')};
         background-image: {svg_tactile_filter}, linear-gradient(130deg, {colors.get('GRAD_STAGE_HI', '#d35f5f')}, {colors.get('GRAD_STAGE_LO', '#b04343')});
         background-repeat: repeat, no-repeat;
         border-radius: 12px;
         padding: 5px 3px;
-        box-shadow: {slight}, {hem(5)};
-        outline: 2px dashed {thread};
-        outline-offset: -4px;
+        border: 2px dashed {thread};
+        box-shadow: 0 0 0 2px transparent, {slight}, {hem(5)};
     }}
 
-    /* Flat Vector Buttons with Tactile Bounce Responses */
+    /* Flat Vector Buttons with Curved Tactile Outlines */
     .nav-btn {{
         padding: 8px;
         margin: 3px 0px;
         border-radius: 8px;
         color: {colors.get('REST', '#4e4e52')};
         background: transparent;
-        border: 3px solid transparent;
-        transition: transform 80ms ease;
+        border: 2px dashed transparent;
+        transition: transform 80ms ease, box-shadow 80ms ease;
     }}
     .nav-btn:hover {{
         background-image: {svg_tactile_filter};
         background-color: {colors.get('WING', '#fff5dd')};
         color: {score};
         transform: scale(1.05) translateY(-1px);
-        box-shadow: {slight_lift}, {hem(3)};
-        outline: 2px dashed {thread};
-        outline-offset: -4px;
+        border: 2px dashed {thread};
+        box-shadow: 0 0 0 1px {outline}, {slight_lift}, {hem(3)};
     }}
     .nav-btn.active {{
         background-image: {svg_tactile_filter};
         background-color: {colors.get('ROOT', '#f4b84b')};
         color: {outline};
         font-weight: 900;
-        box-shadow: {slight}, {hem(3)};
-        outline: 2px dashed {thread};
-        outline-offset: -4px;
+        border: 2px dashed {thread};
+        box-shadow: 0 0 0 2px {outline}, {slight}, {hem(3)};
         transform: scale(1.1);
     }}
 
-    /* Content Display Panels - explicit background assignments prevent default-theme transparency leakage */
+    /* Content Display Panels */
     .card {{
         background-color: {colors.get('STAGE', '#f9f6f0')};
         background-image: {svg_tactile_filter};
         background-repeat: repeat;
         border-radius: 14px;
         padding: 10px;
-        box-shadow: {slight}, {hem(6)};
-        outline: 2px dashed {thread};
-        outline-offset: -5px;
+        border: 2px dashed {thread};
+        box-shadow: 0 0 0 1px transparent, {slight}, {hem(6)};
         margin-bottom: 3px;
     }}
 
-    /* Cover Art Holder - Looks like a stitched-on denim patch */
+    /* Cover Art Holder */
     .cover-art {{
         background-color: {colors.get('WING', '#e2dacf')};
         border-radius: 12px;
         min-width: 124px;
         min-height: 124px;
-        box-shadow: {slight}, {hem(5)};
-        outline: 2px dashed {thread};
-        outline-offset: -4px;
+        border: 2px dashed {thread};
+        box-shadow: 0 0 0 1px transparent, {slight}, {hem(5)};
         transform: rotate(-3deg);
     }}
     .cover-glyph {{
@@ -165,17 +177,15 @@ def load_custom_css():
         transform: rotate(-6deg);
     }}
 
-    /* Backing plate for scrolling lists - a rounded, stitched fabric sheet
-       the row patches are sewn onto */
+    /* Backing plate for scrolling lists */
     .list-plate {{
         background-color: {colors.get('HALL', '#fdf8ee')};
         background-image: {svg_tactile_filter};
         background-repeat: repeat;
         border-radius: 14px;
         padding: 6px;
-        box-shadow: {slight}, {hem(4)};
-        outline: 2px dashed {thread};
-        outline-offset: -4px;
+        border: 2px dashed {thread};
+        box-shadow: 0 0 0 1px transparent, {slight}, {hem(4)};
     }}
     .list-plate row {{
         background: transparent;
@@ -185,45 +195,40 @@ def load_custom_css():
     .list-header {{
         background-color: {colors.get('WING', '#eaddca')};
         color: {score};
-        text-shadow: 0 1px 0 {lite_c};
         font-weight: bold;
         border-radius: 10px;
         padding: 6px 10px;
         margin-bottom: 6px;
-        box-shadow: {slight}, {hem(4)};
-        outline: 2px dashed {thread};
-        outline-offset: -4px;
+        border: 2px dashed {thread};
+        box-shadow: 0 0 0 1px transparent, {slight}, {hem(4)};
+        text-shadow: 0 -1px 0 rgba(255,255,255,0.40), 0 1px 1px rgba({staff},0.5);
     }}
 
-    /* Interactive Rows - resting state is already a sewn fabric strip;
-       hover puffs it up and lifts it off the backing sheet */
+    /* Interactive Rows */
     .station-row {{
         padding: 7px 10px;
         border-radius: 10px;
         margin-bottom: 2px;
         background-color: {colors.get('STAGE', '#f9f6f0')};
-        box-shadow: {slight}, {hem(3, puff=False)};
-        outline: 2px dashed {thread};
-        outline-offset: -4px;
+        border: 2px dashed {thread};
+        box-shadow: 0 0 0 1px transparent, {slight}, {hem(3, puff=False)};
     }}
     .station-row:hover {{
         background-color: {colors.get('WING', '#fff5dd')};
-        box-shadow: {slight_lift}, {hem(3)};
-        outline: 2px dashed {thread};
-        outline-offset: -4px;
+        border: 2px dashed {thread};
+        box-shadow: 0 0 0 1px {outline}, {slight_lift}, {hem(3)};
         transform: translateY(-1px);
     }}
     .station-row.active {{
         background-image: {svg_tactile_filter};
         background-color: {colors.get('SEVENTH', '#79a383')};
         color: {colors.get('HALL', '#fdf8ee')};
-        box-shadow: {slight}, {hem(3)};
-        outline: 2px dashed {thread_light};
-        outline-offset: -4px;
+        border: 2px dashed {thread_light};
+        box-shadow: 0 0 0 1px {outline}, {slight}, {hem(3)};
     }}
     .station-row.active label {{
         color: {colors.get('HALL', '#fdf8ee')};
-        text-shadow: 0 1px 0 rgba({staff}, 0.60);
+        text-shadow: 0 -1px 0 rgba(255,255,255,0.30), 0 1px 2px rgba({staff}, 0.80);
     }}
     .station-freq {{
         color: {colors.get('PIANO', '#2c2c30')};
@@ -233,6 +238,7 @@ def load_custom_css():
     }}
     .station-row.active .station-freq {{
         color: {colors.get('HALL', '#fdf8ee')};
+        text-shadow: 0 -1px 0 rgba(255,255,255,0.20), 0 1px 1px rgba({staff}, 0.70);
     }}
     .station-live {{
         font-size: 0.8em;
@@ -241,9 +247,10 @@ def load_custom_css():
     }}
     .station-row.active .station-live {{
         color: {colors.get('HALL', '#fdf8ee')};
+        text-shadow: none;
     }}
 
-    /* Playback Control Deck Circular Buttons - Chunky plastic/wooden token layout */
+    /* Playback Control Deck Circular Buttons */
     .control-btn {{
         border-radius: 16px;
         min-width: 44px;
@@ -251,18 +258,19 @@ def load_custom_css():
         padding: 0;
         background-color: {colors.get('WING', '#f2ece1')};
         color: {score};
-        box-shadow: {slight}, {hem(4)};
-        outline: 2px dashed {thread};
-        outline-offset: -4px;
+        border: 2px dashed {thread};
+        box-shadow: 0 0 0 1px transparent, {slight}, {hem(4)};
+        transition: transform 80ms ease, box-shadow 80ms ease;
     }}
     .control-btn:hover {{
         background-color: {colors.get('MUTE', '#e5dcce')};
+        border: 2px dashed {thread};
+        box-shadow: 0 0 0 1px {outline}, {slight_lift}, {hem(4)};
         transform: translateY(-1px);
-        box-shadow: {slight_lift}, {hem(4)};
     }}
     .control-btn:active {{
         transform: translateY(2px);
-        box-shadow: {slight_press}, {hem(4, puff=False)};
+        box-shadow: 0 0 0 1px {outline}, {slight_press}, {hem(4, puff=False)};
     }}
     .control-btn.primary {{
         min-width: 56px;
@@ -270,31 +278,41 @@ def load_custom_css():
         border-radius: 20px;
         background-color: {colors.get('PIANO', '#2c2c30')};
         color: {colors.get('HALL', '#fdf8ee')};
-        text-shadow: 0 1px 0 rgba({staff}, 0.60);
-        outline: 2px dashed {thread_light};
+        border: 2px dashed {thread_light};
+        box-shadow: 0 0 0 2px {outline}, {slight}, {hem(4)};
+        text-shadow: 0 -1px 0 rgba(255,255,255,0.30), 0 1px 2px rgba({staff}, 0.70);
     }}
     .control-btn.primary:hover {{
         background-color: {colors.get('SOTTO', '#454549')};
+        box-shadow: 0 0 0 2px {outline}, {slight_lift}, {hem(4)};
+    """ + f"""
     }}
 
-    /* Typography Overrides for Bubble-Pop Craft Themes */
+    /* Typography Overrides with Full Layered Embroidery Treatment */
     .meta-title {{
         font-family: "Fredoka", "Baloo 2", "Chalkboard SE", sans-serif;
         font-size: 1.25em;
         font-weight: 900;
         color: {score};
-        text-shadow: 0 1px 0 {lite_c};
+        /* Thread Puffy Layer + Pinch Cavity Shadow + Hard Mario Canvas Shadow */
+        text-shadow: 0 -1px 0 rgba(255,255,255,0.45),
+                     0 1px 1px rgba({staff},0.6),
+                     1px 3px 0 {outline};
     }}
     .meta-artist {{
         font-family: "Fredoka", sans-serif;
         font-size: 1.0em;
         color: {colors.get('FORTE', '#8c3b3b')};
+        text-shadow: 0 -1px 0 rgba(255,255,255,0.35),
+                     0 1px 1px rgba({staff},0.4),
+                     1px 2px 0 {outline};
     }}
     .meta-genre {{
         font-family: "Fredoka", sans-serif;
         font-size: 0.85em;
         color: {colors.get('BAR', '#6b6b70')};
         font-style: italic;
+        text-shadow: 0 1px 0 {lite_c};
     }}
 
     /* Sticker Tags */
@@ -304,28 +322,27 @@ def load_custom_css():
         font-size: 0.8em;
         background-color: {colors.get('WING', '#fff5dd')};
         color: {score};
-        text-shadow: 0 1px 0 {lite_c};
         padding: 3px 8px;
         border-radius: 6px;
-        box-shadow: {slight_press}, {hem(2, puff=False)};
-        outline: 1px dashed {thread};
-        outline-offset: -3px;
+        border: 1px dashed {thread};
+        box-shadow: 0 0 0 1px transparent, {slight_press}, {hem(2, puff=False)};
+        text-shadow: 0 -1px 0 rgba(255,255,255,0.40), 0 1px 1px rgba({staff},0.4);
     }}
     .tag-chip:hover {{
         background-color: {colors.get('MUTE', '#e5dcce')};
         transform: translateY(-1px);
+        border: 1px dashed {thread};
+        box-shadow: 0 0 0 1px {outline}, {slight_lift}, {hem(2, puff=False)};
     }}
 
-    /* Popover Context Overrides - Cardboard cutout with stitch details */
+    /* Popover Context Overrides */
     popover.context-menu > contents {{
         background-color: {colors.get('GRAD_STAGE_LO', '#ece6da')};
         background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_STAGE_HI', '#fbf9f5')}, {colors.get('GRAD_STAGE_LO', '#ece6da')});
         color: {score};
-        border: 3px solid {outline};
         border-radius: 14px;
-        box-shadow: 8px 8px 0 0 {shadow}, {hem(6)};
-        outline: 2px dashed {thread};
-        outline-offset: -6px;
+        border: 2px dashed {thread};
+        box-shadow: 0 0 0 3px {outline}, 8px 8px 0 3px {shadow}, {hem(6)};
         padding: 10px;
     }}
     popover.context-menu > arrow {{
@@ -336,18 +353,18 @@ def load_custom_css():
         font-size: 0.85em;
         font-weight: bold;
         margin-top: 4px;
+        text-shadow: 0 1px 0 {lite_c};
     }}
     .context-menu entry {{
         background-color: {colors.get('WING', '#fff5dd')};
         border-radius: 8px;
         padding: 6px;
-        box-shadow: {slight_press}, {hem(2, puff=False)};
-        outline: 1px dashed {thread};
-        outline-offset: -3px;
+        border: 1px dashed {thread};
+        box-shadow: 0 0 0 1px transparent, {slight_press}, {hem(2, puff=False)};
     }}
     .context-menu entry:focus-within {{
-        outline: 2px dashed {colors.get('ROOT', '#f4b84b')};
-        outline-offset: -3px;
+        border: 1px dashed {colors.get('ROOT', '#f4b84b')};
+        box-shadow: 0 0 0 2px {colors.get('ROOT', '#f4b84b')};
     }}
     .context-menu separator {{
         background-color: rgba({staff}, 0.35);
@@ -360,26 +377,28 @@ def load_custom_css():
         border-radius: 8px;
         color: {score};
         background-color: {colors.get('WING', '#fff5dd')};
-        box-shadow: {slight}, {hem(3)};
-        outline: 2px dashed {thread};
-        outline-offset: -3px;
+        border: 2px dashed {thread};
+        box-shadow: 0 0 0 1px transparent, {slight}, {hem(3)};
+        transition: transform 80ms ease, box-shadow 80ms ease;
     }}
     .menu-btn:hover {{
         background-color: {colors.get('MUTE', '#e5dcce')};
+        border: 2px dashed {thread};
+        box-shadow: 0 0 0 1px {outline}, {slight_lift}, {hem(3)};
         transform: translateY(-1px);
-        box-shadow: {slight_lift}, {hem(3)};
     }}
     .menu-btn:active {{
         transform: translateY(1px);
-        box-shadow: {slight_press}, {hem(3, puff=False)};
+        box-shadow: 0 0 0 1px {outline}, {slight_press}, {hem(3, puff=False)};
     }}
     .menu-btn.destructive-action {{
         color: {colors.get('FORTE', '#8c3b3b')};
-        outline-color: {colors.get('FORTE', '#8c3b3b')};
+        border-color: {colors.get('FORTE', '#8c3b3b')};
     }}
     .menu-btn.destructive-action:hover {{
         background-color: {colors.get('FORTE', '#8c3b3b')};
         color: {colors.get('HALL', '#fdf8ee')};
+        border-color: transparent;
     }}
     """
 
