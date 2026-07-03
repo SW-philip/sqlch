@@ -170,13 +170,15 @@ def enrich_track(artist: str, track: str) -> dict[str, Any]:
     sp = spoti.enrich(artist, track)
     if sp:
         base.update({
-            'artist':  sp['artist'],
-            'track':   sp['track'],
-            'album':   sp.get('album'),
-            'year':    sp.get('year'),
-            'cover':   sp.get('art_url'),
-            'genres':  sp.get('genres', []),
-            'source':  'spotify',
+            'artist':    sp['artist'],
+            'track':     sp['track'],
+            'album':     sp.get('album'),
+            'year':      sp.get('year'),
+            'cover':     sp.get('art_url'),
+            'genres':    sp.get('genres', []),
+            'album_id':  sp.get('album_id'),
+            'tracklist': sp.get('tracklist', []),
+            'source':    'spotify',
         })
     else:
         mb = _enrich_musicbrainz(artist, track)

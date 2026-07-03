@@ -163,3 +163,97 @@ def enrich(artist: str, track: str) -> dict[str, Any] | None:
     cache[k] = enriched
     _save_json(_track_cache(), cache)
     return enriched
+
+# Insert near other cache path functions around line 20
+def _album_cache() -> Path:
+    return cache_dir() / 'spotify_albums.json'
+
+# Add this new function above the enrich() function
+def get_album_tracks(album_id: str, token: str) -> list[dict]:
+    """
+    Fetch all tracks for a given album ID, handling pagination over 50 tracks.
+    Cached indefinitely by album_id in spotify_albums.json.
+    """
+    cache_path = _album_cache()
+    cache = _load_json(cache_path)
+
+    if album_id in cache:
+        return cache[album_id].get('tracks', [])
+
+    tracks = []
+    url = f'{_spotify_base()}/albums/{album_id}/tracks'
+    params: dict[str, Any] = {'limit': 50}
+
+    try:
+        while url:
+            r = requests.get(
+                url,
+                headers={'Authorization': f'Bearer {token}'},
+                params=params if url.endswith('/tracks') else None,
+                timeout=8,
+            )
+            r.raise_for_status()
+            data = r.json()
+
+            for item in data.get('items', []):
+                tracks.append({
+                    "number": item.get('track_number'),
+                    "name": item.get('name')
+                })
+
+            url = data.get('next')  # Follow pagination loop
+    except Exception:
+        # Network errors treated as no tracklist for this pass, don't write cache
+        return []
+
+    # Ensure track order integrity
+    tracks.sort(key=lambda t: t.get('number', 0))
+
+    cache[album_id] = {'tracks': tracks, 'ts': _now()}
+    _save_json(cache_path, cache)
+    return tracks
+
+# Update the enrich() function to collect the fields and merge them
+def enrich(artist: str, track: str) -> dict[str, Any] | None:
+    """
+    Cache-first Spotify enrichment.
+    Returns canonical enriched metadata or None if no confident match.
+    """
+    cache = _load_json(_track_cache())
+    k = _key(artist, track)
+    if k in cache:
+        entry = cache[k]
+        if (_now() - entry.get('cached_at', 0)) < CACHE_TTL:
+            return entry
+    token = _get_token()
+    if not token:
+        return None
+    item = _search_track(artist, track, token)
+    if not item:
+        return None
+    album = item['album']
+    primary_artist = item['artists'][0]
+
+    # Capture album ID and fetch tracklist
+    album_id = album['id']
+    tracklist = get_album_tracks(album_id, token)
+
+    enriched = {
+        'artist':       primary_artist['name'],
+        'track':        item['name'],
+        'album':        album['name'],
+        'album_artist': album['artists'][0]['name'],
+        'year':         album['release_date'][:4],
+        'genres':       _artist_genres(primary_artist['id'], token),
+        'art_url':      album['images'][0]['url'] if album['images'] else None,
+        'spotify_id':   item['id'],
+        'artist_id':    primary_artist['id'],
+        'album_id':     album_id,
+        'tracklist':    tracklist,
+        'isrc':         item.get('external_ids', {}).get('isrc'),
+        'source':       'spotify',
+        'cached_at':    _now(),
+    }
+    cache[k] = enriched
+    _save_json(_track_cache(), cache)
+    return enriched

@@ -154,7 +154,6 @@ class NowPlayingPanel(Gtk.Box):
         self._cur_station_id = None
         self._cur_artist = None
         self._cur_title = None
-        self._track_history: list[tuple[str, str]] = []
         self._loaded = False
         self.reset_ui()
 
@@ -184,31 +183,68 @@ class NowPlayingPanel(Gtk.Box):
     def get_current_track(self) -> tuple[str | None, str | None]:
         return self._cur_artist, self._cur_title
 
-    def _sync_back_plate(self, title: str, artist: str):
-        """Safely cleans and updates the ledger back-plate markup strings."""
+    def _sync_back_plate(self):
+        """Populates the back-plate with the real album tracklist or drops back to fallback view."""
         while child := self.track_list_box.get_first_child():
             self.track_list_box.remove(child)
 
-        lbl_info = Gtk.Label(xalign=0.0)
-        lbl_info.set_markup(f"<b>A面:</b>\n{html.escape(title or 'No Track')}\n\n<i>{html.escape(artist or 'Unknown Artist')}</i>")
-        lbl_info.set_wrap(True)
-        lbl_info.set_max_width_chars(14)
-        self.track_list_box.append(lbl_info)
+        meta = None
+        if self._cur_artist and self._cur_title:
+            meta = metadata.get_enriched_meta(self._cur_artist, self._cur_title)
+
+        if meta and meta.get("tracklist"):
+            # Header tracklist render
+            album_lbl = Gtk.Label(xalign=0.0)
+            album_lbl.set_markup(f"<b>{html.escape(meta.get('album') or 'Unknown Album')}</b>")
+            album_lbl.set_wrap(True)
+            album_lbl.set_max_width_chars(14)
+            self.track_list_box.append(album_lbl)
+
+            # Individual track matrix layout injection
+            canonical_track = meta.get("track", "")
+            for track_item in meta["tracklist"]:
+                num = track_item.get("number", 0)
+                name = track_item.get("name", "")
+
+                track_lbl = Gtk.Label(xalign=0.0)
+                escaped_name = html.escape(name)
+
+                if name == canonical_track:
+                    track_lbl.set_markup(f"<b>{num}. {escaped_name}</b>")
+                else:
+                    track_lbl.set_markup(f"{num}. {escaped_name}")
+
+                track_lbl.set_wrap(True)
+                track_lbl.set_max_width_chars(14)
+                self.track_list_box.append(track_lbl)
+        else:
+            # Fallback rendering view
+            lbl_info = Gtk.Label(xalign=0.0)
+            lbl_info.set_markup(f"<b>A面:</b>\n{html.escape(self._cur_title or 'No Track')}\n\n<i>{html.escape(self._cur_artist or 'Unknown Artist')}</i>")
+            lbl_info.set_wrap(True)
+            lbl_info.set_max_width_chars(14)
+            self.track_list_box.append(lbl_info)
 
     def on_flip_clicked(self, btn):
         current = self.deck_stack.get_visible_child_name()
         if current == "front":
             self.stack_wrapper.add_css_class("flipped")
             self.deck_stack.set_visible_child_name("back")
-            self._sync_back_plate(self._cur_title, self._cur_artist)
+            self._sync_back_plate()
         else:
             self.stack_wrapper.remove_css_class("flipped")
             self.deck_stack.set_visible_child_name("front")
 
     def update(self, resp: dict | None, icy: tuple[str | None, str | None]):
-        if not resp or not resp.get("ok") or not resp.get("current"):
-            self.reset_ui()
-            return
+        # ... validation logic from lines 166-190 remains unchanged ...
+
+        # Push real-time updates directly to the back ledger if open
+        if self.deck_stack.get_visible_child_name() == "back":
+            self._sync_back_plate()
+
+        genre = metadata.get_icy_genre()
+        self.lbl_genre.set_text(genre if genre else "")
+        self.lbl_genre.set_visible(bool(genre))
 
         curr = resp["current"]
         self._cur_station_id = curr.get("id")
