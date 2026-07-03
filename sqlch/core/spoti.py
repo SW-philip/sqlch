@@ -126,49 +126,10 @@ def _artist_genres(artist_id: str, token: str) -> list[str]:
     return genres
 
 
-def enrich(artist: str, track: str) -> dict[str, Any] | None:
-    """
-    Cache-first Spotify enrichment.
-
-    Returns canonical enriched metadata or None if no confident match.
-    """
-    cache = _load_json(_track_cache())
-    k = _key(artist, track)
-    if k in cache:
-        entry = cache[k]
-        if (_now() - entry.get('cached_at', 0)) < CACHE_TTL:
-            return entry
-    token = _get_token()
-    if not token:
-        return None
-    item = _search_track(artist, track, token)
-    if not item:
-        return None
-    album = item['album']
-    primary_artist = item['artists'][0]
-    enriched = {
-        'artist':       primary_artist['name'],
-        'track':        item['name'],
-        'album':        album['name'],
-        'album_artist': album['artists'][0]['name'],
-        'year':         album['release_date'][:4],
-        'genres':       _artist_genres(primary_artist['id'], token),
-        'art_url':      album['images'][0]['url'] if album['images'] else None,
-        'spotify_id':   item['id'],
-        'artist_id':    primary_artist['id'],
-        'isrc':         item.get('external_ids', {}).get('isrc'),
-        'source':       'spotify',
-        'cached_at':    _now(),
-    }
-    cache[k] = enriched
-    _save_json(_track_cache(), cache)
-    return enriched
-
-# Insert near other cache path functions around line 20
 def _album_cache() -> Path:
     return cache_dir() / 'spotify_albums.json'
 
-# Add this new function above the enrich() function
+
 def get_album_tracks(album_id: str, token: str) -> list[dict]:
     """
     Fetch all tracks for a given album ID, handling pagination over 50 tracks.
@@ -213,7 +174,7 @@ def get_album_tracks(album_id: str, token: str) -> list[dict]:
     _save_json(cache_path, cache)
     return tracks
 
-# Update the enrich() function to collect the fields and merge them
+
 def enrich(artist: str, track: str) -> dict[str, Any] | None:
     """
     Cache-first Spotify enrichment.
@@ -223,7 +184,7 @@ def enrich(artist: str, track: str) -> dict[str, Any] | None:
     k = _key(artist, track)
     if k in cache:
         entry = cache[k]
-        if (_now() - entry.get('cached_at', 0)) < CACHE_TTL:
+        if (_now() - entry.get('cached_at', 0)) < CACHE_TTL and 'tracklist' in entry:
             return entry
     token = _get_token()
     if not token:
