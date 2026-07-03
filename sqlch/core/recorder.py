@@ -172,7 +172,11 @@ def _join_finalizers(timeout: float = 10.0) -> None:
 
 
 def _raw_path(started_at: datetime, seq: int) -> Path:
-    return _staging_dir() / f"rec-{started_at:%Y%m%d-%H%M%S}-{seq}.dump"
+    # mpv's stream-record guesses the output container from this extension
+    # (libavformat av_guess_format) — an unrecognized one (e.g. ".dump")
+    # makes it log "Output format not found" and silently write nothing.
+    # Matroska accepts any audio codec we're likely to receive.
+    return _staging_dir() / f"rec-{started_at:%Y%m%d-%H%M%S}-{seq}.mkv"
 
 
 def start(mode: str, station: dict[str, Any] | None) -> dict[str, Any]:
