@@ -1,6 +1,7 @@
 """sqlch control socket + MPV IPC queries."""
 
 import json
+import re
 import socket
 import subprocess
 
@@ -106,3 +107,18 @@ def get_stream_format() -> str | None:
     if val:
         return str(val).upper()
     return None
+
+
+def get_sink_name() -> str | None:
+    """Return the default audio sink's friendly description from wpctl, or None."""
+    try:
+        r = subprocess.run(
+            ["wpctl", "inspect", "@DEFAULT_AUDIO_SINK@"],
+            capture_output=True,
+            text=True,
+            timeout=1,
+        )
+        m = re.search(r'node\.description\s*=\s*"([^"]+)"', r.stdout)
+        return m.group(1) if m else None
+    except Exception:
+        return None

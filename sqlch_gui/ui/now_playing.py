@@ -193,11 +193,18 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_bt = Gtk.Label(label="BT")
         self.lbl_bt.add_css_class("tech-badge")
 
+        self.lbl_device = Gtk.Label()
+        self.lbl_device.add_css_class("tech-badge")
+        self.lbl_device.set_ellipsize(3)
+        self.lbl_device.set_max_width_chars(12)
+        self.lbl_device.set_visible(False)
+
         self.tech_box.append(self.lbl_rec)
         self.tech_box.append(self.lbl_vol_percent)
         self.tech_box.append(self.lbl_bitrate)
         self.tech_box.append(self.lbl_channels)
         self.tech_box.append(self.lbl_bt)
+        self.tech_box.append(self.lbl_device)
         deck.append(self.tech_box)
         self.append(deck)
 
@@ -229,6 +236,7 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_bt.set_visible(False)
         self.lbl_live_tag.set_visible(False)
         self.lbl_format_tag.set_visible(False)
+        self.lbl_device.set_visible(False)
         self.rec_knob.set_state(False, None)
         self.lbl_rec.set_visible(False)
         self.clear_cover()
@@ -363,7 +371,8 @@ class NowPlayingPanel(Gtk.Box):
         return False
 
     def update_indicators(self, bitrate: int | None, vol: float, muted: bool, bt: bool, playing: bool,
-                          channels: int | None, recording: dict | None = None, fmt: str | None = None):
+                          channels: int | None, recording: dict | None = None, fmt: str | None = None,
+                          device_name: str | None = None):
         self._loaded = playing
         self.btn_toggle.set_icon_name("media-playback-pause-symbolic" if playing else "media-playback-start-symbolic")
         self.eq_strip.set_active(playing)
@@ -404,6 +413,12 @@ class NowPlayingPanel(Gtk.Box):
             self.lbl_format_tag.set_visible(False)
 
         self.lbl_bt.set_visible(bt)
+
+        if device_name:
+            self.lbl_device.set_text(device_name)
+            self.lbl_device.set_visible(True)
+        else:
+            self.lbl_device.set_visible(False)
 
         rec = recording or {}
         active = bool(rec.get("active"))

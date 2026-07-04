@@ -132,14 +132,15 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
             bitrate = daemon.get_stream_bitrate()
             channels = daemon.get_stream_channels()
             fmt = daemon.get_stream_format()
+            device_name = daemon.get_sink_name()
 
             GLib.idle_add(
                 self._apply_daemon_state,
-                resp, icy, vol, muted, bitrate, channels, fmt
+                resp, icy, vol, muted, bitrate, channels, fmt, device_name
             )
             time.sleep(1.0)
 
-    def _apply_daemon_state(self, resp, icy, vol, muted, bitrate, channels, fmt) -> bool:
+    def _apply_daemon_state(self, resp, icy, vol, muted, bitrate, channels, fmt, device_name) -> bool:
         if not self._keep_running:
             return False
         self.now_playing.update(resp, icy=icy)
@@ -147,7 +148,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         recording = resp.get("recording") if resp else None
         self.now_playing.update_indicators(
             bitrate, vol, muted, self._bt_active, playing, channels,
-            recording=recording, fmt=fmt,
+            recording=recording, fmt=fmt, device_name=device_name,
         )
         artist, title = self.now_playing.get_current_track()
         self.station_list.set_active(self.now_playing.get_current_id(), artist, title)
