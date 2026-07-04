@@ -134,8 +134,15 @@ class NowPlayingPanel(Gtk.Box):
         self.vol_adj = Gtk.Adjustment(value=0.0, lower=0.0, upper=1.3, step_increment=0.05)
 
         self.vol_knob = RotaryKnob(self.vol_adj)
-        self.vol_knob.set_valign(Gtk.Align.CENTER)
         self._vol_handler = self.vol_knob.connect("value-changed", self.on_vol_changed)
+
+        vol_wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        vol_wrap.set_valign(Gtk.Align.CENTER)
+        vol_wrap.set_halign(Gtk.Align.CENTER)
+        vol_wrap.append(self.vol_knob)
+        lbl_vol_tag = Gtk.Label(label="VOL")
+        lbl_vol_tag.add_css_class("knob-tag")
+        vol_wrap.append(lbl_vol_tag)
 
         self.btn_mute = Gtk.Button(icon_name="audio-volume-high-symbolic")
         self.btn_mute.add_css_class("control-btn")
@@ -143,12 +150,19 @@ class NowPlayingPanel(Gtk.Box):
         self.btn_mute.connect("clicked", self.on_toggle_mute)
 
         self.rec_knob = RecordKnob()
-        self.rec_knob.set_valign(Gtk.Align.CENTER)
         self.rec_knob.connect("record-toggled", self.on_record_toggled)
 
-        hub_row.append(self.rec_knob)
+        rec_wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        rec_wrap.set_valign(Gtk.Align.CENTER)
+        rec_wrap.set_halign(Gtk.Align.CENTER)
+        rec_wrap.append(self.rec_knob)
+        lbl_rec_tag = Gtk.Label(label="REC")
+        lbl_rec_tag.add_css_class("knob-tag")
+        rec_wrap.append(lbl_rec_tag)
+
+        hub_row.append(rec_wrap)
         hub_row.append(btn_stop)
-        hub_row.append(self.vol_knob)
+        hub_row.append(vol_wrap)
         hub_row.append(self.btn_mute)
         deck.append(hub_row)
 

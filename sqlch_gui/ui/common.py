@@ -362,6 +362,15 @@ def load_custom_css():
         outline: 1px dashed {thread_light};
     }}
 
+    .knob-tag {{
+        font-family: "Courier New", monospace;
+        font-weight: 900;
+        font-size: 0.62em;
+        color: {colors.get('BAR', '#6b6b70')};
+        letter-spacing: 0.05em;
+        text-shadow: 0 1px 0 {lite_c};
+    }}
+
     popover.context-menu > contents {{
         background-color: {colors.get('GRAD_STAGE_LO', '#ece6da')};
         background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_STAGE_HI', '#fbf9f5')}, {colors.get('GRAD_STAGE_LO', '#ece6da')});
