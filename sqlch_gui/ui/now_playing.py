@@ -84,7 +84,7 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_artist.set_max_width_chars(36)
 
         self.lbl_genre = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
-        self.lbl_genre.add_css_class("meta-genre")
+        self.lbl_genre.add_css_class("thread-label")
 
         text_box.append(self.lbl_title)
         text_box.append(self.lbl_artist)
@@ -170,10 +170,18 @@ class NowPlayingPanel(Gtk.Box):
     def clear_cover(self):
         self.cover_stack.set_visible_child_name("placeholder")
 
+    def _set_genre(self, genre: str | None):
+        if genre:
+            self.lbl_genre.set_text(genre)
+            self.lbl_genre.add_css_class("lit")
+        else:
+            self.lbl_genre.set_text("GENRE")
+            self.lbl_genre.remove_css_class("lit")
+
     def reset_ui(self):
         self.lbl_title.set_markup("<b>Not Playing</b>")
         self.lbl_artist.set_text("Select a station from the library")
-        self.lbl_genre.set_text("")
+        self._set_genre(None)
         self.btn_toggle.set_icon_name("media-playback-start-symbolic")
         self.lbl_bitrate.set_visible(False)
         self.lbl_channels.set_visible(False)
@@ -280,8 +288,7 @@ class NowPlayingPanel(Gtk.Box):
             self._sync_back_plate()
 
         genre = metadata.get_icy_genre()
-        self.lbl_genre.set_text(genre if genre else "")
-        self.lbl_genre.set_visible(bool(genre))
+        self._set_genre(genre)
 
     def _async_fetch_cover(self, artist: str, title: str):
         import time
