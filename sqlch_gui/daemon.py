@@ -98,3 +98,11 @@ def get_stream_channels() -> int | None:
         except (ValueError, TypeError):
             pass
     return None
+
+
+def get_stream_format() -> str | None:
+    """Return the short audio codec name (e.g. 'mp3', 'aac') from MPV, or None."""
+    val = _mpv_get_property("audio-codec-name")
+    if val:
+        return str(val).upper()
+    return None

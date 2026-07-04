@@ -178,6 +178,26 @@ def load_custom_css():
         transform: rotate(-6deg);
     }}
 
+    .corner-tag {{
+        font-family: "Courier New", monospace;
+        font-weight: 900;
+        font-size: 0.65em;
+        padding: 2px 7px;
+        border-radius: 8px;
+        box-shadow: 0 2px 0 rgba({staff}, 0.4);
+        margin: 5px;
+    }}
+    .corner-tag-left {{
+        background-color: {colors.get('ROOT', '#f4b84b')};
+        color: {outline};
+        transform: rotate(-4deg);
+    }}
+    .corner-tag-right {{
+        background-color: {colors.get('BAR', '#6a6a6a')};
+        color: {score};
+        transform: rotate(4deg);
+    }}
+
     .list-plate {{
         background-color: {colors.get('HALL', '#fdf8ee')};
         background-image: {svg_tactile_filter};

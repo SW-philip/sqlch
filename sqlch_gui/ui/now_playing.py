@@ -60,7 +60,28 @@ class NowPlayingPanel(Gtk.Box):
         self.stack_wrapper = Gtk.Box()
         self.stack_wrapper.add_css_class("album-deck-wrapper")
         self.stack_wrapper.append(self.deck_stack)
-        deck_box.append(self.stack_wrapper)
+
+        # Overlay carries the sewn-on corner tags without affecting deck sizing
+        self.cover_overlay = Gtk.Overlay()
+        self.cover_overlay.set_child(self.stack_wrapper)
+
+        self.lbl_live_tag = Gtk.Label(label="LIVE")
+        self.lbl_live_tag.add_css_class("corner-tag")
+        self.lbl_live_tag.add_css_class("corner-tag-left")
+        self.lbl_live_tag.set_halign(Gtk.Align.START)
+        self.lbl_live_tag.set_valign(Gtk.Align.START)
+        self.lbl_live_tag.set_visible(False)
+        self.cover_overlay.add_overlay(self.lbl_live_tag)
+
+        self.lbl_format_tag = Gtk.Label()
+        self.lbl_format_tag.add_css_class("corner-tag")
+        self.lbl_format_tag.add_css_class("corner-tag-right")
+        self.lbl_format_tag.set_halign(Gtk.Align.END)
+        self.lbl_format_tag.set_valign(Gtk.Align.START)
+        self.lbl_format_tag.set_visible(False)
+        self.cover_overlay.add_overlay(self.lbl_format_tag)
+
+        deck_box.append(self.cover_overlay)
 
         # Index Tag Toggle Button on the right
         self.flip_btn = Gtk.Button(icon_name="object-flip-horizontal-symbolic")
@@ -192,6 +213,8 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_bitrate.set_visible(False)
         self.lbl_channels.set_visible(False)
         self.lbl_bt.set_visible(False)
+        self.lbl_live_tag.set_visible(False)
+        self.lbl_format_tag.set_visible(False)
         self.rec_knob.set_state(False, None)
         self.lbl_rec.set_visible(False)
         self.clear_cover()
@@ -278,10 +301,12 @@ class NowPlayingPanel(Gtk.Box):
             self.lbl_title.set_markup(f"<b>{html.escape(station_name)}</b>")
             self.lbl_artist.set_text("Live Stream")
             self.clear_cover()
+            self.lbl_live_tag.set_visible(True)
             self._cur_artist, self._cur_title = None, None
         else:
             self.lbl_title.set_text(title or "Unknown Track")
             self.lbl_artist.set_text(artist or "Unknown Artist")
+            self.lbl_live_tag.set_visible(False)
 
             if artist != self._cur_artist or title != self._cur_title:
                 self._cur_artist = artist
@@ -324,7 +349,7 @@ class NowPlayingPanel(Gtk.Box):
         return False
 
     def update_indicators(self, bitrate: int | None, vol: float, muted: bool, bt: bool, playing: bool,
-                          channels: int | None, recording: dict | None = None):
+                          channels: int | None, recording: dict | None = None, fmt: str | None = None):
         self._loaded = playing
         self.btn_toggle.set_icon_name("media-playback-pause-symbolic" if playing else "media-playback-start-symbolic")
         self.eq_strip.set_active(playing)
@@ -357,6 +382,12 @@ class NowPlayingPanel(Gtk.Box):
             self.lbl_channels.set_visible(True)
         else:
             self.lbl_channels.set_visible(False)
+
+        if fmt:
+            self.lbl_format_tag.set_text(fmt)
+            self.lbl_format_tag.set_visible(True)
+        else:
+            self.lbl_format_tag.set_visible(False)
 
         self.lbl_bt.set_visible(bt)
 
