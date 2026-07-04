@@ -11,6 +11,15 @@ import math
 import gi
 gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, GLib
+from .. import palette
+
+
+def _hex_to_rgb_floats(hex_val: str) -> tuple[float, float, float]:
+    h = hex_val.lstrip('#')
+    if len(h) == 3:
+        h = ''.join(c * 2 for c in h)
+    r, g, b = (int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+    return r, g, b
 
 
 class EqStrip(Gtk.DrawingArea):
@@ -26,6 +35,7 @@ class EqStrip(Gtk.DrawingArea):
         self._running = False
         self._timer_id = None
         self.set_draw_func(self._on_draw)
+        self.connect("destroy", lambda *_: self.set_active(False))
 
     def set_active(self, active: bool):
         if active == self._running:
@@ -45,6 +55,10 @@ class EqStrip(Gtk.DrawingArea):
         return self._running
 
     def _on_draw(self, area, cr, width, height, user_data=None):
+        colors = palette.load()
+        top_r, top_g, top_b = _hex_to_rgb_floats(colors.get('ROOT', '#f6b83c'))
+        tail_r, tail_g, tail_b = _hex_to_rgb_floats(colors.get('SEVENTH', '#c8723c'))
+
         n = self.N_BEADS
         gap = 3.0
         bead_w = (width - gap * (n - 1)) / n
@@ -58,7 +72,11 @@ class EqStrip(Gtk.DrawingArea):
             x = i * (bead_w + gap)
             y = height - bead_h
 
-            cr.set_source_rgba(0.96, 0.72, 0.24, 1.0)
+            t = i / (n - 1) if n > 1 else 0.0
+            r = top_r + (tail_r - top_r) * t
+            g = top_g + (tail_g - top_g) * t
+            b = top_b + (tail_b - top_b) * t
+            cr.set_source_rgba(r, g, b, 1.0)
             self._rounded_bar(cr, x, y, bead_w, bead_h)
             cr.fill()
 
