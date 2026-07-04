@@ -7,6 +7,7 @@ from gi.repository import Gtk, GLib, GdkPixbuf
 
 from .. import daemon, metadata
 from .knob import RotaryKnob, RecordKnob
+from .eq_strip import EqStrip
 
 class NowPlayingPanel(Gtk.Box):
     def __init__(self, parent_window):
@@ -69,6 +70,10 @@ class NowPlayingPanel(Gtk.Box):
         deck_box.append(self.flip_btn)
 
         card.append(deck_box)
+
+        self.eq_strip = EqStrip()
+        self.eq_strip.set_halign(Gtk.Align.CENTER)
+        card.append(self.eq_strip)
 
         # Meta details text stack, centered below the art
         text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
@@ -183,6 +188,7 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_artist.set_text("Select a station from the library")
         self._set_genre(None)
         self.btn_toggle.set_icon_name("media-playback-start-symbolic")
+        self.eq_strip.set_active(False)
         self.lbl_bitrate.set_visible(False)
         self.lbl_channels.set_visible(False)
         self.lbl_bt.set_visible(False)
@@ -321,6 +327,7 @@ class NowPlayingPanel(Gtk.Box):
                           channels: int | None, recording: dict | None = None):
         self._loaded = playing
         self.btn_toggle.set_icon_name("media-playback-pause-symbolic" if playing else "media-playback-start-symbolic")
+        self.eq_strip.set_active(playing)
 
         # Block signals temporarily to prevent loopback configuration cascades
         self.vol_knob.handler_block(self._vol_handler)
