@@ -43,6 +43,7 @@ def _empty_result(artist: str, track: str) -> dict[str, Any]:
         'year': None,
         'cover': None,
         'genres': [],
+        'tracklist': [],
         'source': 'unknown',
         'ts': _now(),
     }
@@ -159,8 +160,8 @@ def enrich_track(artist: str, track: str) -> dict[str, Any]:
     key = _cache_key(artist, track)
     cached = db.get(key)
 
-    # Return cache hit if fresh
-    if cached and not _is_stale(cached):
+    # Return cache hit if fresh and already carrying tracklist data
+    if cached and not _is_stale(cached) and 'tracklist' in cached:
         cached['source'] = 'cache'
         return cached
 
