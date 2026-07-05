@@ -156,7 +156,7 @@ def load_custom_css():
         background-image: {svg_tactile_filter};
         background-repeat: repeat;
         border-radius: 14px;
-        padding: 10px;
+        padding: 8px;
         border: 2px dashed {thread};
         box-shadow: 0 0 0 1px transparent, {slight}, {hem(6)};
         margin-bottom: 3px;

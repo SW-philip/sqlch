@@ -11,16 +11,16 @@ from .eq_strip import EqStrip
 
 class NowPlayingPanel(Gtk.Box):
     def __init__(self, parent_window):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        self.set_margin_start(8)
-        self.set_margin_end(8)
-        self.set_margin_top(8)
-        self.set_margin_bottom(8)
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.set_margin_start(6)
+        self.set_margin_end(6)
+        self.set_margin_top(6)
+        self.set_margin_bottom(6)
         self.set_valign(Gtk.Align.CENTER)
         self.win = parent_window
 
         # Header card
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         card.add_css_class("card")
 
         # --- Dual-Sided Album Deck Layout Container ---
@@ -97,7 +97,7 @@ class NowPlayingPanel(Gtk.Box):
         card.append(self.eq_strip)
 
         # Meta details text stack, centered below the art
-        text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
         text_box.set_halign(Gtk.Align.CENTER)
         self.lbl_title = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
         self.lbl_title.add_css_class("meta-title")
@@ -119,11 +119,11 @@ class NowPlayingPanel(Gtk.Box):
         self.append(card)
 
         # Control deck card, organized as a hub
-        deck = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        deck = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         deck.add_css_class("card")
 
         # Hub row
-        hub_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        hub_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         hub_row.set_halign(Gtk.Align.CENTER)
 
         btn_stop = Gtk.Button(icon_name="media-playback-stop-symbolic")

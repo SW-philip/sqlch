@@ -42,7 +42,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         # Navigation column sidebar patch
         sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         sidebar.add_css_class("sidebar")
-        sidebar.set_valign(Gtk.Align.START)
+        sidebar.set_valign(Gtk.Align.CENTER)
         main_box.append(sidebar)
 
         self.stack = Gtk.Stack()
