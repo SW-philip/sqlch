@@ -25,12 +25,12 @@ def _hex_to_rgb_floats(hex_val: str) -> tuple[float, float, float]:
 class EqStrip(Gtk.DrawingArea):
     """Row of soft fabric 'beads' that bob in a procedural wave while active."""
 
-    N_BEADS = 7
     FRAME_MS = 80
 
-    def __init__(self):
+    def __init__(self, n_beads: int = 7, width: int = 90, height: int = 24):
         super().__init__()
-        self.set_size_request(90, 24)
+        self.n_beads = n_beads
+        self.set_size_request(width, height)
         self._phase = 0.0
         self._running = False
         self._timer_id = None
@@ -59,7 +59,7 @@ class EqStrip(Gtk.DrawingArea):
         top_r, top_g, top_b = _hex_to_rgb_floats(colors.get('ROOT', '#f6b83c'))
         tail_r, tail_g, tail_b = _hex_to_rgb_floats(colors.get('SEVENTH', '#c8723c'))
 
-        n = self.N_BEADS
+        n = self.n_beads
         gap = 3.0
         bead_w = (width - gap * (n - 1)) / n
 

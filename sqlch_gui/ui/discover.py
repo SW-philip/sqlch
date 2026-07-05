@@ -3,6 +3,7 @@
 import threading
 from gi.repository import Gtk, GLib
 from .. import radiobrowser
+from .banner import RibbonBanner, PennantTag
 
 GENRE_TAGS = ["Jazz", "News", "Rock", "Electronic", "Classical", "Talk", "Ambient", "Sports", "80s"]
 
@@ -31,8 +32,8 @@ class DiscoverPanel(Gtk.Box):
 
         # Scoped Container for Category Discovery
         self.discovery_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        self.browse_title = Gtk.Label(xalign=0.0)
-        self.browse_title.set_markup("<span size='small' weight='bold' alpha='70%'>BROWSE CATEGORIES</span>")
+        self.browse_title = RibbonBanner("Browse Categories", gold=True)
+        self.browse_title.set_halign(Gtk.Align.START)
         self.discovery_container.append(self.browse_title)
 
         # Genre browse grid
@@ -42,8 +43,9 @@ class DiscoverPanel(Gtk.Box):
         self.tag_grid.set_row_spacing(6)
         self.tag_grid.set_column_spacing(6)
         for tag in GENRE_TAGS:
-            btn = Gtk.Button(label=tag.lower())
-            btn.add_css_class("tag-chip")
+            btn = Gtk.Button()
+            btn.set_child(PennantTag(tag.lower()))
+            btn.add_css_class("pennant-btn")
             btn.connect("clicked", lambda b, t=tag: self.on_tag_clicked(t))
             self.tag_grid.append(btn)
         self.discovery_container.append(self.tag_grid)
@@ -135,13 +137,24 @@ class DiscoverPanel(Gtk.Box):
 
             sub = Gtk.Label(xalign=0.0)
             sub.add_css_class("meta-genre")
-            tag_str = r.get("tags", "")[:40]
-            cc = r.get("country", "")
-            sub.set_text(f"[{cc}] {tag_str}" if cc else tag_str)
+            sub.set_text(r.get("tags", "")[:40])
 
             meta.append(title)
             meta.append(sub)
             row.append(meta)
+
+            cc = r.get("country", "")
+            if cc:
+                cc_tag = PennantTag(cc, country=True)
+                cc_tag.set_valign(Gtk.Align.CENTER)
+                row.append(cc_tag)
+
+            bitrate = r.get("bitrate")
+            if bitrate:
+                rate_lbl = Gtk.Label(label=f"{bitrate}k")
+                rate_lbl.add_css_class("small-badge")
+                rate_lbl.set_valign(Gtk.Align.CENTER)
+                row.append(rate_lbl)
 
             btn_import = Gtk.Button(icon_name="bookmark-new-symbolic")
             btn_import.set_tooltip_text("Import into local station library")

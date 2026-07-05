@@ -5,6 +5,8 @@ import time
 
 from gi.repository import Gtk, Gdk, GLib
 from .. import library, daemon, icyprobe, metadata, palette
+from .banner import RibbonBanner, PennantTag
+from .eq_strip import EqStrip
 
 PROBE_STALE_SECS = 45
 PROBE_TICK_SECS = 60
@@ -84,6 +86,9 @@ class StationListPanel(Gtk.Box):
             elif isinstance(widget, Gtk.Label): # Side info chips
                 if search_text in widget.get_text().lower():
                     return True
+            elif isinstance(widget, PennantTag): # Group tag pennant
+                if search_text in widget.label.get_text().lower():
+                    return True
 
         return False
 
@@ -108,13 +113,12 @@ class StationListPanel(Gtk.Box):
         for g_name in sorted(groups.keys()):
             # Category Header Separator
             header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-            header_box.add_css_class("list-header")
             header_box.set_margin_top(8)
             header_box.set_margin_bottom(4)
 
-            group_lbl = Gtk.Label(xalign=0.0)
-            group_lbl.set_markup(f"<b>{g_name.upper()}</b>")
-            header_box.append(group_lbl)
+            ribbon = RibbonBanner(g_name)
+            ribbon.set_halign(Gtk.Align.START)
+            header_box.append(ribbon)
             self.list_box.append(header_box)
 
             def _freq(v):
@@ -142,12 +146,17 @@ class StationListPanel(Gtk.Box):
                 body.append(name_lbl)
                 body.append(live_lbl)
 
-                tag_lbl = Gtk.Label(label=s.get("group", "Unsorted"))
-                tag_lbl.add_css_class("tag-chip")
+                mini_eq = EqStrip(n_beads=3, width=22, height=14)
+                mini_eq.set_valign(Gtk.Align.CENTER)
+                mini_eq.set_visible(False)
+
+                tag_pennant = PennantTag(s.get("group", "Unsorted"))
+                tag_pennant.set_valign(Gtk.Align.CENTER)
 
                 row.append(freq_lbl)
                 row.append(body)
-                row.append(tag_lbl)
+                row.append(mini_eq)
+                row.append(tag_pennant)
 
                 # Secondary click binding context setup
                 click_gesture = Gtk.GestureClick()
@@ -156,14 +165,18 @@ class StationListPanel(Gtk.Box):
                 row.add_controller(click_gesture)
 
                 self.list_box.append(row)
-                self._rows_map[s["id"]] = (row, live_lbl)
+                self._rows_map[s["id"]] = (row, live_lbl, mini_eq)
 
         # Re-apply any already-probed live lines to the rebuilt rows
-        for s_id, (row, live_lbl) in self._rows_map.items():
+        for s_id, (row, live_lbl, mini_eq) in self._rows_map.items():
             text = self._probe_titles.get(s_id, "")
             if text and s_id != self._active_id:
                 live_lbl.set_text(text)
                 live_lbl.set_visible(True)
+            if s_id == self._active_id:
+                row.add_css_class("active")
+                mini_eq.set_visible(True)
+                mini_eq.set_active(True)
 
     def on_row_clicked(self, gesture, n_press, x, y, station):
         button = gesture.get_current_button()
@@ -241,12 +254,16 @@ class StationListPanel(Gtk.Box):
 
     def set_active(self, active_id: str | None, icy_artist: str | None = None, icy_title: str | None = None):
         self._active_id = active_id
-        for s_id, (row, live_lbl) in self._rows_map.items():
+        for s_id, (row, live_lbl, mini_eq) in self._rows_map.items():
             if s_id == active_id:
                 row.add_css_class("active")
+                mini_eq.set_visible(True)
+                mini_eq.set_active(True)
                 text = format_live_text(icy_artist, icy_title) or self._probe_titles.get(s_id, "")
             else:
                 row.remove_css_class("active")
+                mini_eq.set_active(False)
+                mini_eq.set_visible(False)
                 text = self._probe_titles.get(s_id, "")
             live_lbl.set_text(text)
             live_lbl.set_visible(bool(text))
@@ -300,7 +317,7 @@ class StationListPanel(Gtk.Box):
             self._probe_titles.pop(s_id, None)
         entry = self._rows_map.get(s_id)
         if entry and s_id != self._active_id:
-            _row, live_lbl = entry
+            _row, live_lbl, _mini_eq = entry
             live_lbl.set_text(text)
             live_lbl.set_visible(bool(text))
         return False

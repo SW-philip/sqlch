@@ -70,6 +70,7 @@ def _fetch_stations(url: str, limit: int) -> list[dict]:
                     "favicon": item.get("favicon", ""),
                     "tags": item.get("tags", ""),
                     "country": item.get("countrycode", ""),
+                    "bitrate": item.get("bitrate"),
                 }
                 for item in raw[:limit]
             ]

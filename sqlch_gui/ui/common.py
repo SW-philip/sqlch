@@ -241,7 +241,7 @@ def load_custom_css():
         background-image: {svg_tactile_filter};
         background-color: {colors.get('SEVENTH', '#79a383')};
         color: {colors.get('HALL', '#fdf8ee')};
-        border: 2px dashed {thread_light};
+        border: 2px dashed {colors.get('ROOT', '#f4b84b')};
         box-shadow: 0 0 0 1px {outline}, {slight}, {hem(3)};
     }}
     .station-row.active label {{
@@ -360,6 +360,47 @@ def load_custom_css():
         color: {colors.get('HALL', '#fdf8ee')};
         text-shadow: 0 1px 0 rgba({staff}, 0.60);
         outline: 1px dashed {thread_light};
+    }}
+
+    .small-badge {{
+        font-family: "Courier New", monospace;
+        font-weight: 700;
+        font-size: 0.7em;
+        background-color: {colors.get('MUTE', '#e5dcce')};
+        color: {colors.get('BAR', '#6b6b70')};
+        padding: 2px 6px;
+        border-radius: 5px;
+    }}
+
+    .ribbon-label {{
+        font-weight: 900;
+        font-size: 0.78em;
+        letter-spacing: 0.08em;
+        color: {outline};
+        text-shadow: 0 1px 0 rgba(255,255,255,0.25);
+    }}
+
+    .pennant-label {{
+        font-family: "Courier New", monospace;
+        font-weight: 700;
+        font-size: 0.75em;
+        color: {outline};
+        text-shadow: 0 1px 0 rgba(255,255,255,0.25);
+    }}
+
+    .pennant-btn {{
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        transition: transform 80ms ease;
+    }}
+    .pennant-btn:hover {{
+        background: transparent;
+        transform: translateY(-1px);
+    }}
+    .pennant-btn:active {{
+        transform: translateY(1px);
     }}
 
     .knob-tag {{
