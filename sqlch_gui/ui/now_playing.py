@@ -206,7 +206,21 @@ class NowPlayingPanel(Gtk.Box):
         self.tech_box.append(self.lbl_bt)
         self.tech_box.append(self.lbl_device)
         deck.append(self.tech_box)
-        self.append(deck)
+
+        deck_overlay = Gtk.Overlay()
+        deck_overlay.set_child(deck)
+        lbl_brand = Gtk.Label(label="sqlch")
+        lbl_brand.add_css_class("brand-tag")
+        lbl_brand.set_halign(Gtk.Align.END)
+        lbl_brand.set_valign(Gtk.Align.START)
+        # Purely decorative: a bare Gtk.Label added via Gtk.Overlay.add_overlay()
+        # does NOT click-through by default (Gtk.Widget.pick() resolves to the
+        # topmost can_target widget at a point, regardless of whether it has any
+        # click handling), so explicitly opt this label out of hit-testing to
+        # guarantee stop/mute/knob clicks below always reach their real targets.
+        lbl_brand.set_can_target(False)
+        deck_overlay.add_overlay(lbl_brand)
+        self.append(deck_overlay)
 
         self._cur_station_id = None
         self._cur_artist = None

@@ -371,6 +371,18 @@ def load_custom_css():
         text-shadow: 0 1px 0 {lite_c};
     }}
 
+    .brand-tag {{
+        font-family: "Courier New", monospace;
+        font-size: 0.6em;
+        letter-spacing: 0.08em;
+        color: rgba({score_rgb}, 0.45);
+        background-color: {colors.get('HALL', '#2c2c30')};
+        border: 1px dashed {thread};
+        border-radius: 4px;
+        padding: 2px 6px;
+        margin: 6px;
+    }}
+
     popover.context-menu > contents {{
         background-color: {colors.get('GRAD_STAGE_LO', '#ece6da')};
         background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_STAGE_HI', '#fbf9f5')}, {colors.get('GRAD_STAGE_LO', '#ece6da')});
