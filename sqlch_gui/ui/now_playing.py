@@ -7,6 +7,7 @@ from gi.repository import Gtk, GLib, GdkPixbuf
 
 from .. import daemon, metadata
 from .knob import RotaryKnob, RecordKnob
+from .eq_strip import EqStrip
 
 class NowPlayingPanel(Gtk.Box):
     def __init__(self, parent_window):
@@ -59,7 +60,28 @@ class NowPlayingPanel(Gtk.Box):
         self.stack_wrapper = Gtk.Box()
         self.stack_wrapper.add_css_class("album-deck-wrapper")
         self.stack_wrapper.append(self.deck_stack)
-        deck_box.append(self.stack_wrapper)
+
+        # Overlay carries the sewn-on corner tags without affecting deck sizing
+        self.cover_overlay = Gtk.Overlay()
+        self.cover_overlay.set_child(self.stack_wrapper)
+
+        self.lbl_live_tag = Gtk.Label(label="LIVE")
+        self.lbl_live_tag.add_css_class("corner-tag")
+        self.lbl_live_tag.add_css_class("corner-tag-left")
+        self.lbl_live_tag.set_halign(Gtk.Align.START)
+        self.lbl_live_tag.set_valign(Gtk.Align.START)
+        self.lbl_live_tag.set_visible(False)
+        self.cover_overlay.add_overlay(self.lbl_live_tag)
+
+        self.lbl_format_tag = Gtk.Label()
+        self.lbl_format_tag.add_css_class("corner-tag")
+        self.lbl_format_tag.add_css_class("corner-tag-right")
+        self.lbl_format_tag.set_halign(Gtk.Align.END)
+        self.lbl_format_tag.set_valign(Gtk.Align.START)
+        self.lbl_format_tag.set_visible(False)
+        self.cover_overlay.add_overlay(self.lbl_format_tag)
+
+        deck_box.append(self.cover_overlay)
 
         # Index Tag Toggle Button on the right
         self.flip_btn = Gtk.Button(icon_name="object-flip-horizontal-symbolic")
@@ -69,6 +91,10 @@ class NowPlayingPanel(Gtk.Box):
         deck_box.append(self.flip_btn)
 
         card.append(deck_box)
+
+        self.eq_strip = EqStrip()
+        self.eq_strip.set_halign(Gtk.Align.CENTER)
+        card.append(self.eq_strip)
 
         # Meta details text stack, centered below the art
         text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
@@ -84,7 +110,7 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_artist.set_max_width_chars(36)
 
         self.lbl_genre = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
-        self.lbl_genre.add_css_class("meta-genre")
+        self.lbl_genre.add_css_class("thread-label")
 
         text_box.append(self.lbl_title)
         text_box.append(self.lbl_artist)
@@ -108,8 +134,15 @@ class NowPlayingPanel(Gtk.Box):
         self.vol_adj = Gtk.Adjustment(value=0.0, lower=0.0, upper=1.3, step_increment=0.05)
 
         self.vol_knob = RotaryKnob(self.vol_adj)
-        self.vol_knob.set_valign(Gtk.Align.CENTER)
         self._vol_handler = self.vol_knob.connect("value-changed", self.on_vol_changed)
+
+        vol_wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        vol_wrap.set_valign(Gtk.Align.CENTER)
+        vol_wrap.set_halign(Gtk.Align.CENTER)
+        vol_wrap.append(self.vol_knob)
+        lbl_vol_tag = Gtk.Label(label="VOL")
+        lbl_vol_tag.add_css_class("knob-tag")
+        vol_wrap.append(lbl_vol_tag)
 
         self.btn_mute = Gtk.Button(icon_name="audio-volume-high-symbolic")
         self.btn_mute.add_css_class("control-btn")
@@ -117,12 +150,19 @@ class NowPlayingPanel(Gtk.Box):
         self.btn_mute.connect("clicked", self.on_toggle_mute)
 
         self.rec_knob = RecordKnob()
-        self.rec_knob.set_valign(Gtk.Align.CENTER)
         self.rec_knob.connect("record-toggled", self.on_record_toggled)
 
-        hub_row.append(self.rec_knob)
+        rec_wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        rec_wrap.set_valign(Gtk.Align.CENTER)
+        rec_wrap.set_halign(Gtk.Align.CENTER)
+        rec_wrap.append(self.rec_knob)
+        lbl_rec_tag = Gtk.Label(label="REC")
+        lbl_rec_tag.add_css_class("knob-tag")
+        rec_wrap.append(lbl_rec_tag)
+
+        hub_row.append(rec_wrap)
         hub_row.append(btn_stop)
-        hub_row.append(self.vol_knob)
+        hub_row.append(vol_wrap)
         hub_row.append(self.btn_mute)
         deck.append(hub_row)
 
@@ -153,13 +193,34 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_bt = Gtk.Label(label="BT")
         self.lbl_bt.add_css_class("tech-badge")
 
+        self.lbl_device = Gtk.Label()
+        self.lbl_device.add_css_class("tech-badge")
+        self.lbl_device.set_ellipsize(3)
+        self.lbl_device.set_max_width_chars(12)
+        self.lbl_device.set_visible(False)
+
         self.tech_box.append(self.lbl_rec)
         self.tech_box.append(self.lbl_vol_percent)
         self.tech_box.append(self.lbl_bitrate)
         self.tech_box.append(self.lbl_channels)
         self.tech_box.append(self.lbl_bt)
+        self.tech_box.append(self.lbl_device)
         deck.append(self.tech_box)
-        self.append(deck)
+
+        deck_overlay = Gtk.Overlay()
+        deck_overlay.set_child(deck)
+        lbl_brand = Gtk.Label(label="sqlch")
+        lbl_brand.add_css_class("brand-tag")
+        lbl_brand.set_halign(Gtk.Align.END)
+        lbl_brand.set_valign(Gtk.Align.START)
+        # Purely decorative: a bare Gtk.Label added via Gtk.Overlay.add_overlay()
+        # does NOT click-through by default (Gtk.Widget.pick() resolves to the
+        # topmost can_target widget at a point, regardless of whether it has any
+        # click handling), so explicitly opt this label out of hit-testing to
+        # guarantee stop/mute/knob clicks below always reach their real targets.
+        lbl_brand.set_can_target(False)
+        deck_overlay.add_overlay(lbl_brand)
+        self.append(deck_overlay)
 
         self._cur_station_id = None
         self._cur_artist = None
@@ -170,14 +231,26 @@ class NowPlayingPanel(Gtk.Box):
     def clear_cover(self):
         self.cover_stack.set_visible_child_name("placeholder")
 
+    def _set_genre(self, genre: str | None):
+        if genre:
+            self.lbl_genre.set_text(genre)
+            self.lbl_genre.add_css_class("lit")
+        else:
+            self.lbl_genre.set_text("GENRE")
+            self.lbl_genre.remove_css_class("lit")
+
     def reset_ui(self):
         self.lbl_title.set_markup("<b>Not Playing</b>")
         self.lbl_artist.set_text("Select a station from the library")
-        self.lbl_genre.set_text("")
+        self._set_genre(None)
         self.btn_toggle.set_icon_name("media-playback-start-symbolic")
+        self.eq_strip.set_active(False)
         self.lbl_bitrate.set_visible(False)
         self.lbl_channels.set_visible(False)
         self.lbl_bt.set_visible(False)
+        self.lbl_live_tag.set_visible(False)
+        self.lbl_format_tag.set_visible(False)
+        self.lbl_device.set_visible(False)
         self.rec_knob.set_state(False, None)
         self.lbl_rec.set_visible(False)
         self.clear_cover()
@@ -264,10 +337,12 @@ class NowPlayingPanel(Gtk.Box):
             self.lbl_title.set_markup(f"<b>{html.escape(station_name)}</b>")
             self.lbl_artist.set_text("Live Stream")
             self.clear_cover()
+            self.lbl_live_tag.set_visible(True)
             self._cur_artist, self._cur_title = None, None
         else:
             self.lbl_title.set_text(title or "Unknown Track")
             self.lbl_artist.set_text(artist or "Unknown Artist")
+            self.lbl_live_tag.set_visible(False)
 
             if artist != self._cur_artist or title != self._cur_title:
                 self._cur_artist = artist
@@ -280,8 +355,7 @@ class NowPlayingPanel(Gtk.Box):
             self._sync_back_plate()
 
         genre = metadata.get_icy_genre()
-        self.lbl_genre.set_text(genre if genre else "")
-        self.lbl_genre.set_visible(bool(genre))
+        self._set_genre(genre)
 
     def _async_fetch_cover(self, artist: str, title: str):
         import time
@@ -311,9 +385,11 @@ class NowPlayingPanel(Gtk.Box):
         return False
 
     def update_indicators(self, bitrate: int | None, vol: float, muted: bool, bt: bool, playing: bool,
-                          channels: int | None, recording: dict | None = None):
+                          channels: int | None, recording: dict | None = None, fmt: str | None = None,
+                          device_name: str | None = None):
         self._loaded = playing
         self.btn_toggle.set_icon_name("media-playback-pause-symbolic" if playing else "media-playback-start-symbolic")
+        self.eq_strip.set_active(playing)
 
         # Block signals temporarily to prevent loopback configuration cascades
         self.vol_knob.handler_block(self._vol_handler)
@@ -344,7 +420,19 @@ class NowPlayingPanel(Gtk.Box):
         else:
             self.lbl_channels.set_visible(False)
 
+        if fmt:
+            self.lbl_format_tag.set_text(fmt)
+            self.lbl_format_tag.set_visible(True)
+        else:
+            self.lbl_format_tag.set_visible(False)
+
         self.lbl_bt.set_visible(bt)
+
+        if device_name:
+            self.lbl_device.set_text(device_name)
+            self.lbl_device.set_visible(True)
+        else:
+            self.lbl_device.set_visible(False)
 
         rec = recording or {}
         active = bool(rec.get("active"))

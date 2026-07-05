@@ -60,6 +60,15 @@ class RotaryKnob(Gtk.DrawingArea):
         cr.arc(cx, cy, radius - 1, 0, 2 * math.pi)
         cr.fill()
 
+        # Dashed stitch ring, echoes the fabric hem convention used elsewhere in the UI
+        cr.save()
+        cr.set_dash([2.0, 3.0])
+        cr.set_line_width(1.5)
+        cr.set_source_rgba(0.9, 0.9, 0.9, 0.35)
+        cr.arc(cx, cy, radius + 4.0, 0, 2 * math.pi)
+        cr.stroke()
+        cr.restore()
+
         # Unused tracking arc track
         cr.set_line_width(4.0)
         cr.set_source_rgba(0.1, 0.1, 0.1, 0.4)
@@ -193,6 +202,15 @@ class RecordKnob(Gtk.DrawingArea):
         cr.set_source_rgba(0.20, 0.20, 0.22, 1.0)
         cr.arc(cx, cy, radius - 1, 0, 2 * math.pi)
         cr.fill()
+
+        # Dashed stitch ring, matches RotaryKnob
+        cr.save()
+        cr.set_dash([2.0, 3.0])
+        cr.set_line_width(1.5)
+        cr.set_source_rgba(0.9, 0.9, 0.9, 0.35)
+        cr.arc(cx, cy, radius + 4.0, 0, 2 * math.pi)
+        cr.stroke()
+        cr.restore()
 
         # Detent dots at both switch positions
         for ang in self._ANGLES.values():

@@ -10,6 +10,14 @@ from .. import palette
 
 _css_provider: Gtk.CssProvider | None = None
 
+def _hex_to_rgb(hex_val: str) -> str:
+    """Convert a '#rrggbb' (or '#rgb') string into a bare 'r, g, b' triple for rgba() strings."""
+    h = hex_val.lstrip('#')
+    if len(h) == 3:
+        h = ''.join(c * 2 for c in h)
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return f"{r}, {g}, {b}"
+
 def get_adaptive_thread(bg_hex: str, score_hex: str, staff_rgb: str) -> str:
     """
     Calculates thread color by checking background luminance and applying a subtle
@@ -48,6 +56,7 @@ def load_custom_css():
 
     outline = colors.get('SHADOW', '#121214')
     score = colors.get('SCORE', '#121214')
+    score_rgb = _hex_to_rgb(score)
     staff = colors.get('STAFF', '20,20,24')
     shadow = f"rgba({staff}, 0.85)"
     bg_color = colors.get('GRAD_HALL_LO', '#cebfa5')
@@ -167,6 +176,26 @@ def load_custom_css():
         color: {colors.get('PIANO', '#2c2c30')};
         text-shadow: 0 2px 0 {lite_c};
         transform: rotate(-6deg);
+    }}
+
+    .corner-tag {{
+        font-family: "Courier New", monospace;
+        font-weight: 900;
+        font-size: 0.65em;
+        padding: 2px 7px;
+        border-radius: 8px;
+        box-shadow: 0 2px 0 rgba({staff}, 0.4);
+        margin: 5px;
+    }}
+    .corner-tag-left {{
+        background-color: {colors.get('ROOT', '#f4b84b')};
+        color: {outline};
+        transform: rotate(-4deg);
+    }}
+    .corner-tag-right {{
+        background-color: {colors.get('BAR', '#6a6a6a')};
+        color: {score};
+        transform: rotate(4deg);
     }}
 
     .list-plate {{
@@ -296,6 +325,18 @@ def load_custom_css():
         text-shadow: 0 1px 0 {lite_c};
     }}
 
+    .thread-label {{
+        font-family: "Fredoka", sans-serif;
+        font-size: 0.85em;
+        font-style: italic;
+        color: rgba({score_rgb}, 0.28);
+        text-shadow: 0 1px 0 {lite_c};
+    }}
+    .thread-label.lit {{
+        color: {colors.get('ROOT', '#f4b84b')};
+        font-weight: 700;
+    }}
+
     .tech-badge, .tag-chip {{
         font-family: "Courier New", monospace;
         font-weight: 900;
@@ -319,6 +360,27 @@ def load_custom_css():
         color: {colors.get('HALL', '#fdf8ee')};
         text-shadow: 0 1px 0 rgba({staff}, 0.60);
         outline: 1px dashed {thread_light};
+    }}
+
+    .knob-tag {{
+        font-family: "Courier New", monospace;
+        font-weight: 900;
+        font-size: 0.62em;
+        color: {colors.get('BAR', '#6b6b70')};
+        letter-spacing: 0.05em;
+        text-shadow: 0 1px 0 {lite_c};
+    }}
+
+    .brand-tag {{
+        font-family: "Courier New", monospace;
+        font-size: 0.6em;
+        letter-spacing: 0.08em;
+        color: rgba({score_rgb}, 0.45);
+        background-color: {colors.get('HALL', '#2c2c30')};
+        border: 1px dashed {thread};
+        border-radius: 4px;
+        padding: 2px 6px;
+        margin: 6px;
     }}
 
     popover.context-menu > contents {{
