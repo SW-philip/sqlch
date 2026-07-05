@@ -355,6 +355,10 @@ class NowPlayingPanel(Gtk.Box):
             self._sync_back_plate()
 
         genre = metadata.get_icy_genre()
+        if not genre and self._cur_artist and self._cur_title:
+            meta = metadata.get_enriched_meta(self._cur_artist, self._cur_title)
+            if meta and meta.get("genres"):
+                genre = meta["genres"][0]
         self._set_genre(genre)
 
     def _async_fetch_cover(self, artist: str, title: str):
