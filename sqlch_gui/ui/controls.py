@@ -1,10 +1,29 @@
 """Custom GTK 4 tactile controls: pop-it bubble, zipper slider, boost toggle."""
 
+import colorsys
 import math
 import cairo
 import gi
 gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, Gdk, GObject, GLib
+from .. import palette
+
+
+def _hex_to_rgb_floats(hex_val: str) -> tuple[float, float, float]:
+    h = hex_val.lstrip('#')
+    if len(h) == 3:
+        h = ''.join(c * 2 for c in h)
+    r, g, b = (int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+    return r, g, b
+
+
+def _shade(rgb: tuple[float, float, float], factor: float) -> tuple[float, float, float]:
+    """Lighten (factor > 1) or darken (factor < 1) an RGB triple by scaling HSV value."""
+    r, g, b = rgb
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    v = max(0.0, min(1.0, v * factor))
+    return colorsys.hsv_to_rgb(h, s, v)
+
 
 class ZipperSlider(Gtk.DrawingArea):
     """Full-width volume fader drawn as a zipper: mesh-shut tape behind
@@ -68,8 +87,16 @@ class ZipperSlider(Gtk.DrawingArea):
     def _on_draw(self, area, cr, width, height, user_data=None):
         pull_x = self._pull_x(width)
 
+        # Denim tones derive from the theme's BAR swatch, re-read every
+        # draw so a drmis theme switch shows up without restarting the
+        # app. The gold pull tab below stays fixed regardless of theme.
+        bar_rgb = _hex_to_rgb_floats(palette.load().get('BAR', '#6e6a86'))
+        tape_rgb = _shade(bar_rgb, 0.62)
+        tick_dark = _shade(bar_rgb, 0.95)
+        tick_light = _shade(bar_rgb, 1.35)
+
         # Closed (zipped) tape from the left edge to the pull
-        cr.set_source_rgba(0.42, 0.48, 0.36, 1.0)
+        cr.set_source_rgba(*tape_rgb, 1.0)
         cr.rectangle(4.0, height * 0.28, max(0.0, pull_x - 4.0), height * 0.44)
         cr.fill()
 
@@ -79,9 +106,9 @@ class ZipperSlider(Gtk.DrawingArea):
         toggle = False
         while x < pull_x - tooth_w:
             if toggle:
-                cr.set_source_rgba(0.79, 0.76, 0.66, 1.0)
+                cr.set_source_rgba(*tick_light, 1.0)
             else:
-                cr.set_source_rgba(0.66, 0.62, 0.50, 1.0)
+                cr.set_source_rgba(*tick_dark, 1.0)
             cr.rectangle(x, height / 2.0 - 3.0, tooth_w, 6.0)
             cr.fill()
             x += tooth_w
@@ -95,7 +122,7 @@ class ZipperSlider(Gtk.DrawingArea):
         cr.save()
         cr.set_dash([3.0, 3.0])
         cr.set_line_width(1.5)
-        cr.set_source_rgba(0.66, 0.62, 0.50, 0.8)
+        cr.set_source_rgba(*tick_dark, 0.8)
         gap_x = pull_x + 14.0
         while gap_x < width - 6.0:
             cr.move_to(gap_x, height / 2.0 - splay)

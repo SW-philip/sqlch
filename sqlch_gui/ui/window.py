@@ -117,6 +117,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         self._pal_reload_pending = False
         load_custom_css()
         self.station_list.refresh()  # group headers bake palette hex into markup
+        self.now_playing.vol_slider.queue_draw()  # zipper tape re-reads palette on next draw
         return False
 
     def on_close_request(self, win):
