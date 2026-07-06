@@ -1,6 +1,7 @@
 """Custom GTK 4 Rotary Knob Component."""
 
 import math
+import cairo
 import gi
 gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, Gdk, GObject
@@ -117,22 +118,23 @@ class RotaryKnob(Gtk.DrawingArea):
         self.emit('value-changed', new_val)
 
 
-class RecordKnob(Gtk.DrawingArea):
-    """Two-detent record switch drawn in the RotaryKnob idiom.
+class RecordBubble(Gtk.DrawingArea):
+    """Two-mode record button drawn as a pop-it silicone bubble.
 
-    Right-click spins the pointer between the FULL and TRACK detents;
+    Right-click cycles the FULL/TRACK mode (emits 'mode-changed' so the
+    mode can be displayed outside this widget, e.g. a corner badge);
     left-click emits 'record-toggled' with the selected mode. Recording
     state is pushed in from the daemon poll via set_state() — the widget
-    never assumes its click succeeded.
+    never assumes its click succeeded. There is no drag gesture: this
+    control is pressed, never turned.
     """
 
     __gsignals__ = {
         'record-toggled': (GObject.SignalFlags.RUN_LAST, None, (str,)),
+        'mode-changed': (GObject.SignalFlags.RUN_LAST, None, (str,)),
     }
 
     MODES = ("full", "track")
-    # Lower arc detents (y grows downward): FULL lower-left, TRACK lower-right
-    _ANGLES = {"full": 0.75 * math.pi, "track": 0.25 * math.pi}
 
     def __init__(self):
         super().__init__()
@@ -180,63 +182,60 @@ class RecordKnob(Gtk.DrawingArea):
         self.mode = self.MODES[(i + 1) % len(self.MODES)]
         self._update_tooltip()
         self.queue_draw()
+        self.emit('mode-changed', self.mode)
 
     def _on_draw(self, area, cr, width, height, user_data=None):
         cx = width / 2.0
         cy = height / 2.0
         radius = min(width, height) / 2.0 - 5.0
-        rec_red = (0.86, 0.20, 0.18)
 
-        # Hot ring while recording sits outside the bezel
         if self.recording:
-            cr.set_line_width(2.5)
-            cr.set_source_rgba(*rec_red, 0.9)
-            cr.arc(cx, cy, radius + 2.0, 0, 2 * math.pi)
-            cr.stroke()
+            # Soft glow behind the pressed bubble
+            cr.set_source_rgba(0.86, 0.20, 0.18, 0.25)
+            cr.arc(cx, cy, radius + 5.0, 0, 2 * math.pi)
+            cr.fill()
 
-        # Outer metal bezel + faceplate (matches RotaryKnob)
-        cr.set_line_width(3.0)
-        cr.set_source_rgba(0.12, 0.12, 0.14, 1.0)
-        cr.arc(cx, cy, radius, 0, 2 * math.pi)
-        cr.stroke()
-        cr.set_source_rgba(0.20, 0.20, 0.22, 1.0)
-        cr.arc(cx, cy, radius - 1, 0, 2 * math.pi)
-        cr.fill()
-
-        # Dashed stitch ring, matches RotaryKnob
+        # Dashed stitch ring, matches RotaryKnob; turns red while recording
         cr.save()
         cr.set_dash([2.0, 3.0])
         cr.set_line_width(1.5)
-        cr.set_source_rgba(0.9, 0.9, 0.9, 0.35)
+        if self.recording:
+            cr.set_source_rgba(0.86, 0.20, 0.18, 0.6)
+        else:
+            cr.set_source_rgba(0.9, 0.9, 0.9, 0.35)
         cr.arc(cx, cy, radius + 4.0, 0, 2 * math.pi)
         cr.stroke()
         cr.restore()
 
-        # Detent dots at both switch positions
-        for ang in self._ANGLES.values():
-            dx = cx + (radius - 4) * math.cos(ang)
-            dy = cy + (radius - 4) * math.sin(ang)
-            cr.set_source_rgba(0.1, 0.1, 0.1, 0.6)
-            cr.arc(dx, dy, 2.0, 0, 2 * math.pi)
-            cr.fill()
-
-        # Pointer snapped to the selected detent
-        angle = self._ANGLES[self.mode]
+        # Silicone bubble face: convex bump when idle, pressed-in dimple
+        # when recording. Same gradient trick fakes both: a highlight near
+        # the upper-left reads as "light hitting a bump sticking up"; a
+        # highlight shifted toward the center/lower-right of a darker,
+        # more saturated fill reads as "light entering a pressed dimple."
         if self.recording:
-            cr.set_source_rgba(*rec_red, 1.0)
+            gradient = cairo.RadialGradient(
+                cx - radius * 0.15, cy - radius * 0.1, radius * 0.05,
+                cx, cy, radius,
+            )
+            gradient.add_color_stop_rgba(0.0, 0.53, 0.14, 0.13, 1.0)
+            gradient.add_color_stop_rgba(0.55, 0.86, 0.20, 0.18, 1.0)
+            gradient.add_color_stop_rgba(1.0, 0.66, 0.27, 0.24, 1.0)
         else:
-            cr.set_source_rgba(0.85, 0.61, 0.25, 1.0)  # RotaryKnob accent
-        cr.set_line_width(4.0)
-        mx = cx + (radius - 9) * math.cos(angle)
-        my = cy + (radius - 9) * math.sin(angle)
-        cr.move_to(cx, cy)
-        cr.line_to(mx, my)
-        cr.stroke()
-
-        # Center cap doubles as the recording lamp
-        if self.recording:
-            cr.set_source_rgba(*rec_red, 1.0)
-        else:
-            cr.set_source_rgba(0.12, 0.12, 0.14, 1.0)
-        cr.arc(cx, cy, radius * 0.28, 0, 2 * math.pi)
+            gradient = cairo.RadialGradient(
+                cx - radius * 0.35, cy - radius * 0.35, radius * 0.1,
+                cx, cy, radius,
+            )
+            gradient.add_color_stop_rgba(0.0, 0.23, 0.23, 0.24, 1.0)
+            gradient.add_color_stop_rgba(0.55, 0.16, 0.16, 0.18, 1.0)
+            gradient.add_color_stop_rgba(1.0, 0.12, 0.12, 0.13, 1.0)
+        cr.set_source(gradient)
+        cr.arc(cx, cy, radius, 0, 2 * math.pi)
         cr.fill()
+
+        # Drop shadow under the bump (idle only — a pressed dimple casts
+        # no shadow of its own).
+        if not self.recording:
+            cr.set_source_rgba(0.0, 0.0, 0.0, 0.25)
+            cr.arc(cx, cy + 1.5, radius, 0, 2 * math.pi)
+            cr.set_line_width(1.0)
+            cr.stroke_preserve()
