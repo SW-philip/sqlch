@@ -6,7 +6,7 @@ from pathlib import Path
 from gi.repository import Gtk, GLib, GdkPixbuf
 
 from .. import daemon, metadata
-from .knob import RotaryKnob, RecordBubble
+from .controls import ZipperSlider, RecordBubble
 from .eq_strip import EqStrip
 
 _REC_MODE_LABELS = {"full": "FULL", "track": "TRK"}
@@ -133,18 +133,10 @@ class NowPlayingPanel(Gtk.Box):
         btn_stop.connect("clicked", self.on_stop)
         btn_stop.set_valign(Gtk.Align.CENTER)
 
-        self.vol_adj = Gtk.Adjustment(value=0.0, lower=0.0, upper=1.3, step_increment=0.05)
+        self.vol_adj = Gtk.Adjustment(value=0.0, lower=0.0, upper=1.0, step_increment=0.05)
 
-        self.vol_knob = RotaryKnob(self.vol_adj)
-        self._vol_handler = self.vol_knob.connect("value-changed", self.on_vol_changed)
-
-        vol_wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        vol_wrap.set_valign(Gtk.Align.CENTER)
-        vol_wrap.set_halign(Gtk.Align.CENTER)
-        vol_wrap.append(self.vol_knob)
-        lbl_vol_tag = Gtk.Label(label="VOL")
-        lbl_vol_tag.add_css_class("knob-tag")
-        vol_wrap.append(lbl_vol_tag)
+        self.vol_slider = ZipperSlider(self.vol_adj)
+        self._vol_handler = self.vol_slider.connect("value-changed", self.on_vol_changed)
 
         self.btn_mute = Gtk.Button(icon_name="audio-volume-high-symbolic")
         self.btn_mute.add_css_class("control-btn")
@@ -175,9 +167,18 @@ class NowPlayingPanel(Gtk.Box):
 
         hub_row.append(rec_wrap)
         hub_row.append(btn_stop)
-        hub_row.append(vol_wrap)
         hub_row.append(self.btn_mute)
         deck.append(hub_row)
+
+        # Full-width zipper volume row, sewn in below the hub
+        vol_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        vol_row.append(self.vol_slider)
+        deck.append(vol_row)
+
+        lbl_vol_tag = Gtk.Label(label="VOL")
+        lbl_vol_tag.add_css_class("knob-tag")
+        lbl_vol_tag.set_halign(Gtk.Align.START)
+        deck.append(lbl_vol_tag)
 
         # Primary transport at 6 o'clock
         self.btn_toggle = Gtk.Button()
@@ -410,9 +411,9 @@ class NowPlayingPanel(Gtk.Box):
         self.eq_strip.set_active(playing)
 
         # Block signals temporarily to prevent loopback configuration cascades
-        self.vol_knob.handler_block(self._vol_handler)
+        self.vol_slider.handler_block(self._vol_handler)
         self.vol_adj.set_value(vol)
-        self.vol_knob.handler_unblock(self._vol_handler)
+        self.vol_slider.handler_unblock(self._vol_handler)
 
         # Update the text readout percentage
         self.lbl_vol_percent.set_text(f"{int(vol * 100)}%")
@@ -481,7 +482,7 @@ class NowPlayingPanel(Gtk.Box):
         subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"],
                        stdout=subprocess.DEVNULL)
 
-    def on_vol_changed(self, knob, val):
+    def on_vol_changed(self, slider, val):
         # Dynamically push numeric modifications into stdout subsystem
         self.lbl_vol_percent.set_text(f"{int(val * 100)}%")
         import subprocess

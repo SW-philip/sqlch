@@ -1,4 +1,4 @@
-"""Custom GTK 4 Rotary Knob Component."""
+"""Custom GTK 4 tactile controls: pop-it bubble and zipper slider."""
 
 import math
 import cairo
@@ -6,27 +6,34 @@ import gi
 gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, Gdk, GObject
 
-class RotaryKnob(Gtk.DrawingArea):
-    """A tactile rotary dial widget backing onto a Gtk.Adjustment."""
+class ZipperSlider(Gtk.DrawingArea):
+    """Full-width volume fader drawn as a zipper: mesh-shut tape behind
+    the pull, teeth splayed open ahead of it. Backs onto a Gtk.Adjustment,
+    same as the rotary knob it replaces, but reads position along x
+    instead of angle. Click anywhere on the track to jump there; drag the
+    pull; scroll to nudge.
+    """
 
     __gsignals__ = {
         'value-changed': (GObject.SignalFlags.RUN_LAST, None, (float,)),
     }
 
-    def __init__(self, adjustment: Gtk.Adjustment, label: str = ""):
+    def __init__(self, adjustment: Gtk.Adjustment):
         super().__init__()
         self.adj = adjustment
-        self.label = label
         self.set_focusable(True)
-        self.set_size_request(65, 65)
+        self.set_hexpand(True)
+        self.set_size_request(-1, 34)
 
-        # Connect internal update triggers
         self.adj.connect("value-changed", lambda _: self.queue_draw())
         self.set_draw_func(self._on_draw)
 
-        # Interaction gesture tracking
-        self.drag_start_y = 0.0
         self.drag_start_val = 0.0
+
+        click_gest = Gtk.GestureClick.new()
+        click_gest.set_button(1)
+        click_gest.connect("released", self._on_click)
+        self.add_controller(click_gest)
 
         drag_gest = Gtk.GestureDrag.new()
         drag_gest.connect("drag-begin", self._on_drag_begin)
@@ -37,83 +44,94 @@ class RotaryKnob(Gtk.DrawingArea):
         scroll_gest.connect("scroll", self._on_scroll)
         self.add_controller(scroll_gest)
 
+    def _norm(self) -> float:
+        return (self.adj.get_value() - self.adj.get_lower()) / (self.adj.get_upper() - self.adj.get_lower())
+
+    def _set_from_norm(self, norm: float):
+        norm = max(0.0, min(1.0, norm))
+        new_val = self.adj.get_lower() + norm * (self.adj.get_upper() - self.adj.get_lower())
+        self.adj.set_value(new_val)
+        self.emit('value-changed', new_val)
+
     def _on_draw(self, area, cr, width, height, user_data=None):
-        cx = width / 2.0
-        cy = height / 2.0
-        radius = min(width, height) / 2.0 - 6.0
+        pull_x = 10.0 + self._norm() * (width - 20.0)
 
-        # Physical angle limits (270-degree throw layout)
-        min_angle = 0.75 * math.pi
-        max_angle = 2.25 * math.pi
-
-        # Map current scale position
-        norm = (self.adj.get_value() - self.adj.get_lower()) / (self.adj.get_upper() - self.adj.get_lower())
-        current_angle = min_angle + norm * (max_angle - min_angle)
-
-        # Draw outer metal bezel
-        cr.set_line_width(3.0)
-        cr.set_source_rgba(0.12, 0.12, 0.14, 1.0) # Using solid baseline tone
-        cr.arc(cx, cy, radius, 0, 2 * math.pi)
-        cr.stroke()
-
-        # Faceplate
-        cr.set_source_rgba(0.20, 0.20, 0.22, 1.0)
-        cr.arc(cx, cy, radius - 1, 0, 2 * math.pi)
+        # Closed (zipped) tape from the left edge to the pull
+        cr.set_source_rgba(0.42, 0.48, 0.36, 1.0)
+        cr.rectangle(4.0, height * 0.28, max(0.0, pull_x - 4.0), height * 0.44)
         cr.fill()
 
-        # Dashed stitch ring, echoes the fabric hem convention used elsewhere in the UI
+        # Mesh teeth on the closed side: alternating light/dark ticks
+        tooth_w = 5.0
+        x = 6.0
+        toggle = False
+        while x < pull_x - tooth_w:
+            if toggle:
+                cr.set_source_rgba(0.79, 0.76, 0.66, 1.0)
+            else:
+                cr.set_source_rgba(0.66, 0.62, 0.50, 1.0)
+            cr.rectangle(x, height / 2.0 - 3.0, tooth_w, 6.0)
+            cr.fill()
+            x += tooth_w
+            toggle = not toggle
+
+        # Open (unzipped) side past the pull: teeth splayed apart as short
+        # dashed strokes angling away from the centerline
         cr.save()
-        cr.set_dash([2.0, 3.0])
+        cr.set_dash([3.0, 3.0])
         cr.set_line_width(1.5)
-        cr.set_source_rgba(0.9, 0.9, 0.9, 0.35)
-        cr.arc(cx, cy, radius + 4.0, 0, 2 * math.pi)
+        cr.set_source_rgba(0.66, 0.62, 0.50, 0.8)
+        gap_x = pull_x + 14.0
+        while gap_x < width - 6.0:
+            cr.move_to(gap_x, height / 2.0 - 6.0)
+            cr.line_to(gap_x + 4.0, height / 2.0)
+            cr.move_to(gap_x, height / 2.0 + 6.0)
+            cr.line_to(gap_x + 4.0, height / 2.0)
+            gap_x += 9.0
         cr.stroke()
         cr.restore()
 
-        # Unused tracking arc track
-        cr.set_line_width(4.0)
-        cr.set_source_rgba(0.1, 0.1, 0.1, 0.4)
-        cr.arc(cx, cy, radius - 6, min_angle, max_angle)
-        cr.stroke()
-
-        # High-visibility marker line indicating current turn position
-        cr.set_line_width(4.0)
-        cr.set_source_rgba(0.85, 0.61, 0.25, 1.0) # Accent point
-        mx = cx + (radius - 12) * math.cos(current_angle)
-        my = cy + (radius - 12) * math.sin(current_angle)
-        cr.move_to(cx, cy)
-        cr.line_to(mx, my)
-        cr.stroke()
-
-        # Center cap core
-        cr.set_source_rgba(0.12, 0.12, 0.14, 1.0)
-        cr.arc(cx, cy, radius * 0.25, 0, 2 * math.pi)
+        # Zipper pull: rounded body + angled tab, tilted like a real pull
+        cr.save()
+        cr.translate(pull_x, height / 2.0)
+        cr.rotate(-0.12)
+        cr.set_source_rgba(0.85, 0.70, 0.35, 1.0)
+        cr.rectangle(-9.0, -9.0, 14.0, 12.0)
         cr.fill()
+        cr.rectangle(-2.0, -2.0, 11.0, 5.0)
+        cr.fill()
+        cr.set_source_rgba(0.35, 0.25, 0.08, 0.6)
+        cr.set_line_width(1.2)
+        cr.rectangle(-9.0, -9.0, 14.0, 12.0)
+        cr.stroke()
+        cr.restore()
+
+    def _on_click(self, gesture, n_press, x, y):
+        width = self.get_width()
+        if width <= 20:
+            return
+        self._set_from_norm((x - 10.0) / (width - 20.0))
 
     def _on_drag_begin(self, gesture, start_x, start_y):
-        self.drag_start_y = start_y
         self.drag_start_val = self.adj.get_value()
         self.grab_focus()
 
     def _on_drag_update(self, gesture, offset_x, offset_y):
-        # Vertical drag delta modifies settings relative to overall range
+        width = self.get_width()
+        if width <= 20:
+            return
         total_range = self.adj.get_upper() - self.adj.get_lower()
-        delta_y = -offset_y  # Drag up to increase value
-        sensitivity = 0.005  # Drag scale rate
-
-        new_val = self.drag_start_val + (delta_y * sensitivity * total_range)
+        delta_norm = offset_x / (width - 20.0)
+        new_val = self.drag_start_val + delta_norm * total_range
         new_val = max(self.adj.get_lower(), min(self.adj.get_upper(), new_val))
-
         self.adj.set_value(new_val)
         self.emit('value-changed', new_val)
 
     def _on_scroll(self, controller, dx, dy):
         total_range = self.adj.get_upper() - self.adj.get_lower()
         step = (total_range * 0.05) if dy > 0 else -(total_range * 0.05)
-
         new_val = self.adj.get_value() - step
         new_val = max(self.adj.get_lower(), min(self.adj.get_upper(), new_val))
-
         self.adj.set_value(new_val)
         self.emit('value-changed', new_val)
 
