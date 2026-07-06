@@ -21,10 +21,19 @@ polling-driven `set_state()`. This is a visual-only fix.
 ## Component: `RecordBubble` (renamed from `RecordKnob`)
 
 `sqlch_gui/ui/knob.py` — the class name changes because the shape no
-longer says "dial." Everything else on the class is untouched:
-`record-toggled` signal, `MODES = ("full", "track")`, `set_state()`,
-tooltip text, the left/right `GestureClick` handlers (still no drag
-gesture — it was never draggable and still isn't).
+longer says "dial." `record-toggled` signal, `MODES = ("full", "track")`,
+`set_state()`, tooltip text, and the left/right `GestureClick` handlers
+are untouched (still no drag gesture — it was never draggable and still
+isn't).
+
+One addition: today, right-click updates `self.mode` and redraws the
+pointer instantly (optimistic UI, ahead of the next daemon poll). With
+mode displayed by an external corner badge instead of pointer angle, that
+same instant feedback needs a way out of the widget, so `_on_right_click`
+also emits a new `mode-changed(str)` signal after updating `self.mode`.
+`NowPlayingPanel` connects to it to update the badge label immediately,
+independent of the ~1s poll cycle — preserving the existing responsiveness
+rather than regressing it.
 
 `_on_draw` is rewritten:
 
@@ -55,8 +64,10 @@ a `Gtk.Overlay` in `sqlch_gui/ui/now_playing.py`:
   canvas-as-main-child / label-as-overlay pattern already used for the
   `sqlch` brand tag on the deck card.
 - Styling reuses the existing `.small-badge` CSS class in `common.py`
-  (monospace, pill, muted background) — no new CSS. The label's text
-  updates alongside `set_state()`'s existing mode-change handling.
+  (monospace, pill, muted background) — no new CSS. The label's text is
+  set from two call sites: whenever the daemon poll drives
+  `set_state(active, mode)` (`now_playing.py:254,443`), and immediately
+  on the new `mode-changed` signal from right-click.
 - `rec_wrap`'s "REC" label underneath the bubble is unchanged — the badge
   is additive, not a replacement for that existing tag.
 
