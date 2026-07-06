@@ -6,7 +6,7 @@ from pathlib import Path
 from gi.repository import Gtk, GLib, GdkPixbuf
 
 from .. import daemon, metadata
-from .controls import ZipperSlider, RecordBubble
+from .controls import ZipperSlider, RecordBubble, PepperToggle
 from .eq_strip import EqStrip
 
 _REC_MODE_LABELS = {"full": "FULL", "track": "TRK"}
@@ -138,6 +138,10 @@ class NowPlayingPanel(Gtk.Box):
         self.vol_slider = ZipperSlider(self.vol_adj)
         self._vol_handler = self.vol_slider.connect("value-changed", self.on_vol_changed)
 
+        self._pre_boost_vol: float | None = None
+        self.pepper = PepperToggle()
+        self.pepper.connect("boost-toggled", self.on_boost_toggled)
+
         self.btn_mute = Gtk.Button(icon_name="audio-volume-high-symbolic")
         self.btn_mute.add_css_class("control-btn")
         self.btn_mute.set_valign(Gtk.Align.CENTER)
@@ -173,6 +177,7 @@ class NowPlayingPanel(Gtk.Box):
         # Full-width zipper volume row, sewn in below the hub
         vol_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         vol_row.append(self.vol_slider)
+        vol_row.append(self.pepper)
         deck.append(vol_row)
 
         lbl_vol_tag = Gtk.Label(label="VOL")
@@ -483,7 +488,22 @@ class NowPlayingPanel(Gtk.Box):
                        stdout=subprocess.DEVNULL)
 
     def on_vol_changed(self, slider, val):
+        if self.pepper.active:
+            # Touching the fader always means manual control wins.
+            self.pepper.set_active(False)
+            self._pre_boost_vol = None
+
         # Dynamically push numeric modifications into stdout subsystem
         self.lbl_vol_percent.set_text(f"{int(val * 100)}%")
         import subprocess
         subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val:.2f}"], stdout=subprocess.DEVNULL)
+
+    def on_boost_toggled(self, pepper, active):
+        import subprocess
+        if active:
+            self._pre_boost_vol = self.vol_adj.get_value()
+            subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "1.20"], stdout=subprocess.DEVNULL)
+        else:
+            restore = self._pre_boost_vol if self._pre_boost_vol is not None else 0.0
+            subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{restore:.2f}"], stdout=subprocess.DEVNULL)
+            self._pre_boost_vol = None

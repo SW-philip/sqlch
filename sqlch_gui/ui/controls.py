@@ -1,4 +1,4 @@
-"""Custom GTK 4 tactile controls: pop-it bubble and zipper slider."""
+"""Custom GTK 4 tactile controls: pop-it bubble, zipper slider, boost toggle."""
 
 import math
 import cairo
@@ -297,3 +297,84 @@ class RecordBubble(Gtk.DrawingArea):
             cr.arc(cx, cy + 1.5, radius, 0, 2 * math.pi)
             cr.set_line_width(1.0)
             cr.stroke_preserve()
+
+
+class PepperToggle(Gtk.DrawingArea):
+    """Hot-pepper sticker glued past the zipper's end. Toggles a hard
+    120% volume boost — NowPlayingPanel owns what "boosted" actually
+    does to system volume; this widget only tracks its own on/off look
+    and is a plain optimistic toggle (no daemon-truth reflection, unlike
+    RecordBubble): press again to flip back.
+    """
+
+    __gsignals__ = {
+        'boost-toggled': (GObject.SignalFlags.RUN_LAST, None, (bool,)),
+    }
+
+    def __init__(self):
+        super().__init__()
+        self.active = False
+        self.set_size_request(34, 34)
+        self.set_focusable(True)
+        self.set_draw_func(self._on_draw)
+        self._update_tooltip()
+
+        click = Gtk.GestureClick.new()
+        click.set_button(1)
+        click.connect("released", self._on_click)
+        self.add_controller(click)
+
+    def set_active(self, active: bool):
+        """External, signal-free push (mirrors RecordBubble.set_state())."""
+        if active == self.active:
+            return
+        self.active = active
+        self._update_tooltip()
+        self.queue_draw()
+
+    def _update_tooltip(self):
+        self.set_tooltip_text("Tap to restore volume" if self.active else "Tap for 120% boost")
+
+    def _on_click(self, gesture, n_press, x, y):
+        self.active = not self.active
+        self._update_tooltip()
+        self.queue_draw()
+        self.emit('boost-toggled', self.active)
+
+    def _on_draw(self, area, cr, width, height, user_data=None):
+        cx = width / 2.0
+        cy = height / 2.0
+        radius = min(width, height) / 2.0 - 3.0
+
+        cr.save()
+        cr.translate(cx, cy)
+        cr.rotate(0.14 if self.active else -0.14)
+
+        if self.active:
+            gradient = cairo.RadialGradient(-radius * 0.15, -radius * 0.1, radius * 0.05, 0, 0, radius)
+            gradient.add_color_stop_rgba(0.0, 0.55, 0.10, 0.08, 1.0)
+            gradient.add_color_stop_rgba(0.55, 0.82, 0.22, 0.14, 1.0)
+            gradient.add_color_stop_rgba(1.0, 0.60, 0.18, 0.12, 1.0)
+        else:
+            gradient = cairo.RadialGradient(-radius * 0.35, -radius * 0.35, radius * 0.1, 0, 0, radius)
+            gradient.add_color_stop_rgba(0.0, 0.55, 0.68, 0.32, 1.0)
+            gradient.add_color_stop_rgba(0.55, 0.36, 0.50, 0.22, 1.0)
+            gradient.add_color_stop_rgba(1.0, 0.24, 0.36, 0.14, 1.0)
+
+        # Pepper body: teardrop via two mirrored bezier curves
+        cr.set_source(gradient)
+        cr.move_to(0, radius * 0.75)
+        cr.curve_to(radius * 0.9, radius * 0.6, radius * 0.7, -radius * 0.5, 0, -radius * 0.55)
+        cr.curve_to(-radius * 0.7, -radius * 0.5, -radius * 0.9, radius * 0.6, 0, radius * 0.75)
+        cr.fill()
+
+        # Stem
+        cr.set_source_rgba(0.30, 0.42, 0.16, 1.0)
+        cr.move_to(-radius * 0.12, -radius * 0.5)
+        cr.line_to(radius * 0.12, -radius * 0.5)
+        cr.line_to(radius * 0.05, -radius * 0.85)
+        cr.line_to(-radius * 0.05, -radius * 0.85)
+        cr.close_path()
+        cr.fill()
+
+        cr.restore()
