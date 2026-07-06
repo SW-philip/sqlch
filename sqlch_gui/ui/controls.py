@@ -4,7 +4,7 @@ import math
 import cairo
 import gi
 gi.require_version('Gtk', '4.0')
-from gi.repository import Gtk, Gdk, GObject
+from gi.repository import Gtk, Gdk, GObject, GLib
 
 class ZipperSlider(Gtk.DrawingArea):
     """Full-width volume fader drawn as a zipper: mesh-shut tape behind
@@ -18,6 +18,10 @@ class ZipperSlider(Gtk.DrawingArea):
         'value-changed': (GObject.SignalFlags.RUN_LAST, None, (float,)),
     }
 
+    # Single source of truth for the pull's edge margin, so the drawn
+    # position and the click/drag hit-testing can never drift apart.
+    _MARGIN = 10.0
+
     def __init__(self, adjustment: Gtk.Adjustment):
         super().__init__()
         self.adj = adjustment
@@ -29,6 +33,7 @@ class ZipperSlider(Gtk.DrawingArea):
         self.set_draw_func(self._on_draw)
 
         self.drag_start_val = 0.0
+        self._dragging = False
 
         click_gest = Gtk.GestureClick.new()
         click_gest.set_button(1)
@@ -38,6 +43,7 @@ class ZipperSlider(Gtk.DrawingArea):
         drag_gest = Gtk.GestureDrag.new()
         drag_gest.connect("drag-begin", self._on_drag_begin)
         drag_gest.connect("drag-update", self._on_drag_update)
+        drag_gest.connect("drag-end", self._on_drag_end)
         self.add_controller(drag_gest)
 
         scroll_gest = Gtk.EventControllerScroll.new(Gtk.EventControllerScrollFlags.VERTICAL)
@@ -53,8 +59,14 @@ class ZipperSlider(Gtk.DrawingArea):
         self.adj.set_value(new_val)
         self.emit('value-changed', new_val)
 
+    def _usable_width(self, width: float) -> float:
+        return width - 2.0 * self._MARGIN
+
+    def _pull_x(self, width: float) -> float:
+        return self._MARGIN + self._norm() * self._usable_width(width)
+
     def _on_draw(self, area, cr, width, height, user_data=None):
-        pull_x = 10.0 + self._norm() * (width - 20.0)
+        pull_x = self._pull_x(width)
 
         # Closed (zipped) tape from the left edge to the pull
         cr.set_source_rgba(0.42, 0.48, 0.36, 1.0)
@@ -107,25 +119,47 @@ class ZipperSlider(Gtk.DrawingArea):
         cr.restore()
 
     def _on_click(self, gesture, n_press, x, y):
-        width = self.get_width()
-        if width <= 20:
+        if self._dragging:
+            # A drag just released the pull on this same button-up; don't
+            # let this click's 'released' event overwrite it with an
+            # absolute jump. (GTK doesn't guarantee which of GestureClick's
+            # 'released' vs GestureDrag's 'drag-end' fires first for the
+            # same event, so the flag reset below is deferred to idle
+            # rather than done inline in _on_drag_end -- that way this
+            # check sees True regardless of dispatch order.)
             return
-        self._set_from_norm((x - 10.0) / (width - 20.0))
+        width = self.get_width()
+        usable = self._usable_width(width)
+        if usable <= 0:
+            return
+        self._set_from_norm((x - self._MARGIN) / usable)
 
     def _on_drag_begin(self, gesture, start_x, start_y):
+        self._dragging = True
         self.drag_start_val = self.adj.get_value()
         self.grab_focus()
 
     def _on_drag_update(self, gesture, offset_x, offset_y):
         width = self.get_width()
-        if width <= 20:
+        usable = self._usable_width(width)
+        if usable <= 0:
             return
         total_range = self.adj.get_upper() - self.adj.get_lower()
-        delta_norm = offset_x / (width - 20.0)
+        delta_norm = offset_x / usable
         new_val = self.drag_start_val + delta_norm * total_range
         new_val = max(self.adj.get_lower(), min(self.adj.get_upper(), new_val))
         self.adj.set_value(new_val)
         self.emit('value-changed', new_val)
+
+    def _on_drag_end(self, gesture, offset_x, offset_y):
+        # Deferred to idle so any 'released' from the co-installed
+        # GestureClick for this same button-up is still guarded by
+        # _dragging, no matter which controller GTK dispatches first.
+        GLib.idle_add(self._clear_dragging)
+
+    def _clear_dragging(self):
+        self._dragging = False
+        return GLib.SOURCE_REMOVE
 
     def _on_scroll(self, controller, dx, dy):
         total_range = self.adj.get_upper() - self.adj.get_lower()
@@ -213,7 +247,7 @@ class RecordBubble(Gtk.DrawingArea):
             cr.arc(cx, cy, radius + 5.0, 0, 2 * math.pi)
             cr.fill()
 
-        # Dashed stitch ring, matches RotaryKnob; turns red while recording
+        # Dashed stitch ring, echoes the fabric-hem convention used elsewhere in this file; turns red while recording
         cr.save()
         cr.set_dash([2.0, 3.0])
         cr.set_line_width(1.5)

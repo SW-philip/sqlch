@@ -2,7 +2,7 @@
 
 GTK4 CSS has no ::before/::after pseudo-elements or clip-path, so the
 triangular tails (ribbon) and notched flag point (pennant) that the design
-calls for are drawn directly with Cairo, same idiom as knob.py/eq_strip.py.
+calls for are drawn directly with Cairo, same idiom as controls.py/eq_strip.py.
 
 Gtk.Overlay always paints overlay children on top of the main child, and
 only the main child drives the widget's natural size. So the label (which

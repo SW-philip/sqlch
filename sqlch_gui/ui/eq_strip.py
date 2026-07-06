@@ -4,7 +4,7 @@ Revisits the "future work" item tabled in the 2026-07-01 visual refresh
 spec: a real audio-reactive meter needs an mpv audio-filter pipeline
 (astats/showvolume) and was judged too risky then. This is the decorative
 fallback that spec named, drawn in the same Cairo-widget idiom as the
-knobs in knob.py.
+controls in controls.py.
 """
 
 import math
