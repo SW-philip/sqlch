@@ -6,8 +6,10 @@ from pathlib import Path
 from gi.repository import Gtk, GLib, GdkPixbuf
 
 from .. import daemon, metadata
-from .knob import RotaryKnob, RecordKnob
+from .knob import RotaryKnob, RecordBubble
 from .eq_strip import EqStrip
+
+_REC_MODE_LABELS = {"full": "FULL", "track": "TRK"}
 
 class NowPlayingPanel(Gtk.Box):
     def __init__(self, parent_window):
@@ -149,13 +151,24 @@ class NowPlayingPanel(Gtk.Box):
         self.btn_mute.set_valign(Gtk.Align.CENTER)
         self.btn_mute.connect("clicked", self.on_toggle_mute)
 
-        self.rec_knob = RecordKnob()
+        self.rec_knob = RecordBubble()
         self.rec_knob.connect("record-toggled", self.on_record_toggled)
+        self.rec_knob.connect("mode-changed", self.on_rec_mode_changed)
+
+        self.lbl_rec_mode = Gtk.Label(label=_REC_MODE_LABELS[self.rec_knob.mode])
+        self.lbl_rec_mode.add_css_class("small-badge")
+        self.lbl_rec_mode.set_halign(Gtk.Align.END)
+        self.lbl_rec_mode.set_valign(Gtk.Align.END)
+        self.lbl_rec_mode.set_can_target(False)
+
+        rec_bubble_overlay = Gtk.Overlay()
+        rec_bubble_overlay.set_child(self.rec_knob)
+        rec_bubble_overlay.add_overlay(self.lbl_rec_mode)
 
         rec_wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         rec_wrap.set_valign(Gtk.Align.CENTER)
         rec_wrap.set_halign(Gtk.Align.CENTER)
-        rec_wrap.append(self.rec_knob)
+        rec_wrap.append(rec_bubble_overlay)
         lbl_rec_tag = Gtk.Label(label="REC")
         lbl_rec_tag.add_css_class("knob-tag")
         rec_wrap.append(lbl_rec_tag)
@@ -252,6 +265,7 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_format_tag.set_visible(False)
         self.lbl_device.set_visible(False)
         self.rec_knob.set_state(False, None)
+        self.lbl_rec_mode.set_text(_REC_MODE_LABELS[self.rec_knob.mode])
         self.lbl_rec.set_visible(False)
         self.clear_cover()
         self._cur_station_id = None
@@ -441,6 +455,7 @@ class NowPlayingPanel(Gtk.Box):
         rec = recording or {}
         active = bool(rec.get("active"))
         self.rec_knob.set_state(active, rec.get("mode"))
+        self.lbl_rec_mode.set_text(_REC_MODE_LABELS[self.rec_knob.mode])
         if active:
             m, s = divmod(int(rec.get("elapsed", 0)), 60)
             self.lbl_rec.set_text(f"REC {m:02d}:{s:02d}")
@@ -448,6 +463,9 @@ class NowPlayingPanel(Gtk.Box):
 
     def on_record_toggled(self, knob, mode):
         daemon.send({"cmd": "record", "action": "toggle", "mode": mode})
+
+    def on_rec_mode_changed(self, knob, mode):
+        self.lbl_rec_mode.set_text(_REC_MODE_LABELS[mode])
 
     def on_toggle_play(self, btn):
         if self._loaded:
