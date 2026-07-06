@@ -88,16 +88,19 @@ class ZipperSlider(Gtk.DrawingArea):
             toggle = not toggle
 
         # Open (unzipped) side past the pull: teeth splayed apart as short
-        # dashed strokes angling away from the centerline
+        # dashed strokes angling away from the centerline. Splay narrows
+        # slightly as volume rises (quieter reads as more visibly undone),
+        # a subtle 4px swing rather than a dramatic effect.
+        splay = 8.0 - self._norm() * 4.0
         cr.save()
         cr.set_dash([3.0, 3.0])
         cr.set_line_width(1.5)
         cr.set_source_rgba(0.66, 0.62, 0.50, 0.8)
         gap_x = pull_x + 14.0
         while gap_x < width - 6.0:
-            cr.move_to(gap_x, height / 2.0 - 6.0)
+            cr.move_to(gap_x, height / 2.0 - splay)
             cr.line_to(gap_x + 4.0, height / 2.0)
-            cr.move_to(gap_x, height / 2.0 + 6.0)
+            cr.move_to(gap_x, height / 2.0 + splay)
             cr.line_to(gap_x + 4.0, height / 2.0)
             gap_x += 9.0
         cr.stroke()
