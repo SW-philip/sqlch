@@ -361,19 +361,24 @@ class PepperToggle(Gtk.DrawingArea):
             gradient.add_color_stop_rgba(0.55, 0.36, 0.50, 0.22, 1.0)
             gradient.add_color_stop_rgba(1.0, 0.24, 0.36, 0.14, 1.0)
 
-        # Pepper body: teardrop via two mirrored bezier curves
+        # Pepper body: a curved, tapered chili silhouette rather than a
+        # symmetric teardrop -- one side (the "belly") bulges out, the
+        # other (the "spine") stays concave, and it narrows to a hooked
+        # point, so it reads as a bent pepper instead of a round blob.
         cr.set_source(gradient)
-        cr.move_to(0, radius * 0.75)
-        cr.curve_to(radius * 0.9, radius * 0.6, radius * 0.7, -radius * 0.5, 0, -radius * 0.55)
-        cr.curve_to(-radius * 0.7, -radius * 0.5, -radius * 0.9, radius * 0.6, 0, radius * 0.75)
+        cr.move_to(-radius * 0.08, -radius * 0.62)
+        cr.curve_to(radius * 0.55, -radius * 0.68, radius * 0.82, -radius * 0.15, radius * 0.55, radius * 0.40)
+        cr.curve_to(radius * 0.35, radius * 0.72, radius * 0.05, radius * 0.90, -radius * 0.18, radius * 0.80)
+        cr.curve_to(-radius * 0.40, radius * 0.68, -radius * 0.42, radius * 0.10, -radius * 0.30, -radius * 0.30)
+        cr.curve_to(-radius * 0.25, -radius * 0.48, -radius * 0.18, -radius * 0.58, -radius * 0.08, -radius * 0.62)
         cr.fill()
 
-        # Stem
+        # Stem, angled to follow the body's bend
         cr.set_source_rgba(0.30, 0.42, 0.16, 1.0)
-        cr.move_to(-radius * 0.12, -radius * 0.5)
-        cr.line_to(radius * 0.12, -radius * 0.5)
-        cr.line_to(radius * 0.05, -radius * 0.85)
-        cr.line_to(-radius * 0.05, -radius * 0.85)
+        cr.move_to(-radius * 0.20, -radius * 0.58)
+        cr.line_to(radius * 0.02, -radius * 0.62)
+        cr.line_to(-radius * 0.02, -radius * 0.92)
+        cr.line_to(-radius * 0.22, -radius * 0.88)
         cr.close_path()
         cr.fill()
 
