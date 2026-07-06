@@ -135,11 +135,14 @@ class ZipperSlider(Gtk.DrawingArea):
         self._set_from_norm((x - self._MARGIN) / usable)
 
     def _on_drag_begin(self, gesture, start_x, start_y):
-        self._dragging = True
         self.drag_start_val = self.adj.get_value()
         self.grab_focus()
 
     def _on_drag_update(self, gesture, offset_x, offset_y):
+        # drag-update only fires once real pointer motion happens, so a
+        # plain click (press+release with no movement) never sets this --
+        # _on_click's guard stays False and the jump applies normally.
+        self._dragging = True
         width = self.get_width()
         usable = self._usable_width(width)
         if usable <= 0:
