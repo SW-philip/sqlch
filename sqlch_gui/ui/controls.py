@@ -32,28 +32,47 @@ class ThreadSlider(Gtk.DrawingArea):
     open/closed states -- all the visual richness lives in the button.
     Click anywhere on the thread to jump there; drag the button; scroll
     to nudge.
+
+    Past the thread's right edge sits a fixed, always-visible "nub" (an
+    empty buttonhole loop). Dragging the button past the track's edge
+    and onto the nub engages a hard-coded 120% volume boost -- the same
+    button re-colors hot (palette FORTE) and docks there. The
+    adjustment itself is never changed by boosting; only
+    NowPlayingPanel's boost-toggled handler drives the actual wpctl
+    volume change. Boost only engages via drag (a plain click on the
+    empty nub is a no-op); it disengages either by clicking the docked
+    button (pops back to the exact pre-boost value) or by dragging it
+    back onto the thread (lands wherever dropped, manual value wins).
     """
 
     __gsignals__ = {
         'value-changed': (GObject.SignalFlags.RUN_LAST, None, (float,)),
+        'boost-toggled': (GObject.SignalFlags.RUN_LAST, None, (bool,)),
     }
 
-    # Single source of truth for the button's edge margin, so drawing
-    # and hit-testing can never drift apart.
+    # Single source of truth for the button's edge margin and the nub's
+    # geometry, so drawing and hit-testing can never drift apart.
     _MARGIN = 10.0
+    _NUB_GAP = 10.0
+    _NUB_ZONE = 34.0
+    _NUB_RADIUS_X = 9.0
+    _NUB_RADIUS_Y = 13.0
 
     def __init__(self, adjustment: Gtk.Adjustment):
         super().__init__()
         self.adj = adjustment
+        self.boosted = False
         self.set_focusable(True)
         self.set_hexpand(True)
         self.set_size_request(-1, 34)
 
         self.adj.connect("value-changed", lambda _: self.queue_draw())
         self.set_draw_func(self._on_draw)
+        self._update_tooltip()
 
         self.drag_start_val = 0.0
         self._dragging = False
+        self._drag_from_nub = False
 
         click_gest = Gtk.GestureClick.new()
         click_gest.set_button(1)
@@ -70,6 +89,12 @@ class ThreadSlider(Gtk.DrawingArea):
         scroll_gest.connect("scroll", self._on_scroll)
         self.add_controller(scroll_gest)
 
+    def _update_tooltip(self):
+        self.set_tooltip_text(
+            "Tap the button to restore volume" if self.boosted
+            else "Drag the button onto the nub for 120% boost"
+        )
+
     def _norm(self) -> float:
         return (self.adj.get_value() - self.adj.get_lower()) / (self.adj.get_upper() - self.adj.get_lower())
 
@@ -80,42 +105,85 @@ class ThreadSlider(Gtk.DrawingArea):
         self.emit('value-changed', new_val)
 
     def _usable_width(self, width: float) -> float:
-        return width - 2.0 * self._MARGIN
+        return width - 2.0 * self._MARGIN - self._NUB_ZONE
 
     def _button_x(self, width: float) -> float:
         return self._MARGIN + self._norm() * self._usable_width(width)
 
+    def _track_right(self, width: float) -> float:
+        return self._MARGIN + self._usable_width(width)
+
+    def _nub_x(self, width: float) -> float:
+        return self._track_right(width) + self._NUB_GAP + self._NUB_RADIUS_X
+
     def _on_draw(self, area, cr, width, height, user_data=None):
         cy = height / 2.0
-        button_x = self._button_x(width)
+        thread_x = self._button_x(width)
+        nub_x = self._nub_x(width)
+        track_right = self._track_right(width)
 
-        bar_rgb = _hex_to_rgb_floats(palette.load().get('BAR', '#6e6a86'))
+        colors = palette.load()
+        bar_rgb = _hex_to_rgb_floats(colors.get('BAR', '#6e6a86'))
         thread_rgb = _shade(bar_rgb, 1.15)
         button_rgb = _shade(bar_rgb, 1.05)
         dimple_rgb = _shade(bar_rgb, 0.3)
+        forte_rgb = _hex_to_rgb_floats(colors.get('FORTE', '#eb6f92'))
 
-        # The sewing thread: a plain dashed line the full track width --
-        # no zipped/open states, all the richness lives in the button.
+        # The sewing thread: a plain dashed line across the track only
+        # (never through the nub zone) -- no open/closed states.
         cr.save()
         cr.set_dash([4.0, 4.0])
         cr.set_line_width(2.0)
         cr.set_source_rgba(*thread_rgb, 0.7)
         cr.move_to(self._MARGIN - 2.0, cy)
-        cr.line_to(width - self._MARGIN + 2.0, cy)
+        cr.line_to(track_right, cy)
         cr.stroke()
         cr.restore()
 
+        # The nub: an empty buttonhole loop past the thread's end,
+        # always visible whether or not the button is docked there --
+        # that's the discoverability cue.
+        cr.save()
+        cr.set_source_rgba(*thread_rgb, 0.6)
+        cr.set_line_width(1.6)
+        cr.save()
+        cr.translate(nub_x, cy)
+        cr.scale(self._NUB_RADIUS_X, self._NUB_RADIUS_Y)
+        cr.arc(0, 0, 1.0, 0, 2 * math.pi)
+        cr.restore()
+        cr.stroke()
+        cr.move_to(nub_x - self._NUB_RADIUS_X + 2.0, cy)
+        cr.line_to(nub_x + self._NUB_RADIUS_X - 2.0, cy)
+        cr.stroke()
+        cr.restore()
+
+        if self.boosted:
+            # Ghost marker: a faint ring at the resting spot the button
+            # will return to once un-boosted.
+            cr.save()
+            cr.set_dash([1.5, 1.5])
+            cr.set_line_width(1.2)
+            cr.set_source_rgba(*thread_rgb, 0.5)
+            cr.arc(thread_x, cy, 3.0, 0, 2 * math.pi)
+            cr.stroke()
+            cr.restore()
+            button_x = nub_x
+            base_rgb = forte_rgb
+        else:
+            button_x = thread_x
+            base_rgb = button_rgb
+
         # Tufted button: domed radial gradient, single center dimple,
         # four pull-lines radiating out to the puckered fabric edge --
-        # the chesterfield-upholstery look.
+        # the chesterfield-upholstery look, not a sew-through button.
         radius = 15.0
         gradient = cairo.RadialGradient(
             button_x - radius * 0.3, cy - radius * 0.3, radius * 0.1,
             button_x, cy, radius,
         )
-        gradient.add_color_stop_rgba(0.0, *_shade(button_rgb, 1.5), 1.0)
-        gradient.add_color_stop_rgba(0.5, *button_rgb, 1.0)
-        gradient.add_color_stop_rgba(1.0, *_shade(button_rgb, 0.55), 1.0)
+        gradient.add_color_stop_rgba(0.0, *_shade(base_rgb, 1.5), 1.0)
+        gradient.add_color_stop_rgba(0.5, *base_rgb, 1.0)
+        gradient.add_color_stop_rgba(1.0, *_shade(base_rgb, 0.55), 1.0)
         cr.set_source(gradient)
         cr.arc(button_x, cy, radius, 0, 2 * math.pi)
         cr.fill()
@@ -140,10 +208,28 @@ class ThreadSlider(Gtk.DrawingArea):
         usable = self._usable_width(width)
         if usable <= 0:
             return
+        if self.boosted:
+            if x > self._track_right(width):
+                # Tapping the docked button: quick pop back to pre-boost.
+                self.boosted = False
+                self._update_tooltip()
+                self.emit('boost-toggled', False)
+                self.queue_draw()
+            else:
+                # Tapping the thread while boosted: manual override --
+                # un-boost, then jump straight to the clicked position.
+                self.boosted = False
+                self._update_tooltip()
+                self.emit('boost-toggled', False)
+                self._set_from_norm((x - self._MARGIN) / usable)
+            return
+        if x > self._track_right(width):
+            return  # clicking the empty nub/gap does nothing -- drag only
         self._set_from_norm((x - self._MARGIN) / usable)
 
     def _on_drag_begin(self, gesture, start_x, start_y):
         self.drag_start_val = self.adj.get_value()
+        self._drag_from_nub = self.boosted
         self.grab_focus()
 
     def _on_drag_update(self, gesture, offset_x, offset_y):
@@ -152,14 +238,45 @@ class ThreadSlider(Gtk.DrawingArea):
         usable = self._usable_width(width)
         if usable <= 0:
             return
+
+        if self._drag_from_nub:
+            nub_x = self._nub_x(width)
+            candidate_x = nub_x + offset_x
+            if candidate_x > self._track_right(width):
+                return  # still parked over the nub; nothing changes
+            if self.boosted:
+                self.boosted = False
+                self._update_tooltip()
+                self.emit('boost-toggled', False)
+            norm = max(0.0, min(1.0, (candidate_x - self._MARGIN) / usable))
+            new_val = self.adj.get_lower() + norm * (self.adj.get_upper() - self.adj.get_lower())
+            self.adj.set_value(new_val)
+            self.emit('value-changed', new_val)
+            return
+
         total_range = self.adj.get_upper() - self.adj.get_lower()
         delta_norm = offset_x / usable
-        new_val = self.drag_start_val + delta_norm * total_range
-        new_val = max(self.adj.get_lower(), min(self.adj.get_upper(), new_val))
+        raw_val = self.drag_start_val + delta_norm * total_range
+        if raw_val > self.adj.get_upper():
+            return  # reaching past the track's end -- not a value yet
+        new_val = max(self.adj.get_lower(), raw_val)
         self.adj.set_value(new_val)
         self.emit('value-changed', new_val)
 
     def _on_drag_end(self, gesture, offset_x, offset_y):
+        if not self._drag_from_nub:
+            width = self.get_width()
+            usable = self._usable_width(width)
+            if usable > 0:
+                total_range = self.adj.get_upper() - self.adj.get_lower()
+                delta_norm = offset_x / usable
+                raw_val = self.drag_start_val + delta_norm * total_range
+                overshoot_px = (raw_val - self.adj.get_upper()) * usable
+                if overshoot_px >= self._NUB_GAP + self._NUB_RADIUS_X:
+                    self.boosted = True
+                    self._update_tooltip()
+                    self.emit('boost-toggled', True)
+                    self.queue_draw()
         # Deferred to idle so any 'released' from the co-installed
         # GestureClick for this same button-up is still guarded by
         # _dragging, no matter which controller GTK dispatches first.
@@ -170,6 +287,10 @@ class ThreadSlider(Gtk.DrawingArea):
         return GLib.SOURCE_REMOVE
 
     def _on_scroll(self, controller, dx, dy):
+        if self.boosted:
+            self.boosted = False
+            self._update_tooltip()
+            self.emit('boost-toggled', False)
         total_range = self.adj.get_upper() - self.adj.get_lower()
         step = (total_range * 0.05) if dy > 0 else -(total_range * 0.05)
         new_val = self.adj.get_value() - step
