@@ -1,4 +1,4 @@
-"""Custom GTK 4 tactile controls: pop-it bubble, zipper slider, boost toggle."""
+"""Custom GTK 4 tactile controls: pop-it bubble, thread-and-button volume slider."""
 
 import colorsys
 import math
@@ -25,20 +25,21 @@ def _shade(rgb: tuple[float, float, float], factor: float) -> tuple[float, float
     return colorsys.hsv_to_rgb(h, s, v)
 
 
-class ZipperSlider(Gtk.DrawingArea):
-    """Full-width volume fader drawn as a zipper: mesh-shut tape behind
-    the pull, teeth splayed open ahead of it. Backs onto a Gtk.Adjustment,
-    same as the rotary knob it replaces, but reads position along x
-    instead of angle. Click anywhere on the track to jump there; drag the
-    pull; scroll to nudge.
+class ThreadSlider(Gtk.DrawingArea):
+    """Full-width volume fader drawn as a tufted upholstery button riding
+    a dashed sewing thread. Backs onto a Gtk.Adjustment, same as the
+    zipper slider it replaces, but the track is a plain thread with no
+    open/closed states -- all the visual richness lives in the button.
+    Click anywhere on the thread to jump there; drag the button; scroll
+    to nudge.
     """
 
     __gsignals__ = {
         'value-changed': (GObject.SignalFlags.RUN_LAST, None, (float,)),
     }
 
-    # Single source of truth for the pull's edge margin, so the drawn
-    # position and the click/drag hit-testing can never drift apart.
+    # Single source of truth for the button's edge margin, so drawing
+    # and hit-testing can never drift apart.
     _MARGIN = 10.0
 
     def __init__(self, adjustment: Gtk.Adjustment):
@@ -81,82 +82,59 @@ class ZipperSlider(Gtk.DrawingArea):
     def _usable_width(self, width: float) -> float:
         return width - 2.0 * self._MARGIN
 
-    def _pull_x(self, width: float) -> float:
+    def _button_x(self, width: float) -> float:
         return self._MARGIN + self._norm() * self._usable_width(width)
 
     def _on_draw(self, area, cr, width, height, user_data=None):
-        pull_x = self._pull_x(width)
+        cy = height / 2.0
+        button_x = self._button_x(width)
 
-        # Denim tones derive from the theme's BAR swatch, re-read every
-        # draw so a drmis theme switch shows up without restarting the
-        # app. The gold pull tab below stays fixed regardless of theme.
         bar_rgb = _hex_to_rgb_floats(palette.load().get('BAR', '#6e6a86'))
-        tape_rgb = _shade(bar_rgb, 0.62)
-        tick_dark = _shade(bar_rgb, 0.95)
-        tick_light = _shade(bar_rgb, 1.35)
+        thread_rgb = _shade(bar_rgb, 1.15)
+        button_rgb = _shade(bar_rgb, 1.05)
+        dimple_rgb = _shade(bar_rgb, 0.3)
 
-        # Closed (zipped) tape from the left edge to the pull
-        cr.set_source_rgba(*tape_rgb, 1.0)
-        cr.rectangle(4.0, height * 0.28, max(0.0, pull_x - 4.0), height * 0.44)
-        cr.fill()
-
-        # Mesh teeth on the closed side: alternating light/dark ticks
-        tooth_w = 5.0
-        x = 6.0
-        toggle = False
-        while x < pull_x - tooth_w:
-            if toggle:
-                cr.set_source_rgba(*tick_light, 1.0)
-            else:
-                cr.set_source_rgba(*tick_dark, 1.0)
-            cr.rectangle(x, height / 2.0 - 3.0, tooth_w, 6.0)
-            cr.fill()
-            x += tooth_w
-            toggle = not toggle
-
-        # Open (unzipped) side past the pull: teeth splayed apart as short
-        # dashed strokes angling away from the centerline. Splay narrows
-        # slightly as volume rises (quieter reads as more visibly undone),
-        # a subtle 4px swing rather than a dramatic effect.
-        splay = 8.0 - self._norm() * 4.0
+        # The sewing thread: a plain dashed line the full track width --
+        # no zipped/open states, all the richness lives in the button.
         cr.save()
-        cr.set_dash([3.0, 3.0])
-        cr.set_line_width(1.5)
-        cr.set_source_rgba(*tick_dark, 0.8)
-        gap_x = pull_x + 14.0
-        while gap_x < width - 6.0:
-            cr.move_to(gap_x, height / 2.0 - splay)
-            cr.line_to(gap_x + 4.0, height / 2.0)
-            cr.move_to(gap_x, height / 2.0 + splay)
-            cr.line_to(gap_x + 4.0, height / 2.0)
-            gap_x += 9.0
+        cr.set_dash([4.0, 4.0])
+        cr.set_line_width(2.0)
+        cr.set_source_rgba(*thread_rgb, 0.7)
+        cr.move_to(self._MARGIN - 2.0, cy)
+        cr.line_to(width - self._MARGIN + 2.0, cy)
         cr.stroke()
         cr.restore()
 
-        # Zipper pull: rounded body + angled tab, tilted like a real pull
+        # Tufted button: domed radial gradient, single center dimple,
+        # four pull-lines radiating out to the puckered fabric edge --
+        # the chesterfield-upholstery look.
+        radius = 15.0
+        gradient = cairo.RadialGradient(
+            button_x - radius * 0.3, cy - radius * 0.3, radius * 0.1,
+            button_x, cy, radius,
+        )
+        gradient.add_color_stop_rgba(0.0, *_shade(button_rgb, 1.5), 1.0)
+        gradient.add_color_stop_rgba(0.5, *button_rgb, 1.0)
+        gradient.add_color_stop_rgba(1.0, *_shade(button_rgb, 0.55), 1.0)
+        cr.set_source(gradient)
+        cr.arc(button_x, cy, radius, 0, 2 * math.pi)
+        cr.fill()
+
+        cr.set_source_rgba(*dimple_rgb, 1.0)
+        cr.arc(button_x, cy, 2.6, 0, 2 * math.pi)
+        cr.fill()
+
         cr.save()
-        cr.translate(pull_x, height / 2.0)
-        cr.rotate(-0.12)
-        cr.set_source_rgba(0.85, 0.70, 0.35, 1.0)
-        cr.rectangle(-9.0, -9.0, 14.0, 12.0)
-        cr.fill()
-        cr.rectangle(-2.0, -2.0, 11.0, 5.0)
-        cr.fill()
-        cr.set_source_rgba(0.35, 0.25, 0.08, 0.6)
-        cr.set_line_width(1.2)
-        cr.rectangle(-9.0, -9.0, 14.0, 12.0)
+        cr.set_source_rgba(0.0, 0.0, 0.0, 0.3)
+        cr.set_line_width(1.0)
+        for dx, dy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+            cr.move_to(button_x, cy)
+            cr.line_to(button_x + dx * radius * 0.7, cy + dy * radius * 0.7)
         cr.stroke()
         cr.restore()
 
     def _on_click(self, gesture, n_press, x, y):
         if self._dragging:
-            # A drag just released the pull on this same button-up; don't
-            # let this click's 'released' event overwrite it with an
-            # absolute jump. (GTK doesn't guarantee which of GestureClick's
-            # 'released' vs GestureDrag's 'drag-end' fires first for the
-            # same event, so the flag reset below is deferred to idle
-            # rather than done inline in _on_drag_end -- that way this
-            # check sees True regardless of dispatch order.)
             return
         width = self.get_width()
         usable = self._usable_width(width)
@@ -169,9 +147,6 @@ class ZipperSlider(Gtk.DrawingArea):
         self.grab_focus()
 
     def _on_drag_update(self, gesture, offset_x, offset_y):
-        # drag-update only fires once real pointer motion happens, so a
-        # plain click (press+release with no movement) never sets this --
-        # _on_click's guard stays False and the jump applies normally.
         self._dragging = True
         width = self.get_width()
         usable = self._usable_width(width)
@@ -324,89 +299,3 @@ class RecordBubble(Gtk.DrawingArea):
             cr.arc(cx, cy + 1.5, radius, 0, 2 * math.pi)
             cr.set_line_width(1.0)
             cr.stroke_preserve()
-
-
-class PepperToggle(Gtk.DrawingArea):
-    """Hot-pepper sticker glued past the zipper's end. Toggles a hard
-    120% volume boost — NowPlayingPanel owns what "boosted" actually
-    does to system volume; this widget only tracks its own on/off look
-    and is a plain optimistic toggle (no daemon-truth reflection, unlike
-    RecordBubble): press again to flip back.
-    """
-
-    __gsignals__ = {
-        'boost-toggled': (GObject.SignalFlags.RUN_LAST, None, (bool,)),
-    }
-
-    def __init__(self):
-        super().__init__()
-        self.active = False
-        self.set_size_request(34, 34)
-        self.set_focusable(True)
-        self.set_draw_func(self._on_draw)
-        self._update_tooltip()
-
-        click = Gtk.GestureClick.new()
-        click.set_button(1)
-        click.connect("released", self._on_click)
-        self.add_controller(click)
-
-    def set_active(self, active: bool):
-        """External, signal-free push (mirrors RecordBubble.set_state())."""
-        if active == self.active:
-            return
-        self.active = active
-        self._update_tooltip()
-        self.queue_draw()
-
-    def _update_tooltip(self):
-        self.set_tooltip_text("Tap to restore volume" if self.active else "Tap for 120% boost")
-
-    def _on_click(self, gesture, n_press, x, y):
-        self.active = not self.active
-        self._update_tooltip()
-        self.queue_draw()
-        self.emit('boost-toggled', self.active)
-
-    def _on_draw(self, area, cr, width, height, user_data=None):
-        cx = width / 2.0
-        cy = height / 2.0
-        radius = min(width, height) / 2.0 - 3.0
-
-        cr.save()
-        cr.translate(cx, cy)
-        cr.rotate(0.14 if self.active else -0.14)
-
-        if self.active:
-            gradient = cairo.RadialGradient(-radius * 0.15, -radius * 0.1, radius * 0.05, 0, 0, radius)
-            gradient.add_color_stop_rgba(0.0, 0.55, 0.10, 0.08, 1.0)
-            gradient.add_color_stop_rgba(0.55, 0.82, 0.22, 0.14, 1.0)
-            gradient.add_color_stop_rgba(1.0, 0.60, 0.18, 0.12, 1.0)
-        else:
-            gradient = cairo.RadialGradient(-radius * 0.35, -radius * 0.35, radius * 0.1, 0, 0, radius)
-            gradient.add_color_stop_rgba(0.0, 0.55, 0.68, 0.32, 1.0)
-            gradient.add_color_stop_rgba(0.55, 0.36, 0.50, 0.22, 1.0)
-            gradient.add_color_stop_rgba(1.0, 0.24, 0.36, 0.14, 1.0)
-
-        # Pepper body: a curved, tapered chili silhouette rather than a
-        # symmetric teardrop -- one side (the "belly") bulges out, the
-        # other (the "spine") stays concave, and it narrows to a hooked
-        # point, so it reads as a bent pepper instead of a round blob.
-        cr.set_source(gradient)
-        cr.move_to(-radius * 0.08, -radius * 0.62)
-        cr.curve_to(radius * 0.55, -radius * 0.68, radius * 0.82, -radius * 0.15, radius * 0.55, radius * 0.40)
-        cr.curve_to(radius * 0.35, radius * 0.72, radius * 0.05, radius * 0.90, -radius * 0.18, radius * 0.80)
-        cr.curve_to(-radius * 0.40, radius * 0.68, -radius * 0.42, radius * 0.10, -radius * 0.30, -radius * 0.30)
-        cr.curve_to(-radius * 0.25, -radius * 0.48, -radius * 0.18, -radius * 0.58, -radius * 0.08, -radius * 0.62)
-        cr.fill()
-
-        # Stem, angled to follow the body's bend
-        cr.set_source_rgba(0.30, 0.42, 0.16, 1.0)
-        cr.move_to(-radius * 0.20, -radius * 0.58)
-        cr.line_to(radius * 0.02, -radius * 0.62)
-        cr.line_to(-radius * 0.02, -radius * 0.92)
-        cr.line_to(-radius * 0.22, -radius * 0.88)
-        cr.close_path()
-        cr.fill()
-
-        cr.restore()
