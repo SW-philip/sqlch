@@ -170,7 +170,7 @@ class NowPlayingPanel(Gtk.Box):
         hub_row.append(self.btn_mute)
         deck.append(hub_row)
 
-        # Full-width zipper volume row, sewn in below the hub
+        # Full-width thread-slider volume row, sewn in below the hub
         vol_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         vol_row.append(self.vol_slider)
         deck.append(vol_row)
