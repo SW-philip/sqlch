@@ -16,10 +16,11 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app)
         self.set_title("sqlch-gui")
-        # Width sized so track/album lines usually fit un-ellipsized; the
-        # sidebar is content-sized, so extra width all goes to the stack.
-        self.set_default_size(450, 430)
-        
+        # Now Playing is permanently visible and taller (art grown to flank
+        # height); Library/Discover render as a capped-height dropdown
+        # below it rather than swapping the whole window.
+        self.set_default_size(450, 700)
+
         # Inject theme constants
         load_custom_css()
 
@@ -33,48 +34,36 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         Gtk4LayerShell.set_margin(self, Gtk4LayerShell.Edge.RIGHT, 12)
         Gtk4LayerShell.set_keyboard_mode(self, Gtk4LayerShell.KeyboardMode.ON_DEMAND)
 
-        # Top surface: sidebar and stack are quilted side by side — patches
-        # butt against each other at a seam, nothing overlaps or floats.
-        main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        # Top surface: Now Playing stays permanently visible; Library/
+        # Discover render in a capped-height dropdown stacked below it.
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         main_box.add_css_class("popup-window")
         self.set_child(main_box)
-
-        # Navigation column sidebar patch
-        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        sidebar.add_css_class("sidebar")
-        sidebar.set_valign(Gtk.Align.CENTER)
-        main_box.append(sidebar)
-
-        self.stack = Gtk.Stack()
-        self.stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
-        self.stack.set_transition_duration(200)
-        self.stack.set_hexpand(True)
-        main_box.append(self.stack)
 
         # Instantiating presentation views
         self.now_playing = NowPlayingPanel(self)
         self.station_list = StationListPanel(self)
         self.discover = DiscoverPanel(self)
+        main_box.append(self.now_playing)
 
-        self.stack.add_named(self.now_playing, "now_playing")
-        self.stack.add_named(self.station_list, "station_list")
-        self.stack.add_named(self.discover, "discover")
+        # Dropdown region: always allocated at this fixed height, whether
+        # or not it's showing anything -- that's what keeps the window
+        # from resizing when a dropdown opens or closes.
+        self.dropdown_stack = Gtk.Stack()
+        self.dropdown_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        self.dropdown_stack.set_transition_duration(150)
+        self.dropdown_stack.add_named(Gtk.Box(), "mini")
+        self.dropdown_stack.add_named(self.station_list, "library")
+        self.dropdown_stack.add_named(self.discover, "discover")
+        self.dropdown_stack.set_visible_child_name("mini")
 
-        # Sidebar control button array map
-        self.nav_buttons = {}
-        for name, icon, tooltip in [
-            ("now_playing", "media-playlist-consecutive-symbolic", "Now Playing"),
-            ("station_list", "view-list-symbolic", "Station Library"),
-            ("discover", "folder-saved-search-symbolic", "Discover Stations")
-        ]:
-            btn = Gtk.Button(icon_name=icon)
-            btn.add_css_class("nav-btn")
-            btn.set_tooltip_text(tooltip)
-            btn.connect("clicked", lambda b, n=name: self.switch_panel(n))
-            sidebar.append(btn)
-            self.nav_buttons[name] = btn
+        self.dropdown_scroll = Gtk.ScrolledWindow()
+        self.dropdown_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.dropdown_scroll.set_size_request(-1, 220)
+        self.dropdown_scroll.set_child(self.dropdown_stack)
+        main_box.append(self.dropdown_scroll)
 
-        self.switch_panel("now_playing")
+        self.now_playing.connect("nav-selected", self.on_nav_selected)
 
         # Runtime environment loops initialization parameters
         self._bt_active = False
@@ -93,14 +82,9 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         # Connect focus destruction patterns
         self.connect("close-request", self.on_close_request)
 
-    def switch_panel(self, name: str):
-        self.stack.set_visible_child_name(name)
-        for k, btn in self.nav_buttons.items():
-            if k == name:
-                btn.add_css_class("active")
-            else:
-                btn.remove_css_class("active")
-        if name == "station_list":
+    def on_nav_selected(self, panel, name: str):
+        self.dropdown_stack.set_visible_child_name(name)
+        if name == "library":
             self.station_list.on_shown()
 
     def trigger_library_refresh(self):

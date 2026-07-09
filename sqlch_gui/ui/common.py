@@ -165,8 +165,8 @@ def load_custom_css():
     .cover-art {{
         background-color: {colors.get('WING', '#e2dacf')};
         border-radius: 12px;
-        min-width: 124px;
-        min-height: 124px;
+        min-width: 150px;
+        min-height: 150px;
         border: 2px dashed {thread};
         box-shadow: 0 0 0 1px transparent, {slight}, {hem(5)};
     }}
@@ -519,26 +519,28 @@ def load_custom_css():
         padding: 2px;
     }}
 
-    /* Flip Tab Button - Styled to look like a canvas tag sticking out of the seam */
-    .flip-tag-btn {{
-        background-color: {colors.get('ROOT', '#f4b84b')};
-        color: {outline};
-        border: 2px dashed {thread};
-        border-left: none;
-        border-radius: 0 8px 8px 0;
-        margin-left: -2px; /* Pulls it flush right against the main art frame */
-        padding: 0 4px;
-        min-height: 48px;
-        min-width: 24px;
-        box-shadow: 2px 2px 0 0 {outline};
+    /* Flip corner glyph - a small clickable tag tucked into the art's own
+       bottom-right corner, same rotation family as corner-tag-right
+       (used by the top-right format tag) since both sit on the right. */
+    .corner-tag-flip {{
+        background-color: {colors.get('BAR', '#6a6a6a')};
+        color: {score};
+        border: none;
+        border-radius: 8px;
+        padding: 3px 5px;
+        min-height: 0;
+        min-width: 0;
+        margin: 5px;
+        box-shadow: 0 2px 0 rgba({staff}, 0.4);
+        transform: rotate(4deg);
         transition: transform 120ms ease, background-color 120ms ease;
     }}
-    .flip-tag-btn:hover {{
+    .corner-tag-flip:hover {{
         background-color: {colors.get('WING', '#fff5dd')};
-        transform: translateX(2px);
+        transform: rotate(4deg) scale(1.1);
     }}
-    .flip-tag-btn:active {{
-        transform: translateX(0px);
+    .corner-tag-flip:active {{
+        transform: rotate(4deg) scale(0.92);
     }}
     """
 

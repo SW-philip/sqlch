@@ -3,15 +3,19 @@
 import html
 import threading
 from pathlib import Path
-from gi.repository import Gtk, GLib, GdkPixbuf
+from gi.repository import Gtk, GLib, GdkPixbuf, GObject
 
 from .. import daemon, metadata
-from .controls import ThreadSlider, RecordBubble
+from .controls import ThreadSlider, RecordBubble, NavColumn
 from .eq_strip import EqStrip
 
 _REC_MODE_LABELS = {"full": "FULL", "track": "TRK"}
 
 class NowPlayingPanel(Gtk.Box):
+    __gsignals__ = {
+        'nav-selected': (GObject.SignalFlags.RUN_LAST, None, (str,)),
+    }
+
     def __init__(self, parent_window):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.set_margin_start(6)
@@ -25,13 +29,17 @@ class NowPlayingPanel(Gtk.Box):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         card.add_css_class("card")
 
-        # --- Dual-Sided Album Deck Layout Container ---
-        deck_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        # --- Flanked album deck: nav column / art / transport column ---
+        deck_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         deck_box.set_halign(Gtk.Align.CENTER)
+
+        self.nav_column = NavColumn()
+        self.nav_column.connect("nav-selected", lambda nav, name: self.emit("nav-selected", name))
+        deck_box.append(self.nav_column)
 
         # Hero cover art elements (Front side)
         self.cover_img = Gtk.Image()
-        self.cover_img.set_pixel_size(120)
+        self.cover_img.set_pixel_size(150)
         self.cover_placeholder = Gtk.Label(label="♪")
         self.cover_placeholder.add_css_class("cover-glyph")
 
@@ -44,7 +52,7 @@ class NowPlayingPanel(Gtk.Box):
         # Tracklist Matrix Sheet (Back side)
         track_scroll = Gtk.ScrolledWindow()
         track_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        track_scroll.set_size_request(124, 124)
+        track_scroll.set_size_request(150, 150)
         track_scroll.add_css_class("art-card-back")
 
         self.track_list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -83,63 +91,23 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_format_tag.set_visible(False)
         self.cover_overlay.add_overlay(self.lbl_format_tag)
 
+        # Flip-to-tracklist control tucked into the art's own bottom-right
+        # corner (third corner tag), freeing the transport column below to
+        # hold only REC/Stop/Mute.
+        self.flip_btn = Gtk.Button(icon_name="object-flip-horizontal-symbolic")
+        self.flip_btn.add_css_class("corner-tag-flip")
+        self.flip_btn.set_halign(Gtk.Align.END)
+        self.flip_btn.set_valign(Gtk.Align.END)
+        self.flip_btn.connect("clicked", self.on_flip_clicked)
+        self.cover_overlay.add_overlay(self.flip_btn)
+
         deck_box.append(self.cover_overlay)
 
-        # Index Tag Toggle Button on the right
-        self.flip_btn = Gtk.Button(icon_name="object-flip-horizontal-symbolic")
-        self.flip_btn.add_css_class("flip-tag-btn")
-        self.flip_btn.set_valign(Gtk.Align.CENTER)
-        self.flip_btn.connect("clicked", self.on_flip_clicked)
-        deck_box.append(self.flip_btn)
-
-        card.append(deck_box)
-
-        self.eq_strip = EqStrip()
-        self.eq_strip.set_halign(Gtk.Align.CENTER)
-        card.append(self.eq_strip)
-
-        # Meta details text stack, centered below the art
-        text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
-        text_box.set_halign(Gtk.Align.CENTER)
-        self.lbl_title = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
-        self.lbl_title.add_css_class("meta-title")
-        self.lbl_title.set_wrap(True)
-        self.lbl_title.set_max_width_chars(36)
-
-        self.lbl_artist = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
-        self.lbl_artist.add_css_class("meta-artist")
-        self.lbl_artist.set_wrap(True)
-        self.lbl_artist.set_max_width_chars(36)
-
-        self.lbl_genre = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
-        self.lbl_genre.add_css_class("thread-label")
-
-        text_box.append(self.lbl_title)
-        text_box.append(self.lbl_artist)
-        text_box.append(self.lbl_genre)
-        card.append(text_box)
-        self.append(card)
-
-        # Control deck card, organized as a hub
-        deck = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        deck.add_css_class("card")
-
-        # Hub row
-        hub_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        hub_row.set_halign(Gtk.Align.CENTER)
-
+        # Transport column on the right: REC / Stop / Mute, stacked
         btn_stop = Gtk.Button(icon_name="media-playback-stop-symbolic")
         btn_stop.add_css_class("control-btn")
         btn_stop.connect("clicked", self.on_stop)
         btn_stop.set_valign(Gtk.Align.CENTER)
-
-        self.vol_adj = Gtk.Adjustment(value=0.0, lower=0.0, upper=1.0, step_increment=0.05)
-
-        self.vol_slider = ThreadSlider(self.vol_adj)
-        self._vol_handler = self.vol_slider.connect("value-changed", self.on_vol_changed)
-
-        self._pre_boost_vol: float | None = None
-        self.vol_slider.connect("boost-toggled", self.on_boost_toggled)
 
         self.btn_mute = Gtk.Button(icon_name="audio-volume-high-symbolic")
         self.btn_mute.add_css_class("control-btn")
@@ -168,20 +136,59 @@ class NowPlayingPanel(Gtk.Box):
         lbl_rec_tag.add_css_class("knob-tag")
         rec_wrap.append(lbl_rec_tag)
 
-        hub_row.append(rec_wrap)
-        hub_row.append(btn_stop)
-        hub_row.append(self.btn_mute)
-        deck.append(hub_row)
+        right_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        right_col.set_valign(Gtk.Align.CENTER)
+        right_col.append(rec_wrap)
+        right_col.append(btn_stop)
+        right_col.append(self.btn_mute)
+        deck_box.append(right_col)
 
-        # Full-width thread-slider volume row, sewn in below the hub
+        card.append(deck_box)
+
+        self.eq_strip = EqStrip()
+        self.eq_strip.set_halign(Gtk.Align.CENTER)
+        card.append(self.eq_strip)
+
+        # Meta details text stack, centered below the art
+        text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        text_box.set_halign(Gtk.Align.CENTER)
+        self.lbl_title = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
+        self.lbl_title.add_css_class("meta-title")
+        self.lbl_title.set_wrap(True)
+        self.lbl_title.set_max_width_chars(36)
+
+        self.lbl_artist = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
+        self.lbl_artist.add_css_class("meta-artist")
+        self.lbl_artist.set_wrap(True)
+        self.lbl_artist.set_max_width_chars(36)
+
+        self.lbl_genre = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
+        self.lbl_genre.add_css_class("thread-label")
+
+        text_box.append(self.lbl_title)
+        text_box.append(self.lbl_artist)
+        text_box.append(self.lbl_genre)
+        card.append(text_box)
+
+        # Volume + primary transport + tech readout live directly in this
+        # same card now -- REC/Stop/Mute moved up into the flanking column
+        # above, so there's no separate "control deck" card anymore.
+        self.vol_adj = Gtk.Adjustment(value=0.0, lower=0.0, upper=1.0, step_increment=0.05)
+
+        self.vol_slider = ThreadSlider(self.vol_adj)
+        self._vol_handler = self.vol_slider.connect("value-changed", self.on_vol_changed)
+
+        self._pre_boost_vol: float | None = None
+        self.vol_slider.connect("boost-toggled", self.on_boost_toggled)
+
         vol_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         vol_row.append(self.vol_slider)
-        deck.append(vol_row)
+        card.append(vol_row)
 
         lbl_vol_tag = Gtk.Label(label="VOL")
         lbl_vol_tag.add_css_class("knob-tag")
         lbl_vol_tag.set_halign(Gtk.Align.START)
-        deck.append(lbl_vol_tag)
+        card.append(lbl_vol_tag)
 
         # Primary transport at 6 o'clock
         self.btn_toggle = Gtk.Button()
@@ -189,7 +196,7 @@ class NowPlayingPanel(Gtk.Box):
         self.btn_toggle.add_css_class("primary")
         self.btn_toggle.set_halign(Gtk.Align.CENTER)
         self.btn_toggle.connect("clicked", self.on_toggle_play)
-        deck.append(self.btn_toggle)
+        card.append(self.btn_toggle)
 
         # Readout strip
         self.tech_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -222,10 +229,10 @@ class NowPlayingPanel(Gtk.Box):
         self.tech_box.append(self.lbl_channels)
         self.tech_box.append(self.lbl_bt)
         self.tech_box.append(self.lbl_device)
-        deck.append(self.tech_box)
+        card.append(self.tech_box)
 
-        deck_overlay = Gtk.Overlay()
-        deck_overlay.set_child(deck)
+        card_overlay = Gtk.Overlay()
+        card_overlay.set_child(card)
         lbl_brand = Gtk.Label(label="sqlch")
         lbl_brand.add_css_class("brand-tag")
         lbl_brand.set_halign(Gtk.Align.END)
@@ -236,8 +243,8 @@ class NowPlayingPanel(Gtk.Box):
         # click handling), so explicitly opt this label out of hit-testing to
         # guarantee stop/mute/knob clicks below always reach their real targets.
         lbl_brand.set_can_target(False)
-        deck_overlay.add_overlay(lbl_brand)
-        self.append(deck_overlay)
+        card_overlay.add_overlay(lbl_brand)
+        self.append(card_overlay)
 
         self._cur_station_id = None
         self._cur_artist = None
