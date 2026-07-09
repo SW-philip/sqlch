@@ -1,4 +1,4 @@
-"""Custom GTK 4 tactile controls: pop-it bubble, thread-and-button volume slider."""
+"""Custom GTK 4 tactile controls: pop-it bubble, thread-and-button volume slider, spool nav rail."""
 
 import colorsys
 import math
@@ -420,3 +420,99 @@ class RecordBubble(Gtk.DrawingArea):
             cr.arc(cx, cy + 1.5, radius, 0, 2 * math.pi)
             cr.set_line_width(1.0)
             cr.stroke_preserve()
+
+
+class NavColumn(Gtk.Box):
+    """Vertical nav-icon rail: Mini (collapse), Library, Discover.
+
+    Not three independent toggle buttons -- clicking Library or Discover
+    opens that section (auto-collapsing whichever was open), re-clicking
+    the already-open one is a no-op, and only Mini collapses back down to
+    nothing selected. Mini's icon is a hand-drawn spool (thread wound back
+    up) rather than a stock symbolic icon, echoing the thread/button
+    vocabulary already established by ThreadSlider and RecordBubble.
+    """
+
+    __gsignals__ = {
+        'nav-selected': (GObject.SignalFlags.RUN_LAST, None, (str,)),
+    }
+
+    def __init__(self):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.add_css_class("sidebar")
+        self.set_valign(Gtk.Align.CENTER)
+
+        self.active = "mini"
+        self._buttons = {}
+
+        self._spool = Gtk.DrawingArea()
+        self._spool.set_content_width(18)
+        self._spool.set_content_height(18)
+        self._spool.set_draw_func(self._draw_spool)
+
+        btn_mini = Gtk.Button()
+        btn_mini.set_child(self._spool)
+        btn_mini.add_css_class("nav-btn")
+        btn_mini.set_tooltip_text("Mini")
+        btn_mini.connect("clicked", lambda b: self._select("mini"))
+        self.append(btn_mini)
+        self._buttons["mini"] = btn_mini
+
+        btn_library = Gtk.Button(icon_name="view-list-symbolic")
+        btn_library.add_css_class("nav-btn")
+        btn_library.set_tooltip_text("Station Library")
+        btn_library.connect("clicked", lambda b: self._select("library"))
+        self.append(btn_library)
+        self._buttons["library"] = btn_library
+
+        btn_discover = Gtk.Button(icon_name="folder-saved-search-symbolic")
+        btn_discover.add_css_class("nav-btn")
+        btn_discover.set_tooltip_text("Discover Stations")
+        btn_discover.connect("clicked", lambda b: self._select("discover"))
+        self.append(btn_discover)
+        self._buttons["discover"] = btn_discover
+
+        self._buttons["mini"].add_css_class("active")
+
+    def _select(self, name: str):
+        if name == self.active:
+            return  # re-clicking the already-open one (or idle Mini) is a no-op
+        self._buttons[self.active].remove_css_class("active")
+        self.active = name
+        self._buttons[name].add_css_class("active")
+        self._spool.queue_draw()
+        self.emit("nav-selected", name)
+
+    def _draw_spool(self, area, cr, width, height, user_data=None):
+        colors = palette.load()
+        mini_active = self.active == "mini"
+        # Matches .nav-btn.active's `color: {outline}` (palette SHADOW) when
+        # Mini is selected, .nav-btn's plain `color: {REST}` otherwise --
+        # Cairo draws don't pick up GTK CSS `color`, so it's read explicitly.
+        rgb = _hex_to_rgb_floats(colors.get('SHADOW' if mini_active else 'REST', '#4e4e52'))
+
+        cx, cy = width / 2.0, height / 2.0
+        rx, ry = width * 0.42, height * 0.16
+        top, bottom = cy - height * 0.32, cy + height * 0.32
+
+        cr.set_source_rgba(*rgb, 1.0)
+        cr.set_line_width(1.4)
+
+        # Two dashed rims (the spool's end-caps) joined by two verticals
+        # (the spindle) -- reads as thread wound back onto a spool.
+        cr.set_dash([1.6, 1.4])
+        for rim_y in (top, bottom):
+            cr.save()
+            cr.translate(cx, rim_y)
+            cr.scale(rx, ry)
+            cr.arc(0, 0, 1.0, 0, 2 * math.pi)
+            cr.restore()
+            cr.stroke()
+
+        cr.set_dash([])
+        cr.move_to(cx - rx, top)
+        cr.line_to(cx - rx, bottom)
+        cr.stroke()
+        cr.move_to(cx + rx, top)
+        cr.line_to(cx + rx, bottom)
+        cr.stroke()
