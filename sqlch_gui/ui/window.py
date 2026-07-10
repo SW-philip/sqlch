@@ -16,7 +16,7 @@ from .discover import DiscoverPanel
 MAX_DRAWER_HEIGHT = 420
 DRAWER_OPEN_THRESHOLD = 0.35   # fraction of max height that commits an open
 DRAWER_FLING_VELOCITY = 600.0  # px/s at release that overrides position
-DRAWER_SPRING_OMEGA = 16.0     # rad/s
+DRAWER_SPRING_OMEGA = 20.0     # rad/s
 DRAWER_SPRING_ZETA = 0.78      # underdamped: slight fabric-settle overshoot
 
 class SqlchPopupWindow(Gtk.ApplicationWindow):
@@ -88,6 +88,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         self._drawer_panel = "library"  # what a bare seam-drag reveals
         self._drag_start_h = 0.0
         self._drag_vel = 0.0
+        self._drag_pending = 0.0
         self._drag_last = (0, 0.0)
 
         self.now_playing.connect("nav-selected", self.on_nav_selected)
@@ -135,10 +136,20 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         self._stop_drawer_anim()  # grab mid-snap steals the drawer back
         self._drag_start_h = self._drawer_pos
         self._drag_vel = 0.0
+        self._drag_pending = self._drawer_pos
         self._drag_last = (GLib.get_monotonic_time(), self._drawer_pos)
         self.seam.set_grabbed(True)
         if self._drawer_pos == 0.0:
             self.dropdown_stack.set_visible_child_name(self._drawer_panel)
+        # Coalesce drag positions onto the frame clock: pointers report at
+        # up to 1000Hz, and relayouting the window per motion event (rather
+        # than once per frame) is what reads as drag lag
+        self._drawer_tick_id = self.dropdown_scroll.add_tick_callback(self._drag_frame)
+
+    def _drag_frame(self, widget, frame_clock):
+        if self._drag_pending != self._drawer_pos:
+            self._set_drawer_pos(self._drag_pending)
+        return GLib.SOURCE_CONTINUE
 
     def _on_seam_drag_update(self, gesture, offset_x, offset_y):
         pos = max(0.0, min(float(MAX_DRAWER_HEIGHT), self._drag_start_h + offset_y))
@@ -149,9 +160,11 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
             # Exponentially smoothed release velocity for fling detection
             self._drag_vel = 0.7 * self._drag_vel + 0.3 * (pos - last_pos) / dt
             self._drag_last = (now, pos)
-        self._set_drawer_pos(pos)
+        self._drag_pending = pos
 
     def _on_seam_drag_end(self, gesture, offset_x, offset_y):
+        self._stop_drawer_anim()  # retire the drag coalescer
+        self._set_drawer_pos(self._drag_pending)
         self.seam.set_grabbed(False)
         if abs(self._drag_vel) > DRAWER_FLING_VELOCITY:
             opening = self._drag_vel > 0  # a committed flick wins outright
