@@ -12,6 +12,8 @@ no text of its own to size itself by, so its size is pulled from measuring
 the label once up front and pinned with set_size_request().
 """
 
+import math
+
 import gi
 gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk
@@ -89,6 +91,80 @@ class RibbonBanner(Gtk.Overlay):
         cr.line_to(width, height)
         cr.close_path()
         cr.fill()
+
+
+class TornSeparator(Gtk.DrawingArea):
+    """Torn-paper seam between the Now Playing sheet and the drawer below.
+
+    Reads as the ragged bottom edge of the sheet above; a short run of
+    stitch dashes in the middle is the grab affordance. Purely visual --
+    the window owns the drag gesture and drawer state, this widget just
+    draws the seam and swaps the grab/grabbing cursor.
+    """
+
+    _HEIGHT = 18
+    _BODY_H = 8.0
+
+    def __init__(self):
+        super().__init__()
+        self.set_hexpand(True)
+        self.set_content_height(self._HEIGHT)
+        self.set_draw_func(self._on_draw)
+        self.set_cursor_from_name("grab")
+        self.set_tooltip_text("Drag to open the drawer")
+
+    def set_grabbed(self, grabbed: bool):
+        self.set_cursor_from_name("grabbing" if grabbed else "grab")
+
+    def _tear_points(self, width: float, height: float) -> list[tuple[float, float]]:
+        # Depths and spacing are hashed from the tooth index (not random)
+        # so the tear never shimmers between redraws.
+        points = []
+        x, i = 0.0, 0
+        max_depth = height - 2.0
+        while x < width:
+            frac = abs(math.sin(i * 12.9898 + 4.1414))
+            points.append((x, self._BODY_H + 1.5 + frac * (max_depth - self._BODY_H - 1.5)))
+            x += 9.0 * (0.7 + 0.6 * abs(math.sin(i * 7.31)))
+            i += 1
+        points.append((float(width), self._BODY_H + 1.5))
+        return points
+
+    def _on_draw(self, area, cr, width, height, user_data=None):
+        colors = palette.load()
+        paper = _hex_to_rgb_floats(colors.get('STAGE', '#f9f6f0'))
+        shadow = _hex_to_rgb_floats(colors.get('SHADOW', '#0f0e17'))
+        thread = _hex_to_rgb_floats(colors.get('BAR', '#6a6a6a'))
+
+        points = self._tear_points(width, height)
+
+        def tear_path(y_off: float):
+            cr.move_to(0, 0)
+            cr.line_to(0, self._BODY_H + y_off)
+            for px, py in points:
+                cr.line_to(px, py + y_off)
+            cr.line_to(width, 0)
+            cr.close_path()
+
+        # Soft shadow peeking out under the tear, then the paper on top
+        cr.set_source_rgba(*shadow, 0.25)
+        tear_path(1.5)
+        cr.fill()
+        cr.set_source_rgba(*paper, 1.0)
+        tear_path(0.0)
+        cr.fill()
+
+        # Centered stitch dashes: the "grab here" cue, same thread
+        # vocabulary as ThreadSlider/RecordBubble
+        cr.save()
+        cr.set_dash([4.0, 3.5])
+        cr.set_line_width(1.6)
+        cr.set_source_rgba(*thread, 0.8)
+        cy = self._BODY_H / 2.0 + 0.5
+        cr.move_to(width / 2.0 - 23.0, cy)
+        cr.line_to(width / 2.0 + 23.0, cy)
+        cr.stroke()
+        cr.restore()
 
 
 class PennantTag(Gtk.Overlay):

@@ -474,13 +474,20 @@ class NavColumn(Gtk.Box):
 
         self._buttons["mini"].add_css_class("active")
 
-    def _select(self, name: str):
+    def set_active(self, name: str):
+        """Sync the highlight to drawer state driven from outside (seam
+        drags) without re-emitting nav-selected."""
         if name == self.active:
-            return  # re-clicking the already-open one (or idle Mini) is a no-op
+            return
         self._buttons[self.active].remove_css_class("active")
         self.active = name
         self._buttons[name].add_css_class("active")
         self._spool.queue_draw()
+
+    def _select(self, name: str):
+        if name == self.active:
+            return  # re-clicking the already-open one (or idle Mini) is a no-op
+        self.set_active(name)
         self.emit("nav-selected", name)
 
     def _draw_spool(self, area, cr, width, height, user_data=None):

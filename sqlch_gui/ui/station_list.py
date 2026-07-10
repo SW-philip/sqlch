@@ -63,6 +63,7 @@ class StationListPanel(Gtk.Box):
         self._active_id = None
         self._probe_titles: dict[str, str] = {}
         self._probe_running = False
+        self._abort_probes = threading.Event()
         self._last_probe = 0.0
         GLib.timeout_add_seconds(PROBE_TICK_SECS, self._probe_tick)
         self.refresh()
@@ -275,6 +276,13 @@ class StationListPanel(Gtk.Box):
         if time.monotonic() - self._last_probe > PROBE_STALE_SECS:
             self._probe_all()
 
+    def abort_probes(self):
+        """Drop the queued remainder of a sweep (drawer closed). In-flight
+        socket reads finish on their own 4s timeout; only not-yet-started
+        probes are skipped, and the sweep stays marked stale so the next
+        open re-probes."""
+        self._abort_probes.set()
+
     def _probe_tick(self) -> bool:
         if self.get_mapped():
             self.on_shown()
@@ -284,6 +292,7 @@ class StationListPanel(Gtk.Box):
         if self._probe_running:
             return
         self._probe_running = True
+        self._abort_probes.clear()
         stations = [
             s for s in library.get_station_list() if s["id"] != self._active_id
         ]
@@ -292,7 +301,11 @@ class StationListPanel(Gtk.Box):
 
         def probe_one(st):
             with sem:
+                if self._abort_probes.is_set():
+                    return
                 title = icyprobe.fetch_stream_title(st["url"])
+            if self._abort_probes.is_set():
+                return
             artist, track = metadata.parse_icy(title) if title else (None, None)
             GLib.idle_add(self._apply_probe, st["id"], format_live_text(artist, track))
 
@@ -305,7 +318,8 @@ class StationListPanel(Gtk.Box):
                 w.start()
             for w in workers:
                 w.join()
-            self._last_probe = time.monotonic()
+            if not self._abort_probes.is_set():
+                self._last_probe = time.monotonic()
             self._probe_running = False
 
         threading.Thread(target=run, daemon=True).start()
