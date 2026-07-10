@@ -13,9 +13,11 @@ from .now_playing import NowPlayingPanel
 from .station_list import StationListPanel
 from .discover import DiscoverPanel
 
-MAX_DRAWER_HEIGHT = 420
+MAX_DRAWER_HEIGHT = 420        # ceiling; the effective max also fits the monitor
+DRAWER_BOTTOM_GAP = 12         # breathing room kept above the screen's bottom edge
 DRAWER_OPEN_THRESHOLD = 0.35   # fraction of max height that commits an open
 DRAWER_FLING_VELOCITY = 600.0  # px/s at release that overrides position
+DRAWER_CLICK_SLOP = 8.0        # px of travel under which a "drag" is just a click
 DRAWER_SPRING_OMEGA = 20.0     # rad/s
 DRAWER_SPRING_ZETA = 0.78      # underdamped: slight fabric-settle overshoot
 
@@ -27,7 +29,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         # drawer beneath the torn seam. Height is content-driven so the
         # layer-shell surface hugs the card when closed and grows as the
         # drawer is pulled open.
-        self.set_default_size(450, -1)
+        self.set_default_size(380, -1)
 
         # Inject theme constants
         load_custom_css()
@@ -84,6 +86,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
 
         self._drawer_pos = 0.0
         self._drawer_target = 0.0
+        self._drawer_max = float(MAX_DRAWER_HEIGHT)
         self._drawer_tick_id = None
         self._drawer_panel = "library"  # what a bare seam-drag reveals
         self._drag_start_h = 0.0
@@ -117,11 +120,32 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         else:
             self._drawer_panel = name
             self.dropdown_stack.set_visible_child_name(name)
-            self._animate_drawer_to(MAX_DRAWER_HEIGHT)
+            self._animate_drawer_to(self._compute_drawer_max())
             if name == "library":
                 self.station_list.on_shown()
 
     # --- Drawer: seam drag + spring snap ---
+
+    def _compute_drawer_max(self) -> float:
+        """MAX_DRAWER_HEIGHT capped so the fully open window still fits on
+        the monitor below the layer-shell top margin. Whenever a fresh
+        measurement can't be trusted -- surface/monitor unresolved, window
+        not yet allocated, or an animation in flight (allocation lags
+        _drawer_pos by a frame) -- reuse the last good value instead of
+        ever falling back to the bare ceiling."""
+        if self._drawer_tick_id:
+            return self._drawer_max
+        surface = self.get_surface()
+        monitor = self.get_display().get_monitor_at_surface(surface) if surface else None
+        if monitor is None or self.get_height() <= 0:
+            return self._drawer_max
+        # Everything that isn't drawer: current window height minus the
+        # drawer's current share of it
+        overhead = self.get_height() - round(self._drawer_pos)
+        top_margin = Gtk4LayerShell.get_margin(self, Gtk4LayerShell.Edge.TOP)
+        avail = monitor.get_geometry().height - top_margin - overhead - DRAWER_BOTTOM_GAP
+        self._drawer_max = float(max(0, min(MAX_DRAWER_HEIGHT, avail)))
+        return self._drawer_max
 
     def _set_drawer_pos(self, pos: float):
         self._drawer_pos = pos
@@ -134,6 +158,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
 
     def _on_seam_drag_begin(self, gesture, start_x, start_y):
         self._stop_drawer_anim()  # grab mid-snap steals the drawer back
+        self._compute_drawer_max()
         self._drag_start_h = self._drawer_pos
         self._drag_vel = 0.0
         self._drag_pending = self._drawer_pos
@@ -152,13 +177,16 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         return GLib.SOURCE_CONTINUE
 
     def _on_seam_drag_update(self, gesture, offset_x, offset_y):
-        pos = max(0.0, min(float(MAX_DRAWER_HEIGHT), self._drag_start_h + offset_y))
+        pos = max(0.0, min(self._drawer_max, self._drag_start_h + offset_y))
         now = GLib.get_monotonic_time()
         then, last_pos = self._drag_last
         dt = (now - then) / 1_000_000
-        if dt > 0.001:
-            # Exponentially smoothed release velocity for fling detection
-            self._drag_vel = 0.7 * self._drag_vel + 0.3 * (pos - last_pos) / dt
+        if dt > 0.008:
+            # Exponentially smoothed release velocity for fling detection.
+            # Sampling under ~8ms would let a 2px release-twitch read as
+            # thousands of px/s; the clamp bounds any surviving spike.
+            inst = max(-3000.0, min(3000.0, (pos - last_pos) / dt))
+            self._drag_vel = 0.7 * self._drag_vel + 0.3 * inst
             self._drag_last = (now, pos)
         self._drag_pending = pos
 
@@ -166,14 +194,17 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         self._stop_drawer_anim()  # retire the drag coalescer
         self._set_drawer_pos(self._drag_pending)
         self.seam.set_grabbed(False)
-        if abs(self._drag_vel) > DRAWER_FLING_VELOCITY:
+        if abs(self._drawer_pos - self._drag_start_h) < DRAWER_CLICK_SLOP:
+            # A click, not a drag: settle back to whichever state we were in
+            opening = self._drag_start_h > self._drawer_max * 0.5
+        elif abs(self._drag_vel) > DRAWER_FLING_VELOCITY:
             opening = self._drag_vel > 0  # a committed flick wins outright
         else:
-            opening = self._drawer_pos > MAX_DRAWER_HEIGHT * DRAWER_OPEN_THRESHOLD
+            opening = self._drawer_pos > self._drawer_max * DRAWER_OPEN_THRESHOLD
 
         if opening:
             self.now_playing.nav_column.set_active(self._drawer_panel)
-            self._animate_drawer_to(MAX_DRAWER_HEIGHT, initial_vel=self._drag_vel)
+            self._animate_drawer_to(self._drawer_max, initial_vel=self._drag_vel)
             if self._drawer_panel == "library":
                 self.station_list.on_shown()
         else:

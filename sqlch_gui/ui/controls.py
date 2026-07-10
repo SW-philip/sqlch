@@ -321,7 +321,7 @@ class RecordBubble(Gtk.DrawingArea):
         super().__init__()
         self.mode = "full"
         self.recording = False
-        self.set_size_request(52, 52)
+        self.set_size_request(46, 46)
         self.set_focusable(True)
         self.set_draw_func(self._on_draw)
         self._update_tooltip()

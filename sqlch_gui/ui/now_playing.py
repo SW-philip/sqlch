@@ -17,20 +17,20 @@ class NowPlayingPanel(Gtk.Box):
     }
 
     def __init__(self, parent_window):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        self.set_margin_start(6)
-        self.set_margin_end(6)
-        self.set_margin_top(6)
-        self.set_margin_bottom(6)
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.set_margin_start(4)
+        self.set_margin_end(4)
+        self.set_margin_top(4)
+        self.set_margin_bottom(4)
         self.set_valign(Gtk.Align.CENTER)
         self.win = parent_window
 
         # Header card
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         card.add_css_class("card")
 
         # --- Flanked album deck: nav column / art / transport column ---
-        deck_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        deck_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         deck_box.set_halign(Gtk.Align.CENTER)
 
         self.nav_column = NavColumn()
@@ -39,7 +39,7 @@ class NowPlayingPanel(Gtk.Box):
 
         # Hero cover art elements (Front side)
         self.cover_img = Gtk.Image()
-        self.cover_img.set_pixel_size(150)
+        self.cover_img.set_pixel_size(130)
         self.cover_placeholder = Gtk.Label(label="♪")
         self.cover_placeholder.add_css_class("cover-glyph")
 
@@ -52,7 +52,7 @@ class NowPlayingPanel(Gtk.Box):
         # Tracklist Matrix Sheet (Back side)
         track_scroll = Gtk.ScrolledWindow()
         track_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        track_scroll.set_size_request(150, 150)
+        track_scroll.set_size_request(130, 130)
         track_scroll.add_css_class("art-card-back")
 
         self.track_list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -155,12 +155,12 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_title = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
         self.lbl_title.add_css_class("meta-title")
         self.lbl_title.set_wrap(True)
-        self.lbl_title.set_max_width_chars(36)
+        self.lbl_title.set_max_width_chars(30)
 
         self.lbl_artist = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
         self.lbl_artist.add_css_class("meta-artist")
         self.lbl_artist.set_wrap(True)
-        self.lbl_artist.set_max_width_chars(36)
+        self.lbl_artist.set_max_width_chars(30)
 
         self.lbl_genre = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
         self.lbl_genre.add_css_class("thread-label")
@@ -406,7 +406,7 @@ class NowPlayingPanel(Gtk.Box):
     def _apply_cover_path(self, path: str, artist: str, title: str) -> bool:
         if self._cur_artist == artist and self._cur_title == title:
             try:
-                pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 120, 120, True)
+                pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 130, 130, True)
                 self.cover_img.set_from_pixbuf(pb)
                 self.cover_stack.set_visible_child_name("art")
             except Exception:

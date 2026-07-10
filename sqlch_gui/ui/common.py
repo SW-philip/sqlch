@@ -109,9 +109,9 @@ def load_custom_css():
         color: {score};
         border-radius: 16px;
         border: 2px dashed {thread};
-        box-shadow: 0 0 0 4px {outline}, 8px 8px 0 4px {outline}, 14px 14px 0 4px {shadow}, {hem(8)};
-        margin: 4px 20px 20px 4px;
-        padding: 4px;
+        box-shadow: 0 0 0 3px {outline}, 6px 6px 0 3px {outline}, 10px 10px 0 3px {shadow}, {hem(8)};
+        margin: 3px 14px 14px 3px;
+        padding: 3px;
     }}
 
     .sidebar {{
@@ -125,7 +125,7 @@ def load_custom_css():
     }}
 
     .nav-btn {{
-        padding: 8px;
+        padding: 6px;
         margin: 3px 0px;
         border-radius: 8px;
         color: {colors.get('REST', '#4e4e52')};
@@ -155,23 +155,23 @@ def load_custom_css():
         background-color: {colors.get('STAGE', '#f9f6f0')};
         background-image: {svg_tactile_filter};
         background-repeat: repeat;
-        border-radius: 14px;
-        padding: 8px;
+        border-radius: 12px;
+        padding: 6px;
         border: 2px dashed {thread};
         box-shadow: 0 0 0 1px transparent, {slight}, {hem(6)};
-        margin-bottom: 3px;
+        margin-bottom: 2px;
     }}
 
     .cover-art {{
         background-color: {colors.get('WING', '#e2dacf')};
         border-radius: 12px;
-        min-width: 150px;
-        min-height: 150px;
+        min-width: 130px;
+        min-height: 130px;
         border: 2px dashed {thread};
         box-shadow: 0 0 0 1px transparent, {slight}, {hem(5)};
     }}
     .cover-glyph {{
-        font-size: 58px;
+        font-size: 50px;
         font-weight: 900;
         color: {colors.get('PIANO', '#2c2c30')};
         text-shadow: 0 2px 0 {lite_c};
@@ -224,7 +224,7 @@ def load_custom_css():
     }}
 
     .station-row {{
-        padding: 7px 10px;
+        padding: 5px 8px;
         border-radius: 10px;
         margin-bottom: 2px;
         background-color: {colors.get('STAGE', '#f9f6f0')};
@@ -269,9 +269,9 @@ def load_custom_css():
     }}
 
     .control-btn {{
-        border-radius: 16px;
-        min-width: 44px;
-        min-height: 44px;
+        border-radius: 14px;
+        min-width: 38px;
+        min-height: 38px;
         padding: 0;
         background-color: {colors.get('WING', '#f2ece1')};
         color: {score};
@@ -290,9 +290,9 @@ def load_custom_css():
         box-shadow: 0 0 0 1px {outline}, {slight_press}, {hem(4, puff=False)};
     }}
     .control-btn.primary {{
-        min-width: 56px;
-        min-height: 56px;
-        border-radius: 20px;
+        min-width: 48px;
+        min-height: 48px;
+        border-radius: 17px;
         background-color: {colors.get('PIANO', '#2c2c30')};
         color: {colors.get('HALL', '#fdf8ee')};
         border: 2px dashed {thread_light};
@@ -343,7 +343,7 @@ def load_custom_css():
         font-size: 0.8em;
         background-color: {colors.get('WING', '#fff5dd')};
         color: {score};
-        padding: 3px 8px;
+        padding: 2px 6px;
         border-radius: 6px;
         border: 1px dashed {thread};
         box-shadow: 0 0 0 1px transparent, {slight_press}, {hem(2, puff=False)};
