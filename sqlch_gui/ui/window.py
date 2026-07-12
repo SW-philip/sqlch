@@ -13,7 +13,7 @@ from .now_playing import NowPlayingPanel
 from .station_list import StationListPanel
 from .discover import DiscoverPanel
 
-MAX_DRAWER_HEIGHT = 420        # ceiling; the effective max also fits the monitor
+MAX_DRAWER_HEIGHT = 320        # ceiling; the effective max also fits the monitor
 DRAWER_BOTTOM_GAP = 12         # breathing room kept above the screen's bottom edge
 DRAWER_OPEN_THRESHOLD = 0.35   # fraction of max height that commits an open
 DRAWER_FLING_VELOCITY = 600.0  # px/s at release that overrides position
@@ -29,7 +29,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         # drawer beneath the torn seam. Height is content-driven so the
         # layer-shell surface hugs the card when closed and grows as the
         # drawer is pulled open.
-        self.set_default_size(380, -1)
+        self.set_default_size(290, -1)
 
         # Inject theme constants
         load_custom_css()
