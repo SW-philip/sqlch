@@ -150,7 +150,7 @@ class StationListPanel(Gtk.Box):
                 body.append(name_lbl)
                 body.append(live_lbl)
 
-                mini_eq = EqStrip(n_beads=3, width=22, height=14)
+                mini_eq = EqStrip(n_beads=3, width=18, height=11)
                 mini_eq.set_valign(Gtk.Align.CENTER)
                 mini_eq.set_visible(False)
 

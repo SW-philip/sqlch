@@ -27,7 +27,7 @@ class EqStrip(Gtk.DrawingArea):
 
     FRAME_MS = 80
 
-    def __init__(self, n_beads: int = 7, width: int = 90, height: int = 24):
+    def __init__(self, n_beads: int = 7, width: int = 68, height: int = 18):
         super().__init__()
         self.n_beads = n_beads
         self.set_size_request(width, height)
