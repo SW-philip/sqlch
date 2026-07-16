@@ -20,11 +20,11 @@ def format_live_text(artist: str | None, title: str | None) -> str:
 
 class StationListPanel(Gtk.Box):
     def __init__(self, parent_window):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        self.set_margin_start(8)
-        self.set_margin_end(8)
-        self.set_margin_top(8)
-        self.set_margin_bottom(8)
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.set_margin_start(6)
+        self.set_margin_end(6)
+        self.set_margin_top(6)
+        self.set_margin_bottom(6)
         self.win = parent_window
 
         # Inline catalog text filtering bar
@@ -34,7 +34,7 @@ class StationListPanel(Gtk.Box):
         self.append(self.filter_entry)
 
         # Add manual configuration trigger bar
-        add_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        add_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         add_box.add_css_class("list-header")
         self.ent_name = Gtk.Entry(placeholder_text="Station Name")
         self.ent_name.set_hexpand(True)
@@ -132,7 +132,7 @@ class StationListPanel(Gtk.Box):
                     return 0.0
 
             for s in sorted(groups[g_name], key=lambda x: _freq(x.get("frequency"))):
-                row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+                row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
                 row.add_css_class("station-row")
 
                 freq_lbl = Gtk.Label()
