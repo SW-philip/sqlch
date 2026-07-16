@@ -202,8 +202,8 @@ def load_custom_css():
         background-color: {colors.get('HALL', '#fdf8ee')};
         background-image: {svg_tactile_filter};
         background-repeat: repeat;
-        border-radius: 14px;
-        padding: 6px;
+        border-radius: 12px;
+        padding: 5px;
         border: 2px dashed {thread};
         box-shadow: 0 0 0 1px transparent, {slight}, {hem(4)};
     }}
@@ -215,17 +215,17 @@ def load_custom_css():
         background-color: {colors.get('WING', '#eaddca')};
         color: {score};
         font-weight: bold;
-        border-radius: 10px;
-        padding: 6px 10px;
-        margin-bottom: 6px;
+        border-radius: 8px;
+        padding: 5px 8px;
+        margin-bottom: 5px;
         border: 2px dashed {thread};
         box-shadow: 0 0 0 1px transparent, {slight}, {hem(4)};
         text-shadow: 0 -1px 0 rgba(255,255,255,0.40), 0 1px 1px rgba({staff},0.5);
     }}
 
     .station-row {{
-        padding: 5px 8px;
-        border-radius: 10px;
+        padding: 4px 6px;
+        border-radius: 8px;
         margin-bottom: 2px;
         background-color: {colors.get('STAGE', '#f9f6f0')};
         border: 2px dashed {thread};
