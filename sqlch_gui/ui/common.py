@@ -107,27 +107,27 @@ def load_custom_css():
         background-image: {svg_tactile_filter}, linear-gradient(165deg, {colors.get('GRAD_HALL_HI', '#e6dfce')}, {bg_color});
         background-repeat: repeat, no-repeat;
         color: {score};
-        border-radius: 16px;
+        border-radius: 13px;
         border: 2px dashed {thread};
         box-shadow: 0 0 0 3px {outline}, 6px 6px 0 3px {outline}, 10px 10px 0 3px {shadow}, {hem(8)};
-        margin: 3px 14px 14px 3px;
-        padding: 3px;
+        margin: 2px 10px 10px 2px;
+        padding: 2px;
     }}
 
     .sidebar {{
         background-color: {colors.get('GRAD_STAGE_LO', '#b04343')};
         background-image: {svg_tactile_filter}, linear-gradient(130deg, {colors.get('GRAD_STAGE_HI', '#d35f5f')}, {colors.get('GRAD_STAGE_LO', '#b04343')});
         background-repeat: repeat, no-repeat;
-        border-radius: 12px;
-        padding: 5px 3px;
+        border-radius: 10px;
+        padding: 4px 2px;
         border: 2px dashed {thread};
         box-shadow: 0 0 0 2px transparent, {slight}, {hem(5)};
     }}
 
     .nav-btn {{
-        padding: 6px;
-        margin: 3px 0px;
-        border-radius: 8px;
+        padding: 4px;
+        margin: 2px 0px;
+        border-radius: 6px;
         color: {colors.get('REST', '#4e4e52')};
         background: transparent;
         border: 2px dashed transparent;
@@ -155,8 +155,8 @@ def load_custom_css():
         background-color: {colors.get('STAGE', '#f9f6f0')};
         background-image: {svg_tactile_filter};
         background-repeat: repeat;
-        border-radius: 12px;
-        padding: 6px;
+        border-radius: 10px;
+        padding: 4px;
         border: 2px dashed {thread};
         box-shadow: 0 0 0 1px transparent, {slight}, {hem(6)};
         margin-bottom: 2px;
@@ -164,14 +164,14 @@ def load_custom_css():
 
     .cover-art {{
         background-color: {colors.get('WING', '#e2dacf')};
-        border-radius: 12px;
-        min-width: 130px;
-        min-height: 130px;
+        border-radius: 10px;
+        min-width: 98px;
+        min-height: 98px;
         border: 2px dashed {thread};
         box-shadow: 0 0 0 1px transparent, {slight}, {hem(5)};
     }}
     .cover-glyph {{
-        font-size: 50px;
+        font-size: 38px;
         font-weight: 900;
         color: {colors.get('PIANO', '#2c2c30')};
         text-shadow: 0 2px 0 {lite_c};
