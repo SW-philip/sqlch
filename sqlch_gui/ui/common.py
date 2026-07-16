@@ -181,8 +181,8 @@ def load_custom_css():
     .corner-tag {{
         font-family: "Courier New", monospace;
         font-weight: 900;
-        font-size: 0.65em;
-        padding: 2px 7px;
+        font-size: 0.6em;
+        padding: 2px 5px;
         border-radius: 8px;
         box-shadow: 0 2px 0 rgba({staff}, 0.4);
         margin: 5px;
@@ -269,9 +269,9 @@ def load_custom_css():
     }}
 
     .control-btn {{
-        border-radius: 14px;
-        min-width: 38px;
-        min-height: 38px;
+        border-radius: 11px;
+        min-width: 28px;
+        min-height: 28px;
         padding: 0;
         background-color: {colors.get('WING', '#f2ece1')};
         color: {score};
@@ -290,9 +290,9 @@ def load_custom_css():
         box-shadow: 0 0 0 1px {outline}, {slight_press}, {hem(4, puff=False)};
     }}
     .control-btn.primary {{
-        min-width: 48px;
-        min-height: 48px;
-        border-radius: 17px;
+        min-width: 36px;
+        min-height: 36px;
+        border-radius: 13px;
         background-color: {colors.get('PIANO', '#2c2c30')};
         color: {colors.get('HALL', '#fdf8ee')};
         border: 2px dashed {thread_light};
