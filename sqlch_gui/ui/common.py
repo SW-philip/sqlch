@@ -306,14 +306,14 @@ def load_custom_css():
 
     .meta-title {{
         font-family: "Fredoka", "Baloo 2", "Chalkboard SE", sans-serif;
-        font-size: 1.25em;
+        font-size: 1.05em;
         font-weight: 900;
         color: {score};
         text-shadow: 0 -1px 0 rgba(255,255,255,0.45), 0 1px 1px rgba({staff},0.6), 1px 3px 0 {outline};
     }}
     .meta-artist {{
         font-family: "Fredoka", sans-serif;
-        font-size: 1.0em;
+        font-size: 0.88em;
         color: {colors.get('FORTE', '#8c3b3b')};
         text-shadow: 0 -1px 0 rgba(255,255,255,0.35), 0 1px 1px rgba({staff},0.4), 1px 2px 0 {outline};
     }}
@@ -327,7 +327,7 @@ def load_custom_css():
 
     .thread-label {{
         font-family: "Fredoka", sans-serif;
-        font-size: 0.85em;
+        font-size: 0.75em;
         font-style: italic;
         color: rgba({score_rgb}, 0.28);
         text-shadow: 0 1px 0 {lite_c};
@@ -340,7 +340,7 @@ def load_custom_css():
     .tech-badge, .tag-chip {{
         font-family: "Courier New", monospace;
         font-weight: 900;
-        font-size: 0.8em;
+        font-size: 0.72em;
         background-color: {colors.get('WING', '#fff5dd')};
         color: {score};
         padding: 2px 6px;
@@ -365,7 +365,7 @@ def load_custom_css():
     .small-badge {{
         font-family: "Courier New", monospace;
         font-weight: 700;
-        font-size: 0.7em;
+        font-size: 0.65em;
         background-color: {colors.get('MUTE', '#e5dcce')};
         color: {colors.get('BAR', '#6b6b70')};
         padding: 2px 6px;
@@ -374,7 +374,7 @@ def load_custom_css():
 
     .ribbon-label {{
         font-weight: 900;
-        font-size: 0.78em;
+        font-size: 0.7em;
         letter-spacing: 0.08em;
         color: {outline};
         text-shadow: 0 1px 0 rgba(255,255,255,0.25);
@@ -383,7 +383,7 @@ def load_custom_css():
     .pennant-label {{
         font-family: "Courier New", monospace;
         font-weight: 700;
-        font-size: 0.75em;
+        font-size: 0.7em;
         color: {outline};
         text-shadow: 0 1px 0 rgba(255,255,255,0.25);
     }}
@@ -406,7 +406,7 @@ def load_custom_css():
     .knob-tag {{
         font-family: "Courier New", monospace;
         font-weight: 900;
-        font-size: 0.62em;
+        font-size: 0.58em;
         color: {colors.get('BAR', '#6b6b70')};
         letter-spacing: 0.05em;
         text-shadow: 0 1px 0 {lite_c};
@@ -414,7 +414,7 @@ def load_custom_css():
 
     .brand-tag {{
         font-family: "Courier New", monospace;
-        font-size: 0.6em;
+        font-size: 0.56em;
         letter-spacing: 0.08em;
         color: rgba({score_rgb}, 0.45);
         background-color: {colors.get('HALL', '#2c2c30')};
