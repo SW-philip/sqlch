@@ -17,20 +17,20 @@ class NowPlayingPanel(Gtk.Box):
     }
 
     def __init__(self, parent_window):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        self.set_margin_start(4)
-        self.set_margin_end(4)
-        self.set_margin_top(4)
-        self.set_margin_bottom(4)
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        self.set_margin_start(3)
+        self.set_margin_end(3)
+        self.set_margin_top(3)
+        self.set_margin_bottom(3)
         self.set_valign(Gtk.Align.CENTER)
         self.win = parent_window
 
         # Header card
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         card.add_css_class("card")
 
         # --- Flanked album deck: nav column / art / transport column ---
-        deck_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        deck_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         deck_box.set_halign(Gtk.Align.CENTER)
 
         self.nav_column = NavColumn()
@@ -39,7 +39,7 @@ class NowPlayingPanel(Gtk.Box):
 
         # Hero cover art elements (Front side)
         self.cover_img = Gtk.Image()
-        self.cover_img.set_pixel_size(130)
+        self.cover_img.set_pixel_size(98)
         self.cover_placeholder = Gtk.Label(label="♪")
         self.cover_placeholder.add_css_class("cover-glyph")
 
@@ -52,7 +52,7 @@ class NowPlayingPanel(Gtk.Box):
         # Tracklist Matrix Sheet (Back side)
         track_scroll = Gtk.ScrolledWindow()
         track_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        track_scroll.set_size_request(130, 130)
+        track_scroll.set_size_request(98, 98)
         track_scroll.add_css_class("art-card-back")
 
         self.track_list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -136,7 +136,7 @@ class NowPlayingPanel(Gtk.Box):
         lbl_rec_tag.add_css_class("knob-tag")
         rec_wrap.append(lbl_rec_tag)
 
-        right_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        right_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         right_col.set_valign(Gtk.Align.CENTER)
         right_col.append(rec_wrap)
         right_col.append(btn_stop)
@@ -150,7 +150,7 @@ class NowPlayingPanel(Gtk.Box):
         card.append(self.eq_strip)
 
         # Meta details text stack, centered below the art
-        text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         text_box.set_halign(Gtk.Align.CENTER)
         self.lbl_title = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
         self.lbl_title.add_css_class("meta-title")
@@ -181,7 +181,7 @@ class NowPlayingPanel(Gtk.Box):
         self._pre_boost_vol: float | None = None
         self.vol_slider.connect("boost-toggled", self.on_boost_toggled)
 
-        vol_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        vol_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         vol_row.append(self.vol_slider)
         card.append(vol_row)
 
@@ -199,7 +199,7 @@ class NowPlayingPanel(Gtk.Box):
         card.append(self.btn_toggle)
 
         # Readout strip
-        self.tech_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.tech_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         self.tech_box.set_halign(Gtk.Align.CENTER)
 
         self.lbl_vol_percent = Gtk.Label(label="0%")
@@ -406,7 +406,7 @@ class NowPlayingPanel(Gtk.Box):
     def _apply_cover_path(self, path: str, artist: str, title: str) -> bool:
         if self._cur_artist == artist and self._cur_title == title:
             try:
-                pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 130, 130, True)
+                pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 98, 98, True)
                 self.cover_img.set_from_pixbuf(pb)
                 self.cover_stack.set_visible_child_name("art")
             except Exception:
