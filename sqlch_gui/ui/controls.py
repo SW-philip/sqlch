@@ -52,11 +52,11 @@ class ThreadSlider(Gtk.DrawingArea):
 
     # Single source of truth for the button's edge margin and the nub's
     # geometry, so drawing and hit-testing can never drift apart.
-    _MARGIN = 10.0
-    _NUB_GAP = 10.0
-    _NUB_ZONE = 34.0
-    _NUB_RADIUS_X = 9.0
-    _NUB_RADIUS_Y = 13.0
+    _MARGIN = 8.0
+    _NUB_GAP = 7.0
+    _NUB_ZONE = 26.0
+    _NUB_RADIUS_X = 7.0
+    _NUB_RADIUS_Y = 10.0
 
     def __init__(self, adjustment: Gtk.Adjustment):
         super().__init__()
@@ -64,7 +64,7 @@ class ThreadSlider(Gtk.DrawingArea):
         self.boosted = False
         self.set_focusable(True)
         self.set_hexpand(True)
-        self.set_size_request(-1, 34)
+        self.set_size_request(-1, 26)
 
         self.adj.connect("value-changed", lambda _: self.queue_draw())
         self.set_draw_func(self._on_draw)
@@ -164,7 +164,7 @@ class ThreadSlider(Gtk.DrawingArea):
             cr.set_dash([1.5, 1.5])
             cr.set_line_width(1.2)
             cr.set_source_rgba(*thread_rgb, 0.5)
-            cr.arc(thread_x, cy, 3.0, 0, 2 * math.pi)
+            cr.arc(thread_x, cy, 2.2, 0, 2 * math.pi)
             cr.stroke()
             cr.restore()
             button_x = nub_x
@@ -176,7 +176,7 @@ class ThreadSlider(Gtk.DrawingArea):
         # Tufted button: domed radial gradient, single center dimple,
         # four pull-lines radiating out to the puckered fabric edge --
         # the chesterfield-upholstery look, not a sew-through button.
-        radius = 15.0
+        radius = 11.0
         gradient = cairo.RadialGradient(
             button_x - radius * 0.3, cy - radius * 0.3, radius * 0.1,
             button_x, cy, radius,
@@ -189,7 +189,7 @@ class ThreadSlider(Gtk.DrawingArea):
         cr.fill()
 
         cr.set_source_rgba(*dimple_rgb, 1.0)
-        cr.arc(button_x, cy, 2.6, 0, 2 * math.pi)
+        cr.arc(button_x, cy, 2.0, 0, 2 * math.pi)
         cr.fill()
 
         cr.save()
