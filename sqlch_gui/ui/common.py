@@ -489,6 +489,19 @@ def load_custom_css():
         border-color: transparent;
     }}
 
+    .field-entry {{
+        background-color: {colors.get('WING', '#fff5dd')};
+        color: {score};
+        border-radius: 8px;
+        padding: 4px 8px;
+        border: 2px dashed {thread};
+        box-shadow: 0 0 0 1px transparent, {slight_press}, {hem(2, puff=False)};
+    }}
+    .field-entry:focus-within {{
+        border: 2px dashed {colors.get('ROOT', '#f4b84b')};
+        box-shadow: 0 0 0 2px {colors.get('ROOT', '#f4b84b')};
+    }}
+
     /* Album Deck Outer Container - baseline rotation state */
     .album-deck-wrapper {{
         border-radius: 12px;

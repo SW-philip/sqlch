@@ -29,6 +29,7 @@ class StationListPanel(Gtk.Box):
 
         # Inline catalog text filtering bar
         self.filter_entry = Gtk.Entry(placeholder_text="Filter local library...")
+        self.filter_entry.add_css_class("field-entry")
         self.filter_entry.connect("changed", self.on_filter_changed)
         self.append(self.filter_entry)
 
@@ -37,8 +38,10 @@ class StationListPanel(Gtk.Box):
         add_box.add_css_class("list-header")
         self.ent_name = Gtk.Entry(placeholder_text="Station Name")
         self.ent_name.set_hexpand(True)
+        self.ent_name.add_css_class("field-entry")
         self.ent_url = Gtk.Entry(placeholder_text="Stream URL")
         self.ent_url.set_hexpand(True)
+        self.ent_url.add_css_class("field-entry")
         btn_add = Gtk.Button(icon_name="list-add-symbolic")
         btn_add.connect("clicked", self.on_add_station)
 

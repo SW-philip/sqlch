@@ -21,6 +21,7 @@ class DiscoverPanel(Gtk.Box):
         search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.ent_query = Gtk.Entry(placeholder_text="Search worldwide directory...")
         self.ent_query.set_hexpand(True)
+        self.ent_query.add_css_class("field-entry")
         self.ent_query.connect("activate", self.on_search)
 
         btn_go = Gtk.Button(icon_name="edit-find-symbolic")
