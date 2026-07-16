@@ -321,7 +321,7 @@ class RecordBubble(Gtk.DrawingArea):
         super().__init__()
         self.mode = "full"
         self.recording = False
-        self.set_size_request(46, 46)
+        self.set_size_request(34, 34)
         self.set_focusable(True)
         self.set_draw_func(self._on_draw)
         self._update_tooltip()
@@ -368,7 +368,7 @@ class RecordBubble(Gtk.DrawingArea):
     def _on_draw(self, area, cr, width, height, user_data=None):
         cx = width / 2.0
         cy = height / 2.0
-        radius = min(width, height) / 2.0 - 5.0
+        radius = min(width, height) / 2.0 - 4.0
 
         if self.recording:
             # Soft glow behind the pressed bubble
@@ -446,8 +446,8 @@ class NavColumn(Gtk.Box):
         self._buttons = {}
 
         self._spool = Gtk.DrawingArea()
-        self._spool.set_content_width(18)
-        self._spool.set_content_height(18)
+        self._spool.set_content_width(14)
+        self._spool.set_content_height(14)
         self._spool.set_draw_func(self._draw_spool)
 
         btn_mini = Gtk.Button()
