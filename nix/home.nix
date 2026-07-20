@@ -11,7 +11,7 @@ let
     # evaluation than home-manager's. Same version, different store path -> two
     # builds of glib/gdk-pixbuf loaded into one process -> GObject registers
     # GIcon twice and deadlocks in its type-system lock. Keep this list self-contained.
-    export GI_TYPELIB_PATH="${pkgs.gtk4-layer-shell}/lib/girepository-1.0:${pkgs.gtk4}/lib/girepository-1.0:${pkgs.gdk-pixbuf}/lib/girepository-1.0:${pkgs.pango}/lib/girepository-1.0:${pkgs.graphene}/lib/girepository-1.0:${pkgs.harfbuzz}/lib/girepository-1.0:${pkgs.gobject-introspection}/lib/girepository-1.0"
+    export GI_TYPELIB_PATH="${pkgs.gtk4-layer-shell}/lib/girepository-1.0:${pkgs.gtk4}/lib/girepository-1.0:${pkgs.gdk-pixbuf}/lib/girepository-1.0:${pkgs.pango.out}/lib/girepository-1.0:${pkgs.graphene}/lib/girepository-1.0:${pkgs.harfbuzz}/lib/girepository-1.0:${pkgs.gobject-introspection}/lib/girepository-1.0"
     export LD_LIBRARY_PATH="${pkgs.gtk4-layer-shell}/lib:${pkgs.graphene}/lib"
     export LD_PRELOAD="${pkgs.gtk4-layer-shell}/lib/libgtk4-layer-shell.so"
     export SQLCH_GUI_PALETTE="${cfg.palettePath}"
