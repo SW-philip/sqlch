@@ -81,3 +81,35 @@ def heard_pairs(conn: sqlite3.Connection) -> set[tuple[str, str]]:
         "WHERE artist IS NOT NULL AND title IS NOT NULL"
     ).fetchall()
     return {(r["artist"], r["title"]) for r in rows}
+
+
+def record_candidate_probe(
+    conn: sqlite3.Connection,
+    station_id: str,
+    artist: str | None,
+    title: str | None,
+    *,
+    when: int | None = None,
+) -> None:
+    last = conn.execute(
+        "SELECT artist, title FROM candidate_probes "
+        "WHERE station_id = ? ORDER BY observed_at DESC LIMIT 1",
+        (station_id,),
+    ).fetchone()
+    if last is not None and last["artist"] == artist and last["title"] == title:
+        return
+    conn.execute(
+        "INSERT INTO candidate_probes (station_id, artist, title, observed_at) "
+        "VALUES (?, ?, ?, ?)",
+        (station_id, artist, title, when if when is not None else int(time.time())),
+    )
+    conn.commit()
+
+
+def get_probes(conn: sqlite3.Connection, station_id: str) -> list[dict]:
+    rows = conn.execute(
+        "SELECT artist, title, observed_at FROM candidate_probes "
+        "WHERE station_id = ? ORDER BY observed_at ASC",
+        (station_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
