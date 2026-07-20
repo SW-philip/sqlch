@@ -1,5 +1,6 @@
 """Network Radio-Browser directory scanning interface."""
 
+import html
 import threading
 from gi.repository import Gtk, GLib
 from .. import radiobrowser
@@ -83,7 +84,7 @@ class DiscoverPanel(Gtk.Box):
 
     def on_tag_clicked(self, tag: str):
         self.discovery_container.set_visible(False)
-        self.lbl_active_filter.set_markup(f"Active Genre: <b>{tag}</b>")
+        self.lbl_active_filter.set_markup(f"Active Genre: <b>{html.escape(tag)}</b>")
         self.reset_banner.set_visible(True)
         self.spinner.start()
         while child := self.results_box.get_first_child():
@@ -99,7 +100,7 @@ class DiscoverPanel(Gtk.Box):
         if not q:
             return
         self.discovery_container.set_visible(False)
-        self.lbl_active_filter.set_markup(f"Search Query: <b>{q}</b>")
+        self.lbl_active_filter.set_markup(f"Search Query: <b>{html.escape(q)}</b>")
         self.reset_banner.set_visible(True)
         self.spinner.start()
         while child := self.results_box.get_first_child():

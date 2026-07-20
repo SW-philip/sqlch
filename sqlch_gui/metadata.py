@@ -1,6 +1,7 @@
 """ICY track metadata, enriched cache, cover art, and sqlch enrich bridge."""
 
 import hashlib
+import html
 import json
 import re
 import socket
@@ -28,6 +29,7 @@ def _parse_iheart(title: str) -> tuple[str | None, str | None]:
 def parse_icy(title: str) -> tuple[str | None, str | None]:
     if not title:
         return None, None
+    title = html.unescape(title)
     if "song_spot=" in title:
         return _parse_iheart(title)
     if " - " in title:

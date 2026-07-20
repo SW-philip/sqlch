@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 import os
 import socket
@@ -129,6 +130,7 @@ def mpv_set_metadata(key: str, value: Any) -> None:
 def _parse_icy(title: str) -> tuple[str | None, str | None]:
     if not title:
         return None, None
+    title = html.unescape(title)
     if " - " in title:
         artist, track = title.split(" - ", 1)
     elif "-" in title:
