@@ -9,6 +9,7 @@ explicit `conn` parameter and lets the caller own its lifecycle.
 from __future__ import annotations
 
 import sqlite3
+import time
 from pathlib import Path
 
 from sqlch.core.paths import data_dir
@@ -48,3 +49,35 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.executescript(_SCHEMA)
     return conn
+
+
+def record_heard_track(
+    conn: sqlite3.Connection,
+    station_id: str,
+    artist: str | None,
+    title: str | None,
+    *,
+    when: int | None = None,
+) -> None:
+    conn.execute(
+        "INSERT INTO heard_tracks (station_id, artist, title, first_heard_at) "
+        "VALUES (?, ?, ?, ?)",
+        (station_id, artist, title, when if when is not None else int(time.time())),
+    )
+    conn.commit()
+
+
+def has_heard(conn: sqlite3.Connection, artist: str, title: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM heard_tracks WHERE artist = ? AND title = ? LIMIT 1",
+        (artist, title),
+    ).fetchone()
+    return row is not None
+
+
+def heard_pairs(conn: sqlite3.Connection) -> set[tuple[str, str]]:
+    rows = conn.execute(
+        "SELECT artist, title FROM heard_tracks "
+        "WHERE artist IS NOT NULL AND title IS NOT NULL"
+    ).fetchall()
+    return {(r["artist"], r["title"]) for r in rows}
