@@ -5,9 +5,15 @@ let
   sqlchGuiPython = pkgs.python3.withPackages (ps: with ps; [ pygobject3 ]);
 
   launcher = pkgs.writeShellScriptBin "sqlch-gui" ''
-    export GI_TYPELIB_PATH="${pkgs.gtk4-layer-shell}/lib/girepository-1.0:${pkgs.gtk4}/lib/girepository-1.0:${pkgs.gdk-pixbuf}/lib/girepository-1.0:${pkgs.pango}/lib/girepository-1.0:${pkgs.graphene}/lib/girepository-1.0:${pkgs.harfbuzz}/lib/girepository-1.0:$GI_TYPELIB_PATH"
-    export LD_LIBRARY_PATH="${pkgs.gtk4-layer-shell}/lib:${pkgs.graphene}/lib:$LD_LIBRARY_PATH"
-    export LD_PRELOAD="${pkgs.gtk4-layer-shell}/lib/libgtk4-layer-shell.so:$LD_PRELOAD"
+    # Deliberately not appending the inherited $GI_TYPELIB_PATH / $LD_LIBRARY_PATH /
+    # $LD_PRELOAD here: the running session (niri, via systemd --user) can carry its
+    # own copies of these same libraries resolved from a different nixpkgs
+    # evaluation than home-manager's. Same version, different store path -> two
+    # builds of glib/gdk-pixbuf loaded into one process -> GObject registers
+    # GIcon twice and deadlocks in its type-system lock. Keep this list self-contained.
+    export GI_TYPELIB_PATH="${pkgs.gtk4-layer-shell}/lib/girepository-1.0:${pkgs.gtk4}/lib/girepository-1.0:${pkgs.gdk-pixbuf}/lib/girepository-1.0:${pkgs.pango}/lib/girepository-1.0:${pkgs.graphene}/lib/girepository-1.0:${pkgs.harfbuzz}/lib/girepository-1.0"
+    export LD_LIBRARY_PATH="${pkgs.gtk4-layer-shell}/lib:${pkgs.graphene}/lib"
+    export LD_PRELOAD="${pkgs.gtk4-layer-shell}/lib/libgtk4-layer-shell.so"
     export SQLCH_GUI_PALETTE="${cfg.palettePath}"
     export PYTHONPATH="${../.}:$PYTHONPATH"
     exec ${sqlchGuiPython}/bin/python3 -m sqlch_gui "$@"
