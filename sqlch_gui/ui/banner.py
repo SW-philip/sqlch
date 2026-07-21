@@ -94,21 +94,33 @@ class RibbonBanner(Gtk.Overlay):
 
 
 class TornSeparator(Gtk.DrawingArea):
-    """Torn-paper seam between the Now Playing sheet and the drawer below.
+    """Torn-paper seam between the Now Playing sheet and the drawer.
 
-    Reads as the ragged bottom edge of the sheet above; a short run of
-    stitch dashes in the middle is the grab affordance. Purely visual --
-    the window owns the drag gesture and drawer state, this widget just
-    draws the seam and swaps the grab/grabbing cursor.
+    Reads as the ragged edge of the sheet where the drawer tucks under
+    it; a short run of stitch dashes in the middle is the grab
+    affordance. Purely visual -- the window owns the drag gesture and
+    drawer state, this widget just draws the seam and swaps the
+    grab/grabbing cursor.
+
+    HORIZONTAL (the default) is a strip below Now Playing, torn along
+    its bottom edge, for a drawer that drops down. VERTICAL is a strip
+    beside Now Playing, torn along its edge facing the drawer, for a
+    drawer that slides out to the side -- same construction, axes
+    swapped.
     """
 
-    _HEIGHT = 18
-    _BODY_H = 8.0
+    _THICKNESS = 18
+    _BODY = 8.0
 
-    def __init__(self):
+    def __init__(self, orientation: Gtk.Orientation = Gtk.Orientation.HORIZONTAL):
         super().__init__()
-        self.set_hexpand(True)
-        self.set_content_height(self._HEIGHT)
+        self._orientation = orientation
+        if orientation == Gtk.Orientation.VERTICAL:
+            self.set_vexpand(True)
+            self.set_content_width(self._THICKNESS)
+        else:
+            self.set_hexpand(True)
+            self.set_content_height(self._THICKNESS)
         self.set_draw_func(self._on_draw)
         self.set_cursor_from_name("grab")
         self.set_tooltip_text("Drag to open the drawer")
@@ -120,14 +132,25 @@ class TornSeparator(Gtk.DrawingArea):
         # Depths and spacing are hashed from the tooth index (not random)
         # so the tear never shimmers between redraws.
         points = []
-        x, i = 0.0, 0
-        max_depth = height - 2.0
-        while x < width:
-            frac = abs(math.sin(i * 12.9898 + 4.1414))
-            points.append((x, self._BODY_H + 1.5 + frac * (max_depth - self._BODY_H - 1.5)))
-            x += 9.0 * (0.7 + 0.6 * abs(math.sin(i * 7.31)))
-            i += 1
-        points.append((float(width), self._BODY_H + 1.5))
+        if self._orientation == Gtk.Orientation.VERTICAL:
+            y, i = 0.0, 0
+            max_depth = width - 2.0
+            while y < height:
+                frac = abs(math.sin(i * 12.9898 + 4.1414))
+                depth = self._BODY + 1.5 + frac * (max_depth - self._BODY - 1.5)
+                points.append((width - depth, y))
+                y += 9.0 * (0.7 + 0.6 * abs(math.sin(i * 7.31)))
+                i += 1
+            points.append((width - self._BODY - 1.5, float(height)))
+        else:
+            x, i = 0.0, 0
+            max_depth = height - 2.0
+            while x < width:
+                frac = abs(math.sin(i * 12.9898 + 4.1414))
+                points.append((x, self._BODY + 1.5 + frac * (max_depth - self._BODY - 1.5)))
+                x += 9.0 * (0.7 + 0.6 * abs(math.sin(i * 7.31)))
+                i += 1
+            points.append((float(width), self._BODY + 1.5))
         return points
 
     def _on_draw(self, area, cr, width, height, user_data=None):
@@ -137,13 +160,21 @@ class TornSeparator(Gtk.DrawingArea):
         thread = _hex_to_rgb_floats(colors.get('BAR', '#6a6a6a'))
 
         points = self._tear_points(width, height)
+        vertical = self._orientation == Gtk.Orientation.VERTICAL
 
-        def tear_path(y_off: float):
-            cr.move_to(0, 0)
-            cr.line_to(0, self._BODY_H + y_off)
-            for px, py in points:
-                cr.line_to(px, py + y_off)
-            cr.line_to(width, 0)
+        def tear_path(offset: float):
+            if vertical:
+                cr.move_to(width, 0)
+                cr.line_to(width - self._BODY - offset, 0)
+                for px, py in points:
+                    cr.line_to(px - offset, py)
+                cr.line_to(width, height)
+            else:
+                cr.move_to(0, 0)
+                cr.line_to(0, self._BODY + offset)
+                for px, py in points:
+                    cr.line_to(px, py + offset)
+                cr.line_to(width, 0)
             cr.close_path()
 
         # Soft shadow peeking out under the tear, then the paper on top
@@ -160,9 +191,14 @@ class TornSeparator(Gtk.DrawingArea):
         cr.set_dash([4.0, 3.5])
         cr.set_line_width(1.6)
         cr.set_source_rgba(*thread, 0.8)
-        cy = self._BODY_H / 2.0 + 0.5
-        cr.move_to(width / 2.0 - 23.0, cy)
-        cr.line_to(width / 2.0 + 23.0, cy)
+        if vertical:
+            cx = width - self._BODY / 2.0 - 0.5
+            cr.move_to(cx, height / 2.0 - 23.0)
+            cr.line_to(cx, height / 2.0 + 23.0)
+        else:
+            cy = self._BODY / 2.0 + 0.5
+            cr.move_to(width / 2.0 - 23.0, cy)
+            cr.line_to(width / 2.0 + 23.0, cy)
         cr.stroke()
         cr.restore()
 

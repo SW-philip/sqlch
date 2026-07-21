@@ -13,9 +13,9 @@ from .now_playing import NowPlayingPanel
 from .station_list import StationListPanel
 from .discover import DiscoverPanel
 
-MAX_DRAWER_HEIGHT = 320        # ceiling; the effective max also fits the monitor
-DRAWER_BOTTOM_GAP = 12         # breathing room kept above the screen's bottom edge
-DRAWER_OPEN_THRESHOLD = 0.35   # fraction of max height that commits an open
+MAX_DRAWER_WIDTH = 320         # ceiling; the effective max also fits the monitor
+DRAWER_SIDE_GAP = 12           # breathing room kept past the screen's left edge
+DRAWER_OPEN_THRESHOLD = 0.35   # fraction of max width that commits an open
 DRAWER_FLING_VELOCITY = 600.0  # px/s at release that overrides position
 DRAWER_CLICK_SLOP = 8.0        # px of travel under which a "drag" is just a click
 DRAWER_SPRING_OMEGA = 20.0     # rad/s
@@ -26,9 +26,10 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         super().__init__(application=app)
         self.set_title("sqlch-gui")
         # Now Playing is permanently visible; Library/Discover live in a
-        # drawer beneath the torn seam. Height is content-driven so the
-        # layer-shell surface hugs the card when closed and grows as the
-        # drawer is pulled open.
+        # drawer that slides out to its left through the torn seam. Width
+        # is content-driven so the layer-shell surface hugs the card when
+        # closed and grows leftward (off the right anchor) as the drawer
+        # is pulled open.
         self.set_default_size(290, -1)
 
         # Inject theme constants
@@ -45,8 +46,9 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         Gtk4LayerShell.set_keyboard_mode(self, Gtk4LayerShell.KeyboardMode.ON_DEMAND)
 
         # Top surface: Now Playing stays permanently visible; Library/
-        # Discover live in a drag-open drawer stacked below the torn seam.
-        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        # Discover live in a drag-open drawer that slides out to its
+        # left, beside the torn seam.
+        main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         main_box.add_css_class("popup-window")
         self.set_child(main_box)
 
@@ -54,25 +56,19 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         self.now_playing = NowPlayingPanel(self)
         self.station_list = StationListPanel(self)
         self.discover = DiscoverPanel(self)
-        main_box.append(self.now_playing)
 
-        # The torn seam doubles as the drawer's drag handle
-        self.seam = TornSeparator()
-        seam_drag = Gtk.GestureDrag.new()
-        seam_drag.connect("drag-begin", self._on_seam_drag_begin)
-        seam_drag.connect("drag-update", self._on_seam_drag_update)
-        seam_drag.connect("drag-end", self._on_seam_drag_end)
-        self.seam.add_controller(seam_drag)
-        main_box.append(self.seam)
-
-        # Drawer region: a clipping ScrolledWindow whose height-request is
-        # the drawer position (0 = closed .. MAX_DRAWER_HEIGHT = open),
+        # Drawer region: a clipping ScrolledWindow whose width-request is
+        # the drawer position (0 = closed .. MAX_DRAWER_WIDTH = open),
         # driven by seam drags and the spring snap. The "mini" page is the
         # parked empty state so the panels unmap (and stop probing) while
-        # the drawer is shut.
+        # the drawer is shut. vexpand pins its height to Now Playing's so
+        # overflowing content scrolls instead of stretching the window.
         self.dropdown_stack = Gtk.Stack()
         self.dropdown_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         self.dropdown_stack.set_transition_duration(150)
+        # Non-homogeneous: measure() below should reflect the visible
+        # page's own natural width, not the widest page in the stack.
+        self.dropdown_stack.set_hhomogeneous(False)
         self.dropdown_stack.add_named(Gtk.Box(), "mini")
         self.dropdown_stack.add_named(self.station_list, "library")
         self.dropdown_stack.add_named(self.discover, "discover")
@@ -80,16 +76,28 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
 
         self.dropdown_scroll = Gtk.ScrolledWindow()
         self.dropdown_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        self.dropdown_scroll.set_size_request(-1, 0)
+        self.dropdown_scroll.set_size_request(0, -1)
+        self.dropdown_scroll.set_vexpand(True)
         self.dropdown_scroll.set_child(self.dropdown_stack)
         main_box.append(self.dropdown_scroll)
 
+        # The torn seam doubles as the drawer's drag handle
+        self.seam = TornSeparator(orientation=Gtk.Orientation.VERTICAL)
+        seam_drag = Gtk.GestureDrag.new()
+        seam_drag.connect("drag-begin", self._on_seam_drag_begin)
+        seam_drag.connect("drag-update", self._on_seam_drag_update)
+        seam_drag.connect("drag-end", self._on_seam_drag_end)
+        self.seam.add_controller(seam_drag)
+        main_box.append(self.seam)
+
+        main_box.append(self.now_playing)
+
         self._drawer_pos = 0.0
         self._drawer_target = 0.0
-        self._drawer_max = float(MAX_DRAWER_HEIGHT)
+        self._drawer_max = float(MAX_DRAWER_WIDTH)
         self._drawer_tick_id = None
         self._drawer_panel = "library"  # what a bare seam-drag reveals
-        self._drag_start_h = 0.0
+        self._drag_start_pos = 0.0
         self._drag_vel = 0.0
         self._drag_pending = 0.0
         self._drag_last = (0, 0.0)
@@ -120,15 +128,23 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         else:
             self._drawer_panel = name
             self.dropdown_stack.set_visible_child_name(name)
-            self._animate_drawer_to(self._compute_drawer_max())
             if name == "library":
                 self.station_list.on_shown()
+            # Open only as wide as the panel actually needs -- an empty
+            # or sparse list shouldn't drag along dead space up to the
+            # ceiling.
+            target = min(self._measure_drawer_width(), self._compute_drawer_max())
+            self._animate_drawer_to(target)
+
+    def _measure_drawer_width(self) -> float:
+        _min_w, nat_w, _mb, _nb = self.dropdown_stack.measure(Gtk.Orientation.HORIZONTAL, -1)
+        return float(nat_w)
 
     # --- Drawer: seam drag + spring snap ---
 
     def _compute_drawer_max(self) -> float:
-        """MAX_DRAWER_HEIGHT capped so the fully open window still fits on
-        the monitor below the layer-shell top margin. Whenever a fresh
+        """MAX_DRAWER_WIDTH capped so the fully open window still fits on
+        the monitor past the layer-shell right margin. Whenever a fresh
         measurement can't be trusted -- surface/monitor unresolved, window
         not yet allocated, or an animation in flight (allocation lags
         _drawer_pos by a frame) -- reuse the last good value instead of
@@ -137,19 +153,19 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
             return self._drawer_max
         surface = self.get_surface()
         monitor = self.get_display().get_monitor_at_surface(surface) if surface else None
-        if monitor is None or self.get_height() <= 0:
+        if monitor is None or self.get_width() <= 0:
             return self._drawer_max
-        # Everything that isn't drawer: current window height minus the
+        # Everything that isn't drawer: current window width minus the
         # drawer's current share of it
-        overhead = self.get_height() - round(self._drawer_pos)
-        top_margin = Gtk4LayerShell.get_margin(self, Gtk4LayerShell.Edge.TOP)
-        avail = monitor.get_geometry().height - top_margin - overhead - DRAWER_BOTTOM_GAP
-        self._drawer_max = float(max(0, min(MAX_DRAWER_HEIGHT, avail)))
+        overhead = self.get_width() - round(self._drawer_pos)
+        right_margin = Gtk4LayerShell.get_margin(self, Gtk4LayerShell.Edge.RIGHT)
+        avail = monitor.get_geometry().width - right_margin - overhead - DRAWER_SIDE_GAP
+        self._drawer_max = float(max(0, min(MAX_DRAWER_WIDTH, avail)))
         return self._drawer_max
 
     def _set_drawer_pos(self, pos: float):
         self._drawer_pos = pos
-        self.dropdown_scroll.set_size_request(-1, max(0, round(pos)))
+        self.dropdown_scroll.set_size_request(max(0, round(pos)), -1)
 
     def _stop_drawer_anim(self):
         if self._drawer_tick_id:
@@ -159,7 +175,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
     def _on_seam_drag_begin(self, gesture, start_x, start_y):
         self._stop_drawer_anim()  # grab mid-snap steals the drawer back
         self._compute_drawer_max()
-        self._drag_start_h = self._drawer_pos
+        self._drag_start_pos = self._drawer_pos
         self._drag_vel = 0.0
         self._drag_pending = self._drawer_pos
         self._drag_last = (GLib.get_monotonic_time(), self._drawer_pos)
@@ -177,7 +193,9 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         return GLib.SOURCE_CONTINUE
 
     def _on_seam_drag_update(self, gesture, offset_x, offset_y):
-        pos = max(0.0, min(self._drawer_max, self._drag_start_h + offset_y))
+        # Opening means pulling the seam left (away from Now Playing), so
+        # a leftward (negative) offset_x increases pos.
+        pos = max(0.0, min(self._drawer_max, self._drag_start_pos - offset_x))
         now = GLib.get_monotonic_time()
         then, last_pos = self._drag_last
         dt = (now - then) / 1_000_000
@@ -194,9 +212,9 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         self._stop_drawer_anim()  # retire the drag coalescer
         self._set_drawer_pos(self._drag_pending)
         self.seam.set_grabbed(False)
-        if abs(self._drawer_pos - self._drag_start_h) < DRAWER_CLICK_SLOP:
+        if abs(self._drawer_pos - self._drag_start_pos) < DRAWER_CLICK_SLOP:
             # A click, not a drag: settle back to whichever state we were in
-            opening = self._drag_start_h > self._drawer_max * 0.5
+            opening = self._drag_start_pos > self._drawer_max * 0.5
         elif abs(self._drag_vel) > DRAWER_FLING_VELOCITY:
             opening = self._drag_vel > 0  # a committed flick wins outright
         else:

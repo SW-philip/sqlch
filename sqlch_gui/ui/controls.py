@@ -26,10 +26,9 @@ def _shade(rgb: tuple[float, float, float], factor: float) -> tuple[float, float
 
 
 class ThreadSlider(Gtk.DrawingArea):
-    """Full-width volume fader drawn as a tufted upholstery button riding
-    a dashed sewing thread. Backs onto a Gtk.Adjustment, same as the
-    zipper slider it replaces, but the track is a plain thread with no
-    open/closed states -- all the visual richness lives in the button.
+    """Full-width volume fader: a plain dot riding a dotted sewing
+    thread. Backs onto a Gtk.Adjustment, same as the zipper slider it
+    replaces, but neither track nor button carries much decoration --
     Click anywhere on the thread to jump there; drag the button; scroll
     to nudge.
 
@@ -126,18 +125,21 @@ class ThreadSlider(Gtk.DrawingArea):
         bar_rgb = _hex_to_rgb_floats(colors.get('BAR', '#6e6a86'))
         thread_rgb = _shade(bar_rgb, 1.15)
         button_rgb = _shade(bar_rgb, 1.05)
-        dimple_rgb = _shade(bar_rgb, 0.3)
         forte_rgb = _hex_to_rgb_floats(colors.get('FORTE', '#eb6f92'))
 
-        # The sewing thread: a plain dashed line across the track only
-        # (never through the nub zone) -- no open/closed states.
+        # The sewing thread: evenly spaced dots across the track only
+        # (never through the nub zone) -- no open/closed states. Drawn as
+        # discrete filled circles rather than a cairo dashed stroke: a
+        # dashed stroke's phase drifts against the pixel grid and beats,
+        # making some dots read fainter or skipped entirely.
         cr.save()
-        cr.set_dash([4.0, 4.0])
-        cr.set_line_width(2.0)
         cr.set_source_rgba(*thread_rgb, 0.7)
-        cr.move_to(self._MARGIN - 2.0, cy)
-        cr.line_to(track_right, cy)
-        cr.stroke()
+        dot_spacing = 6.0
+        x = self._MARGIN - 2.0
+        while x <= track_right:
+            cr.arc(x, cy, 1.0, 0, 2 * math.pi)
+            cr.fill()
+            x += dot_spacing
         cr.restore()
 
         # The nub: an empty buttonhole loop past the thread's end,
@@ -173,33 +175,18 @@ class ThreadSlider(Gtk.DrawingArea):
             button_x = thread_x
             base_rgb = button_rgb
 
-        # Tufted button: domed radial gradient, single center dimple,
-        # four pull-lines radiating out to the puckered fabric edge --
-        # the chesterfield-upholstery look, not a sew-through button.
-        radius = 11.0
+        # The button: just a dot -- a small flat disc with a hint of a
+        # highlight so it still reads as round, nothing more.
+        radius = 6.0
         gradient = cairo.RadialGradient(
             button_x - radius * 0.3, cy - radius * 0.3, radius * 0.1,
             button_x, cy, radius,
         )
-        gradient.add_color_stop_rgba(0.0, *_shade(base_rgb, 1.5), 1.0)
-        gradient.add_color_stop_rgba(0.5, *base_rgb, 1.0)
-        gradient.add_color_stop_rgba(1.0, *_shade(base_rgb, 0.55), 1.0)
+        gradient.add_color_stop_rgba(0.0, *_shade(base_rgb, 1.3), 1.0)
+        gradient.add_color_stop_rgba(1.0, *_shade(base_rgb, 0.8), 1.0)
         cr.set_source(gradient)
         cr.arc(button_x, cy, radius, 0, 2 * math.pi)
         cr.fill()
-
-        cr.set_source_rgba(*dimple_rgb, 1.0)
-        cr.arc(button_x, cy, 2.0, 0, 2 * math.pi)
-        cr.fill()
-
-        cr.save()
-        cr.set_source_rgba(0.0, 0.0, 0.0, 0.3)
-        cr.set_line_width(1.0)
-        for dx, dy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
-            cr.move_to(button_x, cy)
-            cr.line_to(button_x + dx * radius * 0.7, cy + dy * radius * 0.7)
-        cr.stroke()
-        cr.restore()
 
     def _on_click(self, gesture, n_press, x, y):
         if self._dragging:
