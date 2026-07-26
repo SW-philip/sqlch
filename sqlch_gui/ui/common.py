@@ -114,16 +114,6 @@ def load_custom_css():
         padding: 2px;
     }}
 
-    .sidebar {{
-        background-color: {colors.get('GRAD_STAGE_LO', '#b04343')};
-        background-image: {svg_tactile_filter}, linear-gradient(130deg, {colors.get('GRAD_STAGE_HI', '#d35f5f')}, {colors.get('GRAD_STAGE_LO', '#b04343')});
-        background-repeat: repeat, no-repeat;
-        border-radius: 10px;
-        padding: 4px 2px;
-        border: 2px dashed {thread};
-        box-shadow: 0 0 0 2px transparent, {slight}, {hem(5)};
-    }}
-
     .nav-btn {{
         padding: 4px;
         margin: 2px 0px;

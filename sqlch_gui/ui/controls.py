@@ -347,7 +347,7 @@ class RecordBubble(Gtk.DrawingArea):
 
 
 class NavColumn(Gtk.Box):
-    """Vertical nav-icon rail: Mini (collapse), Library, Discover.
+    """Horizontal nav-icon row: Mini (collapse), Library, Discover.
 
     Not three independent toggle buttons -- clicking Library or Discover
     opens that section (auto-collapsing whichever was open), re-clicking
@@ -362,8 +362,7 @@ class NavColumn(Gtk.Box):
     }
 
     def __init__(self):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        self.add_css_class("sidebar")
+        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         self.set_valign(Gtk.Align.CENTER)
 
         self.active = "mini"
