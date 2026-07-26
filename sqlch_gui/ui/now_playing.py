@@ -6,10 +6,10 @@ from pathlib import Path
 from gi.repository import Gtk, GLib, GdkPixbuf, GObject
 
 from .. import daemon, metadata
-from .controls import ThreadSlider, RecordBubble, NavColumn
+from .controls import ThreadSlider, NavColumn
 from .eq_strip import EqStrip
 
-_REC_MODE_LABELS = {"full": "FULL", "track": "TRK"}
+_REC_MODE_LABELS = {"full": "F", "track": "T"}
 
 class NowPlayingPanel(Gtk.Box):
     __gsignals__ = {
@@ -25,19 +25,27 @@ class NowPlayingPanel(Gtk.Box):
         self.set_valign(Gtk.Align.CENTER)
         self.win = parent_window
 
-        # Header card
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         card.add_css_class("card")
 
-        # --- Flanked album deck: nav column / art / transport column ---
-        deck_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        deck_box.set_halign(Gtk.Align.CENTER)
+        # --- Row 1: nav row + plain-text readout ---
+        nav_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
 
         self.nav_column = NavColumn()
         self.nav_column.connect("nav-selected", lambda nav, name: self.emit("nav-selected", name))
-        deck_box.append(self.nav_column)
+        nav_row.append(self.nav_column)
 
-        # Hero cover art elements (Front side)
+        self.lbl_readout = Gtk.Label(xalign=1.0)
+        self.lbl_readout.add_css_class("readout-line")
+        self.lbl_readout.set_hexpand(True)
+        self.lbl_readout.set_halign(Gtk.Align.END)
+        nav_row.append(self.lbl_readout)
+
+        card.append(nav_row)
+
+        # --- Row 2: cover art (with its 4 corner tags) + text, EQ behind text ---
+        art_text_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+
         self.cover_img = Gtk.Image()
         self.cover_img.set_pixel_size(98)
         self.cover_placeholder = Gtk.Label(label="♪")
@@ -49,7 +57,6 @@ class NowPlayingPanel(Gtk.Box):
         self.cover_stack.add_named(self.cover_img, "art")
         self.clear_cover()
 
-        # Tracklist Matrix Sheet (Back side)
         track_scroll = Gtk.ScrolledWindow()
         track_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         track_scroll.set_size_request(98, 98)
@@ -59,19 +66,16 @@ class NowPlayingPanel(Gtk.Box):
         self.track_list_box.add_css_class("tracklist-container")
         track_scroll.set_child(self.track_list_box)
 
-        # Core physical deck stack switcher
         self.deck_stack = Gtk.Stack()
         self.deck_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         self.deck_stack.set_transition_duration(250)
         self.deck_stack.add_named(self.cover_stack, "front")
         self.deck_stack.add_named(track_scroll, "back")
 
-        # Main stitched wrap framework
         self.stack_wrapper = Gtk.Box()
         self.stack_wrapper.add_css_class("album-deck-wrapper")
         self.stack_wrapper.append(self.deck_stack)
 
-        # Overlay carries the sewn-on corner tags without affecting deck sizing
         self.cover_overlay = Gtk.Overlay()
         self.cover_overlay.set_child(self.stack_wrapper)
 
@@ -91,9 +95,6 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_format_tag.set_visible(False)
         self.cover_overlay.add_overlay(self.lbl_format_tag)
 
-        # Flip-to-tracklist control tucked into the art's own bottom-right
-        # corner (third corner tag), freeing the transport column below to
-        # hold only REC/Stop/Mute.
         self.flip_btn = Gtk.Button(icon_name="object-flip-horizontal-symbolic")
         self.flip_btn.add_css_class("corner-tag-flip")
         self.flip_btn.set_halign(Gtk.Align.END)
@@ -101,135 +102,88 @@ class NowPlayingPanel(Gtk.Box):
         self.flip_btn.connect("clicked", self.on_flip_clicked)
         self.cover_overlay.add_overlay(self.flip_btn)
 
-        deck_box.append(self.cover_overlay)
+        # REC corner tag (bottom-left, 4th corner) -- replaces RecordBubble.
+        # Plain text tag from the same .corner-tag family as LIVE/format;
+        # left-click toggles recording, right-click cycles FULL/TRACK mode.
+        self.rec_tag = Gtk.Button(label="REC")
+        self.rec_tag.add_css_class("corner-tag")
+        self.rec_tag.add_css_class("corner-tag-rec")
+        self.rec_tag.set_halign(Gtk.Align.START)
+        self.rec_tag.set_valign(Gtk.Align.END)
+        self.rec_tag.connect("clicked", self.on_record_clicked)
+        rec_right_click = Gtk.GestureClick.new()
+        rec_right_click.set_button(3)
+        rec_right_click.connect("released", self.on_rec_mode_cycle)
+        self.rec_tag.add_controller(rec_right_click)
+        self.cover_overlay.add_overlay(self.rec_tag)
 
-        # Transport column on the right: REC / Stop / Mute, stacked
-        btn_stop = Gtk.Button(icon_name="media-playback-stop-symbolic")
-        btn_stop.add_css_class("control-btn")
-        btn_stop.connect("clicked", self.on_stop)
-        btn_stop.set_valign(Gtk.Align.CENTER)
+        art_text_row.append(self.cover_overlay)
 
-        self.btn_mute = Gtk.Button(icon_name="audio-volume-high-symbolic")
-        self.btn_mute.add_css_class("control-btn")
-        self.btn_mute.set_valign(Gtk.Align.CENTER)
-        self.btn_mute.connect("clicked", self.on_toggle_mute)
-
-        self.rec_knob = RecordBubble()
-        self.rec_knob.connect("record-toggled", self.on_record_toggled)
-        self.rec_knob.connect("mode-changed", self.on_rec_mode_changed)
-
-        self.lbl_rec_mode = Gtk.Label(label=_REC_MODE_LABELS[self.rec_knob.mode])
-        self.lbl_rec_mode.add_css_class("small-badge")
-        self.lbl_rec_mode.set_halign(Gtk.Align.END)
-        self.lbl_rec_mode.set_valign(Gtk.Align.END)
-        self.lbl_rec_mode.set_can_target(False)
-
-        rec_bubble_overlay = Gtk.Overlay()
-        rec_bubble_overlay.set_child(self.rec_knob)
-        rec_bubble_overlay.add_overlay(self.lbl_rec_mode)
-
-        rec_wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        rec_wrap.set_valign(Gtk.Align.CENTER)
-        rec_wrap.set_halign(Gtk.Align.CENTER)
-        rec_wrap.append(rec_bubble_overlay)
-        lbl_rec_tag = Gtk.Label(label="REC")
-        lbl_rec_tag.add_css_class("knob-tag")
-        rec_wrap.append(lbl_rec_tag)
-
-        right_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        right_col.set_valign(Gtk.Align.CENTER)
-        right_col.append(rec_wrap)
-        right_col.append(btn_stop)
-        right_col.append(self.btn_mute)
-        deck_box.append(right_col)
-
-        card.append(deck_box)
-
+        # Title/artist/genre text, with the EQ strip painted behind it.
+        # The Overlay sizes to its main child (eq_strip) by default, which
+        # would clip the text block -- set_measure_overlay tells it to
+        # also account for the text_box overlay child's own size.
         self.eq_strip = EqStrip()
-        self.eq_strip.set_halign(Gtk.Align.CENTER)
-        card.append(self.eq_strip)
+        self.eq_strip.set_halign(Gtk.Align.FILL)
+        self.eq_strip.set_valign(Gtk.Align.CENTER)
 
-        # Meta details text stack, centered below the art
         text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        text_box.set_halign(Gtk.Align.CENTER)
-        self.lbl_title = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
+        text_box.set_halign(Gtk.Align.START)
+        text_box.set_valign(Gtk.Align.CENTER)
+        self.lbl_title = Gtk.Label(xalign=0.0, justify=Gtk.Justification.LEFT)
         self.lbl_title.add_css_class("meta-title")
         self.lbl_title.set_wrap(True)
-        self.lbl_title.set_max_width_chars(30)
+        self.lbl_title.set_max_width_chars(22)
 
-        self.lbl_artist = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
+        self.lbl_artist = Gtk.Label(xalign=0.0, justify=Gtk.Justification.LEFT)
         self.lbl_artist.add_css_class("meta-artist")
         self.lbl_artist.set_wrap(True)
-        self.lbl_artist.set_max_width_chars(30)
+        self.lbl_artist.set_max_width_chars(22)
 
-        self.lbl_genre = Gtk.Label(xalign=0.5, justify=Gtk.Justification.CENTER)
+        self.lbl_genre = Gtk.Label(xalign=0.0, justify=Gtk.Justification.LEFT)
         self.lbl_genre.add_css_class("thread-label")
 
         text_box.append(self.lbl_title)
         text_box.append(self.lbl_artist)
         text_box.append(self.lbl_genre)
-        card.append(text_box)
 
-        # Volume + primary transport + tech readout live directly in this
-        # same card now -- REC/Stop/Mute moved up into the flanking column
-        # above, so there's no separate "control deck" card anymore.
+        text_overlay = Gtk.Overlay()
+        text_overlay.set_child(self.eq_strip)
+        text_overlay.add_overlay(text_box)
+        text_overlay.set_measure_overlay(text_box, True)
+        text_overlay.set_hexpand(True)
+        art_text_row.append(text_overlay)
+
+        card.append(art_text_row)
+
+        # --- Row 3: Stop / Volume / Mute / Play, one merged control row ---
+        control_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+
+        btn_stop = Gtk.Button(icon_name="media-playback-stop-symbolic")
+        btn_stop.add_css_class("control-btn")
+        btn_stop.connect("clicked", self.on_stop)
+        control_row.append(btn_stop)
+
         self.vol_adj = Gtk.Adjustment(value=0.0, lower=0.0, upper=1.0, step_increment=0.05)
-
         self.vol_slider = ThreadSlider(self.vol_adj)
         self._vol_handler = self.vol_slider.connect("value-changed", self.on_vol_changed)
-
         self._pre_boost_vol: float | None = None
         self.vol_slider.connect("boost-toggled", self.on_boost_toggled)
+        self.vol_slider.set_hexpand(True)
+        control_row.append(self.vol_slider)
 
-        vol_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        vol_row.append(self.vol_slider)
-        card.append(vol_row)
+        self.btn_mute = Gtk.Button(icon_name="audio-volume-high-symbolic")
+        self.btn_mute.add_css_class("control-btn")
+        self.btn_mute.connect("clicked", self.on_toggle_mute)
+        control_row.append(self.btn_mute)
 
-        lbl_vol_tag = Gtk.Label(label="VOL")
-        lbl_vol_tag.add_css_class("knob-tag")
-        lbl_vol_tag.set_halign(Gtk.Align.START)
-        card.append(lbl_vol_tag)
-
-        # Primary transport at 6 o'clock
         self.btn_toggle = Gtk.Button()
         self.btn_toggle.add_css_class("control-btn")
         self.btn_toggle.add_css_class("primary")
-        self.btn_toggle.set_halign(Gtk.Align.CENTER)
         self.btn_toggle.connect("clicked", self.on_toggle_play)
-        card.append(self.btn_toggle)
+        control_row.append(self.btn_toggle)
 
-        # Readout strip
-        self.tech_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        self.tech_box.set_halign(Gtk.Align.CENTER)
-
-        self.lbl_vol_percent = Gtk.Label(label="0%")
-        self.lbl_vol_percent.add_css_class("tech-badge")
-        self.lbl_vol_percent.set_width_chars(5)
-
-        self.lbl_rec = Gtk.Label()
-        self.lbl_rec.add_css_class("tech-badge")
-        self.lbl_rec.add_css_class("rec-badge")
-
-        self.lbl_bitrate = Gtk.Label()
-        self.lbl_bitrate.add_css_class("tech-badge")
-        self.lbl_channels = Gtk.Label()
-        self.lbl_channels.add_css_class("tech-badge")
-        self.lbl_bt = Gtk.Label(label="BT")
-        self.lbl_bt.add_css_class("tech-badge")
-
-        self.lbl_device = Gtk.Label()
-        self.lbl_device.add_css_class("tech-badge")
-        self.lbl_device.set_ellipsize(3)
-        self.lbl_device.set_max_width_chars(12)
-        self.lbl_device.set_visible(False)
-
-        self.tech_box.append(self.lbl_rec)
-        self.tech_box.append(self.lbl_vol_percent)
-        self.tech_box.append(self.lbl_bitrate)
-        self.tech_box.append(self.lbl_channels)
-        self.tech_box.append(self.lbl_bt)
-        self.tech_box.append(self.lbl_device)
-        card.append(self.tech_box)
+        card.append(control_row)
 
         card_overlay = Gtk.Overlay()
         card_overlay.set_child(card)
@@ -250,6 +204,14 @@ class NowPlayingPanel(Gtk.Box):
         self._cur_artist = None
         self._cur_title = None
         self._loaded = False
+        self._vol = 0.0
+        self._bitrate = None
+        self._channels = None
+        self._bt = False
+        self._device_name = None
+        self._rec_mode = "full"
+        self._rec_active = False
+        self._rec_elapsed = 0
         self.reset_ui()
 
     def clear_cover(self):
@@ -269,15 +231,18 @@ class NowPlayingPanel(Gtk.Box):
         self._set_genre(None)
         self.btn_toggle.set_icon_name("media-playback-start-symbolic")
         self.eq_strip.set_active(False)
-        self.lbl_bitrate.set_visible(False)
-        self.lbl_channels.set_visible(False)
-        self.lbl_bt.set_visible(False)
         self.lbl_live_tag.set_visible(False)
         self.lbl_format_tag.set_visible(False)
-        self.lbl_device.set_visible(False)
-        self.rec_knob.set_state(False, None)
-        self.lbl_rec_mode.set_text(_REC_MODE_LABELS[self.rec_knob.mode])
-        self.lbl_rec.set_visible(False)
+        self._vol = 0.0
+        self._bitrate = None
+        self._channels = None
+        self._bt = False
+        self._device_name = None
+        self._update_readout()
+        self._rec_mode = "full"
+        self._rec_active = False
+        self._rec_elapsed = 0
+        self._update_rec_tag()
         self.clear_cover()
         self._cur_station_id = None
         self._cur_artist = None
@@ -286,6 +251,30 @@ class NowPlayingPanel(Gtk.Box):
         # Sync back-plate layout status
         self.stack_wrapper.remove_css_class("flipped")
         self.deck_stack.set_visible_child_name("front")
+
+    def _update_readout(self):
+        parts = []
+        parts.append(f"{int(self._vol * 100)}%")
+        if self._bitrate:
+            parts.append(f"{self._bitrate}k")
+        if self._channels:
+            parts.append("Stereo" if self._channels == 2 else "Mono" if self._channels == 1 else f"{self._channels}Ch")
+        if self._bt:
+            parts.append("BT")
+        if self._device_name:
+            parts.append(self._device_name)
+        self.lbl_readout.set_text(" · ".join(parts))
+
+    def _update_rec_tag(self):
+        letter = _REC_MODE_LABELS[self._rec_mode]
+        self.rec_tag.set_label(f"REC·{letter}")
+        if self._rec_active:
+            self.rec_tag.add_css_class("active")
+            m, s = divmod(self._rec_elapsed, 60)
+            self.rec_tag.set_tooltip_text(f"Recording {m:02d}:{s:02d} · left-click to stop · right-click: mode")
+        else:
+            self.rec_tag.remove_css_class("active")
+            self.rec_tag.set_tooltip_text("Left-click to record · right-click: mode")
 
     def get_current_id(self) -> str | None:
         return self._cur_station_id
@@ -425,9 +414,6 @@ class NowPlayingPanel(Gtk.Box):
         self.vol_adj.set_value(vol)
         self.vol_slider.handler_unblock(self._vol_handler)
 
-        # Update the text readout percentage
-        self.lbl_vol_percent.set_text(f"{int(vol * 100)}%")
-
         if muted:
             self.btn_mute.set_icon_name("audio-volume-muted-symbolic")
         elif vol < 0.4:
@@ -437,17 +423,12 @@ class NowPlayingPanel(Gtk.Box):
         else:
             self.btn_mute.set_icon_name("audio-volume-high-symbolic")
 
-        if bitrate:
-            self.lbl_bitrate.set_text(f"{bitrate}k")
-            self.lbl_bitrate.set_visible(True)
-        else:
-            self.lbl_bitrate.set_visible(False)
-
-        if channels:
-            self.lbl_channels.set_text("Stereo" if channels == 2 else "Mono" if channels == 1 else f"{channels}Ch")
-            self.lbl_channels.set_visible(True)
-        else:
-            self.lbl_channels.set_visible(False)
+        self._vol = vol
+        self._bitrate = bitrate
+        self._channels = channels
+        self._bt = bt
+        self._device_name = device_name
+        self._update_readout()
 
         if fmt:
             self.lbl_format_tag.set_text(fmt)
@@ -455,28 +436,24 @@ class NowPlayingPanel(Gtk.Box):
         else:
             self.lbl_format_tag.set_visible(False)
 
-        self.lbl_bt.set_visible(bt)
-
-        if device_name:
-            self.lbl_device.set_text(device_name)
-            self.lbl_device.set_visible(True)
-        else:
-            self.lbl_device.set_visible(False)
-
         rec = recording or {}
-        active = bool(rec.get("active"))
-        self.rec_knob.set_state(active, rec.get("mode"))
-        self.lbl_rec_mode.set_text(_REC_MODE_LABELS[self.rec_knob.mode])
-        if active:
-            m, s = divmod(int(rec.get("elapsed", 0)), 60)
-            self.lbl_rec.set_text(f"REC {m:02d}:{s:02d}")
-        self.lbl_rec.set_visible(active)
+        self._rec_active = bool(rec.get("active"))
+        mode = rec.get("mode")
+        if mode in ("full", "track"):
+            self._rec_mode = mode
+        self._rec_elapsed = int(rec.get("elapsed", 0))
+        self._update_rec_tag()
 
-    def on_record_toggled(self, knob, mode):
-        daemon.send({"cmd": "record", "action": "toggle", "mode": mode})
+    def on_record_clicked(self, btn):
+        daemon.send({"cmd": "record", "action": "toggle", "mode": self._rec_mode})
 
-    def on_rec_mode_changed(self, knob, mode):
-        self.lbl_rec_mode.set_text(_REC_MODE_LABELS[mode])
+    def on_rec_mode_cycle(self, gesture, n_press, x, y):
+        if self._rec_active:
+            return  # mode locked while a take is rolling
+        modes = ("full", "track")
+        i = modes.index(self._rec_mode)
+        self._rec_mode = modes[(i + 1) % len(modes)]
+        self._update_rec_tag()
 
     def on_toggle_play(self, btn):
         if self._loaded:
@@ -493,8 +470,8 @@ class NowPlayingPanel(Gtk.Box):
                        stdout=subprocess.DEVNULL)
 
     def on_vol_changed(self, slider, val):
-        # Dynamically push numeric modifications into stdout subsystem
-        self.lbl_vol_percent.set_text(f"{int(val * 100)}%")
+        self._vol = val
+        self._update_readout()
         import subprocess
         subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val:.2f}"], stdout=subprocess.DEVNULL)
 
