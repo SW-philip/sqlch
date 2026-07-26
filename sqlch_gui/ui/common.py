@@ -157,8 +157,7 @@ def load_custom_css():
         border-radius: 10px;
         min-width: 98px;
         min-height: 98px;
-        border: 2px dashed {thread};
-        box-shadow: 0 0 0 1px transparent, {slight}, {hem(5)};
+        box-shadow: {slight};
     }}
     .cover-glyph {{
         font-size: 38px;
@@ -186,6 +185,15 @@ def load_custom_css():
         background-color: {colors.get('BAR', '#6a6a6a')};
         color: {score};
         transform: rotate(4deg);
+    }}
+    .corner-tag-rec {{
+        background-color: {colors.get('MUTE', '#e5dcce')};
+        color: {colors.get('BAR', '#6b6b70')};
+        transform: rotate(-4deg);
+    }}
+    .corner-tag-rec.active {{
+        background-color: {colors.get('FORTE', '#8c3b3b')};
+        color: {colors.get('HALL', '#fdf8ee')};
     }}
 
     .list-plate {{
@@ -265,19 +273,17 @@ def load_custom_css():
         padding: 0;
         background-color: {colors.get('WING', '#f2ece1')};
         color: {score};
-        border: 2px dashed {thread};
-        box-shadow: 0 0 0 1px transparent, {slight}, {hem(4)};
+        box-shadow: {slight};
         transition: transform 80ms ease, box-shadow 80ms ease;
     }}
     .control-btn:hover {{
         background-color: {colors.get('MUTE', '#e5dcce')};
-        border: 2px dashed {thread};
-        box-shadow: 0 0 0 1px {outline}, {slight_lift}, {hem(4)};
+        box-shadow: 0 0 0 1px {outline}, {slight_lift};
         transform: translateY(-1px);
     }}
     .control-btn:active {{
         transform: translateY(2px);
-        box-shadow: 0 0 0 1px {outline}, {slight_press}, {hem(4, puff=False)};
+        box-shadow: {slight_press};
     }}
     .control-btn.primary {{
         min-width: 36px;
@@ -285,13 +291,12 @@ def load_custom_css():
         border-radius: 13px;
         background-color: {colors.get('PIANO', '#2c2c30')};
         color: {colors.get('HALL', '#fdf8ee')};
-        border: 2px dashed {thread_light};
-        box-shadow: 0 0 0 2px {outline}, {slight}, {hem(4)};
+        box-shadow: 0 0 0 2px {outline}, {slight};
         text-shadow: 0 -1px 0 rgba(255,255,255,0.30), 0 1px 2px rgba({staff}, 0.70);
     }}
     .control-btn.primary:hover {{
         background-color: {colors.get('SOTTO', '#454549')};
-        box-shadow: 0 0 0 2px {outline}, {slight_lift}, {hem(4)};
+        box-shadow: 0 0 0 2px {outline}, {slight_lift};
     }}
 
     .meta-title {{
@@ -400,6 +405,13 @@ def load_custom_css():
         color: {colors.get('BAR', '#6b6b70')};
         letter-spacing: 0.05em;
         text-shadow: 0 1px 0 {lite_c};
+    }}
+
+    .readout-line {{
+        font-family: "Courier New", monospace;
+        font-size: 0.72em;
+        color: {colors.get('BAR', '#6b6b70')};
+        letter-spacing: 0.02em;
     }}
 
     .brand-tag {{
