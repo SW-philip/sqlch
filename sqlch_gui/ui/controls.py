@@ -26,10 +26,9 @@ def _shade(rgb: tuple[float, float, float], factor: float) -> tuple[float, float
 
 
 class ThreadSlider(Gtk.DrawingArea):
-    """Full-width volume fader: a plain dot riding a dotted sewing
-    thread. Backs onto a Gtk.Adjustment, same as before -- click
-    anywhere on the thread to jump there; drag the button; scroll to
-    nudge.
+    """Full-width volume fader: a plain dot riding a flat track.
+    Backs onto a Gtk.Adjustment, same as before -- click anywhere on
+    the track to jump there; drag the button; scroll to nudge.
 
     Scrolling up while already at 100% engages a hard-coded 120% volume
     boost: the button docks in a small overflow zone past the track's
@@ -117,19 +116,13 @@ class ThreadSlider(Gtk.DrawingArea):
         button_rgb = _shade(bar_rgb, 1.05)
         forte_rgb = _hex_to_rgb_floats(colors.get('FORTE', '#eb6f92'))
 
-        # The sewing thread: evenly spaced dots across the track only --
-        # drawn as discrete filled circles rather than a cairo dashed
-        # stroke, since a dashed stroke's phase drifts against the pixel
-        # grid and beats, making some dots read fainter or skipped
-        # entirely.
+        # Flat solid track bar underneath the button.
         cr.save()
         cr.set_source_rgba(*thread_rgb, 0.7)
-        dot_spacing = 6.0
-        x = self._MARGIN - 2.0
-        while x <= track_right:
-            cr.arc(x, cy, 1.0, 0, 2 * math.pi)
-            cr.fill()
-            x += dot_spacing
+        cr.set_line_width(2.0)
+        cr.move_to(self._MARGIN - 2.0, cy)
+        cr.line_to(track_right, cy)
+        cr.stroke()
         cr.restore()
 
         if self.boosted:
@@ -300,9 +293,8 @@ class RecordBubble(Gtk.DrawingArea):
             cr.arc(cx, cy, radius + 5.0, 0, 2 * math.pi)
             cr.fill()
 
-        # Dashed stitch ring, echoes the fabric-hem convention used elsewhere in this file; turns red while recording
+        # Solid ink ring; turns red while recording
         cr.save()
-        cr.set_dash([2.0, 3.0])
         cr.set_line_width(1.5)
         if self.recording:
             cr.set_source_rgba(0.86, 0.20, 0.18, 0.6)
@@ -428,9 +420,8 @@ class NavColumn(Gtk.Box):
         cr.set_source_rgba(*rgb, 1.0)
         cr.set_line_width(1.4)
 
-        # Two dashed rims (the spool's end-caps) joined by two verticals
+        # Two solid rims (the spool's end-caps) joined by two verticals
         # (the spindle) -- reads as thread wound back onto a spool.
-        cr.set_dash([1.6, 1.4])
         for rim_y in (top, bottom):
             cr.save()
             cr.translate(cx, rim_y)
@@ -439,7 +430,6 @@ class NavColumn(Gtk.Box):
             cr.restore()
             cr.stroke()
 
-        cr.set_dash([])
         cr.move_to(cx - rx, top)
         cr.line_to(cx - rx, bottom)
         cr.stroke()

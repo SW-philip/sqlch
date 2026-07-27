@@ -97,8 +97,8 @@ class TornSeparator(Gtk.DrawingArea):
     """Torn-paper seam between the Now Playing sheet and the drawer.
 
     Reads as the ragged edge of the sheet where the drawer tucks under
-    it; a short run of stitch dashes in the middle is the grab
-    affordance. Purely visual -- the window owns the drag gesture and
+    it; a short solid line in the middle is the grab affordance.
+    Purely visual -- the window owns the drag gesture and
     drawer state, this widget just draws the seam and swaps the
     grab/grabbing cursor.
 
@@ -185,10 +185,8 @@ class TornSeparator(Gtk.DrawingArea):
         tear_path(0.0)
         cr.fill()
 
-        # Centered stitch dashes: the "grab here" cue, same thread
-        # vocabulary as ThreadSlider/RecordBubble
+        # Centered solid grab-here cue.
         cr.save()
-        cr.set_dash([4.0, 3.5])
         cr.set_line_width(1.6)
         cr.set_source_rgba(*thread, 0.8)
         if vertical:
