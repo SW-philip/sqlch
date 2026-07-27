@@ -1,6 +1,5 @@
 """Shared UI styling and custom CSS loading utilities with a Paper-Craft & Fabric Vibe."""
 
-import colorsys
 from pathlib import Path
 
 import gi
@@ -18,38 +17,6 @@ def _hex_to_rgb(hex_val: str) -> str:
     r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
     return f"{r}, {g}, {b}"
 
-def get_adaptive_thread(bg_hex: str, score_hex: str, staff_rgb: str) -> str:
-    """
-    Calculates thread color by checking background luminance and applying a subtle
-    tint matching the layout's active colorway to prevent wash-out.
-    """
-    try:
-        hex_val = bg_hex.lstrip('#')
-        if len(hex_val) == 3:
-            hex_val = ''.join(c*2 for c in hex_val)
-        r_bg, g_bg, b_bg = [int(hex_val[i:i+2], 16) for i in (0, 2, 4)]
-
-        # Perceived luminance formula (Y)
-        y = 0.2126 * r_bg + 0.7152 * g_bg + 0.0722 * b_bg
-
-        # Isolate the active score hue for a subtle thread tint
-        score_clean = score_hex.lstrip('#')
-        if len(score_clean) == 3:
-            score_clean = ''.join(c*2 for c in score_clean)
-        r_s, g_s, b_s = [int(score_clean[i:i+2], 16) / 255.0 for i in (0, 2, 4)]
-        h, s, v = colorsys.rgb_to_hsv(r_s, g_s, b_s)
-
-        if y < 128:
-            # Dark background: Light chalk thread with a faint hint of hue
-            tr, tg, tb = colorsys.hsv_to_rgb(h, min(s * 0.15, 0.06), 0.88)
-            return f"rgba({int(tr*255)}, {int(tg*255)}, {int(tb*255)}, 0.65)"
-        else:
-            # Light background: Deep ink thread derived from your base layout structure
-            tr, tg, tb = colorsys.hsv_to_rgb(h, min(s * 0.20, 0.08), 0.22)
-            return f"rgba({int(tr*255)}, {int(tg*255)}, {int(tb*255)}, 0.55)"
-    except Exception:
-        return f"rgba({staff_rgb}, 0.55)"
-
 def load_custom_css():
     global _css_provider
     colors = palette.load()
@@ -61,26 +28,15 @@ def load_custom_css():
     shadow = f"rgba({staff}, 0.85)"
     bg_color = colors.get('GRAD_HALL_LO', '#cebfa5')
 
-    hem_c = f"rgba({staff}, 0.14)"
-    shade_c = f"rgba({staff}, 0.25)"
     lite_c = "rgba(255,255,255,0.40)"
-
-    # Generate the dynamic thread using our adaptive utility
-    thread = get_adaptive_thread(bg_color, score, staff)
-    thread_light = "rgba(255,255,255,0.60)"
 
     slight = f"0 2px 3px rgba({staff}, 0.30)"
     slight_lift = f"0 3px 4px rgba({staff}, 0.35)"
     slight_press = f"0 1px 2px rgba({staff}, 0.25)"
 
-    def hem(w: int, puff: bool = True) -> str:
-        layers = [f"inset 0 0 0 {w}px {hem_c}"]
-        if puff:
-            layers += [
-                f"inset 0 {w + 2}px 6px -{w}px {lite_c}",
-                f"inset 0 -{w + 2}px 6px -{w}px {shade_c}",
-            ]
-        return ", ".join(layers)
+    def cutout(dx: int, dy: int) -> str:
+        """Hard-edged offset duplicate; pair with `border: Npx solid {outline}`."""
+        return f"{dx}px {dy}px 0 0 {outline}"
 
     svg_tactile_filter = (
         "url(\"data:image/svg+xml;utf8,"
@@ -108,8 +64,8 @@ def load_custom_css():
         background-repeat: repeat, no-repeat;
         color: {score};
         border-radius: 13px;
-        border: 2px dashed {thread};
-        box-shadow: 0 0 0 3px {outline}, 6px 6px 0 3px {outline}, 10px 10px 0 3px {shadow}, {hem(8)};
+        border: 2px solid {outline};
+        box-shadow: 6px 6px 0 3px {outline}, 10px 10px 0 3px {shadow};
         margin: 2px 10px 10px 2px;
         padding: 2px;
     }}
@@ -120,7 +76,7 @@ def load_custom_css():
         border-radius: 6px;
         color: {colors.get('REST', '#4e4e52')};
         background: transparent;
-        border: 2px dashed transparent;
+        border: 2px solid transparent;
         transition: transform 80ms ease, box-shadow 80ms ease;
     }}
     .nav-btn:hover {{
@@ -128,16 +84,16 @@ def load_custom_css():
         background-color: {colors.get('WING', '#fff5dd')};
         color: {score};
         transform: scale(1.05) translateY(-1px);
-        border: 2px dashed {thread};
-        box-shadow: 0 0 0 1px {outline}, {slight_lift}, {hem(3)};
+        border: 2px solid {outline};
+        box-shadow: {cutout(2, 2)}, {slight_lift};
     }}
     .nav-btn.active {{
         background-image: {svg_tactile_filter};
         background-color: {colors.get('ROOT', '#f4b84b')};
         color: {outline};
         font-weight: 900;
-        border: 2px dashed {thread};
-        box-shadow: 0 0 0 2px {outline}, {slight}, {hem(3)};
+        border: 2px solid {outline};
+        box-shadow: {cutout(2, 2)}, {slight};
         transform: scale(1.1);
     }}
 
@@ -147,8 +103,8 @@ def load_custom_css():
         background-repeat: repeat;
         border-radius: 10px;
         padding: 4px;
-        border: 2px dashed {thread};
-        box-shadow: 0 0 0 1px transparent, {slight}, {hem(6)};
+        border: 2px solid {outline};
+        box-shadow: {cutout(4, 4)}, {slight};
         margin-bottom: 2px;
     }}
 
@@ -173,8 +129,10 @@ def load_custom_css():
         font-size: 0.6em;
         padding: 2px 5px;
         border-radius: 8px;
-        box-shadow: 0 2px 0 rgba({staff}, 0.4);
+        border: 2px solid {outline};
+        box-shadow: {cutout(2, 2)};
         margin: 5px;
+        text-shadow: 0 -1px 0 rgba(255,255,255,0.35), 0 1px 1px rgba({staff},0.5);
     }}
     .corner-tag-left {{
         background-color: {colors.get('ROOT', '#f4b84b')};
@@ -202,8 +160,8 @@ def load_custom_css():
         background-repeat: repeat;
         border-radius: 12px;
         padding: 5px;
-        border: 2px dashed {thread};
-        box-shadow: 0 0 0 1px transparent, {slight}, {hem(4)};
+        border: 2px solid {outline};
+        box-shadow: {cutout(4, 4)}, {slight};
     }}
     .list-plate row {{
         background: transparent;
@@ -216,8 +174,8 @@ def load_custom_css():
         border-radius: 8px;
         padding: 5px 8px;
         margin-bottom: 5px;
-        border: 2px dashed {thread};
-        box-shadow: 0 0 0 1px transparent, {slight}, {hem(4)};
+        border: 2px solid {outline};
+        box-shadow: {cutout(3, 3)}, {slight};
         text-shadow: 0 -1px 0 rgba(255,255,255,0.40), 0 1px 1px rgba({staff},0.5);
     }}
 
@@ -226,21 +184,21 @@ def load_custom_css():
         border-radius: 8px;
         margin-bottom: 2px;
         background-color: {colors.get('STAGE', '#f9f6f0')};
-        border: 2px dashed {thread};
-        box-shadow: 0 0 0 1px transparent, {slight}, {hem(3, puff=False)};
+        border: 2px solid {outline};
+        box-shadow: {cutout(2, 2)}, {slight};
     }}
     .station-row:hover {{
         background-color: {colors.get('WING', '#fff5dd')};
-        border: 2px dashed {thread};
-        box-shadow: 0 0 0 1px {outline}, {slight_lift}, {hem(3)};
+        border: 2px solid {outline};
+        box-shadow: {cutout(3, 3)}, {slight_lift};
         transform: translateY(-1px);
     }}
     .station-row.active {{
         background-image: {svg_tactile_filter};
         background-color: {colors.get('SEVENTH', '#79a383')};
         color: {colors.get('HALL', '#fdf8ee')};
-        border: 2px dashed {colors.get('ROOT', '#f4b84b')};
-        box-shadow: 0 0 0 1px {outline}, {slight}, {hem(3)};
+        border: 2px solid {colors.get('ROOT', '#f4b84b')};
+        box-shadow: {cutout(2, 2)}, {slight};
     }}
     .station-row.active label {{
         color: {colors.get('HALL', '#fdf8ee')};
@@ -260,6 +218,7 @@ def load_custom_css():
         font-size: 0.8em;
         font-style: italic;
         color: {colors.get('FIFTH', '#6b6b70')};
+        text-shadow: 0 1px 0 {lite_c};
     }}
     .station-row.active .station-live {{
         color: {colors.get('HALL', '#fdf8ee')};
@@ -340,21 +299,21 @@ def load_custom_css():
         color: {score};
         padding: 2px 6px;
         border-radius: 6px;
-        border: 1px dashed {thread};
-        box-shadow: 0 0 0 1px transparent, {slight_press}, {hem(2, puff=False)};
+        border: 1px solid {outline};
+        box-shadow: {cutout(1, 1)}, {slight_press};
         text-shadow: 0 -1px 0 rgba(255,255,255,0.40), 0 1px 1px rgba({staff},0.4);
     }}
     .tag-chip:hover {{
         background-color: {colors.get('MUTE', '#e5dcce')};
         transform: translateY(-1px);
-        border: 1px dashed {thread};
-        box-shadow: 0 0 0 1px {outline}, {slight_lift}, {hem(2, puff=False)};
+        border: 1px solid {outline};
+        box-shadow: {cutout(2, 2)}, {slight_lift};
     }}
     .tech-badge.rec-badge {{
         background-color: {colors.get('FORTE', '#8c3b3b')};
         color: {colors.get('HALL', '#fdf8ee')};
         text-shadow: 0 1px 0 rgba({staff}, 0.60);
-        outline: 1px dashed {thread_light};
+        outline: 1px solid {outline};
     }}
 
     .small-badge {{
@@ -365,6 +324,7 @@ def load_custom_css():
         color: {colors.get('BAR', '#6b6b70')};
         padding: 2px 6px;
         border-radius: 5px;
+        text-shadow: 0 1px 0 {lite_c};
     }}
 
     .ribbon-label {{
@@ -412,18 +372,17 @@ def load_custom_css():
         font-size: 0.72em;
         color: {colors.get('BAR', '#6b6b70')};
         letter-spacing: 0.02em;
+        text-shadow: 0 1px 0 {lite_c};
     }}
 
     .brand-tag {{
         font-family: "Courier New", monospace;
+        font-weight: 700;
         font-size: 0.56em;
         letter-spacing: 0.08em;
-        color: rgba({score_rgb}, 0.45);
-        background-color: {colors.get('HALL', '#2c2c30')};
-        border: 1px dashed {thread};
-        border-radius: 4px;
-        padding: 2px 6px;
-        margin: 6px;
+        color: rgba({score_rgb}, 0.35);
+        text-shadow: 0 1px 0 {lite_c};
+        margin: 6px 8px;
     }}
 
     popover.context-menu > contents {{
@@ -431,8 +390,8 @@ def load_custom_css():
         background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_STAGE_HI', '#fbf9f5')}, {colors.get('GRAD_STAGE_LO', '#ece6da')});
         color: {score};
         border-radius: 14px;
-        border: 2px dashed {thread};
-        box-shadow: 0 0 0 3px {outline}, 8px 8px 0 3px {shadow}, {hem(6)};
+        border: 2px solid {outline};
+        box-shadow: 8px 8px 0 3px {shadow};
         padding: 10px;
     }}
     popover.context-menu > arrow {{
@@ -449,11 +408,11 @@ def load_custom_css():
         background-color: {colors.get('WING', '#fff5dd')};
         border-radius: 8px;
         padding: 6px;
-        border: 1px dashed {thread};
-        box-shadow: 0 0 0 1px transparent, {slight_press}, {hem(2, puff=False)};
+        border: 1px solid {outline};
+        box-shadow: {cutout(1, 1)}, {slight_press};
     }}
     .context-menu entry:focus-within {{
-        border: 1px dashed {colors.get('ROOT', '#f4b84b')};
+        border: 1px solid {colors.get('ROOT', '#f4b84b')};
         box-shadow: 0 0 0 2px {colors.get('ROOT', '#f4b84b')};
     }}
     .context-menu separator {{
@@ -467,19 +426,19 @@ def load_custom_css():
         border-radius: 8px;
         color: {score};
         background-color: {colors.get('WING', '#fff5dd')};
-        border: 2px dashed {thread};
-        box-shadow: 0 0 0 1px transparent, {slight}, {hem(3)};
+        border: 2px solid {outline};
+        box-shadow: {cutout(3, 3)}, {slight};
         transition: transform 80ms ease, box-shadow 80ms ease;
     }}
     .menu-btn:hover {{
         background-color: {colors.get('MUTE', '#e5dcce')};
-        border: 2px dashed {thread};
-        box-shadow: 0 0 0 1px {outline}, {slight_lift}, {hem(3)};
+        border: 2px solid {outline};
+        box-shadow: {cutout(4, 4)}, {slight_lift};
         transform: translateY(-1px);
     }}
     .menu-btn:active {{
         transform: translateY(1px);
-        box-shadow: 0 0 0 1px {outline}, {slight_press}, {hem(3, puff=False)};
+        box-shadow: {cutout(2, 2)}, {slight_press};
     }}
     .menu-btn.destructive-action {{
         color: {colors.get('FORTE', '#8c3b3b')};
@@ -496,11 +455,11 @@ def load_custom_css():
         color: {score};
         border-radius: 8px;
         padding: 4px 8px;
-        border: 2px dashed {thread};
-        box-shadow: 0 0 0 1px transparent, {slight_press}, {hem(2, puff=False)};
+        border: 2px solid {outline};
+        box-shadow: {cutout(2, 2)}, {slight_press};
     }}
     .field-entry:focus-within {{
-        border: 2px dashed {colors.get('ROOT', '#f4b84b')};
+        border: 2px solid {colors.get('ROOT', '#f4b84b')};
         box-shadow: 0 0 0 2px {colors.get('ROOT', '#f4b84b')};
     }}
 
@@ -520,8 +479,8 @@ def load_custom_css():
     .art-card-back {{
         background-color: {colors.get('STAGE', '#f9f6f0')};
         border-radius: 12px;
-        border: 2px dashed {thread};
-        box-shadow: inset 0 0 4px rgba({staff}, 0.15), {slight}, {hem(4, puff=False)};
+        border: 2px solid {outline};
+        box-shadow: inset 0 0 4px rgba({staff}, 0.15), {cutout(3, 3)}, {slight};
         padding: 6px;
     }}
 
@@ -532,6 +491,7 @@ def load_custom_css():
         font-weight: bold;
         color: {colors.get('PIANO', '#2c2c30')};
         padding: 2px;
+        text-shadow: 0 1px 0 {lite_c};
     }}
 
     /* Flip corner glyph - a small clickable tag tucked into the art's own
@@ -540,13 +500,13 @@ def load_custom_css():
     .corner-tag-flip {{
         background-color: {colors.get('BAR', '#6a6a6a')};
         color: {score};
-        border: none;
+        border: 2px solid {outline};
         border-radius: 8px;
         padding: 3px 5px;
         min-height: 0;
         min-width: 0;
         margin: 5px;
-        box-shadow: 0 2px 0 rgba({staff}, 0.4);
+        box-shadow: {cutout(2, 2)};
         transform: rotate(4deg);
         transition: transform 120ms ease, background-color 120ms ease;
     }}
