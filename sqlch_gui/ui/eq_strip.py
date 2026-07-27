@@ -35,12 +35,14 @@ class EqStrip(Gtk.DrawingArea):
         self._running = False
         self._timer_id = None
         self.set_draw_func(self._on_draw)
+        self.set_visible(False)
         self.connect("destroy", lambda *_: self.set_active(False))
 
     def set_active(self, active: bool):
         if active == self._running:
             return
         self._running = active
+        self.set_visible(active)
         if active and self._timer_id is None:
             self._timer_id = GLib.timeout_add(self.FRAME_MS, self._tick)
         elif not active and self._timer_id is not None:

@@ -124,7 +124,7 @@ class NowPlayingPanel(Gtk.Box):
         # would clip the text block -- set_measure_overlay tells it to
         # also account for the text_box overlay child's own size.
         self.eq_strip = EqStrip()
-        self.eq_strip.set_halign(Gtk.Align.FILL)
+        self.eq_strip.set_halign(Gtk.Align.START)
         self.eq_strip.set_valign(Gtk.Align.CENTER)
 
         text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
