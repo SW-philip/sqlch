@@ -108,11 +108,12 @@ def load_custom_css():
         margin-bottom: 2px;
     }}
 
+    /* Size kept in sync with _COVER_SIZE in now_playing.py */
     .cover-art {{
         background-color: {colors.get('WING', '#e2dacf')};
         border-radius: 10px;
-        min-width: 98px;
-        min-height: 98px;
+        min-width: 220px;
+        min-height: 220px;
         box-shadow: {slight};
     }}
     .cover-glyph {{
@@ -463,20 +464,10 @@ def load_custom_css():
         box-shadow: 0 0 0 2px {colors.get('ROOT', '#f4b84b')};
     }}
 
-    /* Album Deck Outer Container - baseline rotation state */
-    .album-deck-wrapper {{
-        border-radius: 12px;
-        transition: transform 250ms cubic-bezier(0.4, 0.0, 0.2, 1);
-        transform: rotate(-3deg);
-    }}
-
-    /* Subtle geometric physics push when flipped open */
-    .album-deck-wrapper.flipped {{
-        transform: rotate(2deg) scale(1.02);
-    }}
-
-    /* Back side styling - Looks like a typewriter ledger scrap pasted to cardboard */
-    .art-card-back {{
+    /* Tracklist panel - permanent full-width row below the meta text,
+       no longer a flip-card back face. Looks like a typewriter ledger
+       scrap pasted to cardboard. */
+    .tracklist-panel {{
         background-color: {colors.get('STAGE', '#f9f6f0')};
         border-radius: 12px;
         border: 2px solid {outline};
@@ -494,29 +485,6 @@ def load_custom_css():
         text-shadow: 0 1px 0 {lite_c};
     }}
 
-    /* Flip corner glyph - a small clickable tag tucked into the art's own
-       bottom-right corner, same rotation family as corner-tag-right
-       (used by the top-right format tag) since both sit on the right. */
-    .corner-tag-flip {{
-        background-color: {colors.get('BAR', '#6a6a6a')};
-        color: {score};
-        border: 2px solid {outline};
-        border-radius: 8px;
-        padding: 3px 5px;
-        min-height: 0;
-        min-width: 0;
-        margin: 5px;
-        box-shadow: {cutout(2, 2)};
-        transform: rotate(4deg);
-        transition: transform 120ms ease, background-color 120ms ease;
-    }}
-    .corner-tag-flip:hover {{
-        background-color: {colors.get('WING', '#fff5dd')};
-        transform: rotate(4deg) scale(1.1);
-    }}
-    .corner-tag-flip:active {{
-        transform: rotate(4deg) scale(0.92);
-    }}
     """
 
     display = Gdk.Display.get_default()
