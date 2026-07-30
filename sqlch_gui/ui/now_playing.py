@@ -10,6 +10,15 @@ from .controls import ThreadSlider, NavColumn
 from .eq_strip import EqStrip
 
 _REC_MODE_LABELS = {"full": "F", "track": "T"}
+_COVER_SIZE = 220     # keep in sync with .cover-art's min-width/min-height in common.py
+_TRACKLIST_HEIGHT = 130  # ~5-6 track rows before scrolling
+
+
+def _fmt_duration(ms: int | None) -> str | None:
+    if not ms:
+        return None
+    total_s = ms // 1000
+    return f"{total_s // 60}:{total_s % 60:02d}"
 
 class NowPlayingPanel(Gtk.Box):
     __gsignals__ = {
@@ -43,11 +52,9 @@ class NowPlayingPanel(Gtk.Box):
 
         card.append(nav_row)
 
-        # --- Row 2: cover art (with its 4 corner tags) + text, EQ behind text ---
-        art_text_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-
+        # --- Row 2: album art, full card width, corner tags overlaid ---
         self.cover_img = Gtk.Image()
-        self.cover_img.set_pixel_size(98)
+        self.cover_img.set_pixel_size(_COVER_SIZE)
         self.cover_placeholder = Gtk.Label(label="♪")
         self.cover_placeholder.add_css_class("cover-glyph")
 
@@ -57,27 +64,9 @@ class NowPlayingPanel(Gtk.Box):
         self.cover_stack.add_named(self.cover_img, "art")
         self.clear_cover()
 
-        track_scroll = Gtk.ScrolledWindow()
-        track_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        track_scroll.set_size_request(98, 98)
-        track_scroll.add_css_class("art-card-back")
-
-        self.track_list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        self.track_list_box.add_css_class("tracklist-container")
-        track_scroll.set_child(self.track_list_box)
-
-        self.deck_stack = Gtk.Stack()
-        self.deck_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
-        self.deck_stack.set_transition_duration(250)
-        self.deck_stack.add_named(self.cover_stack, "front")
-        self.deck_stack.add_named(track_scroll, "back")
-
-        self.stack_wrapper = Gtk.Box()
-        self.stack_wrapper.add_css_class("album-deck-wrapper")
-        self.stack_wrapper.append(self.deck_stack)
-
         self.cover_overlay = Gtk.Overlay()
-        self.cover_overlay.set_child(self.stack_wrapper)
+        self.cover_overlay.set_child(self.cover_stack)
+        self.cover_overlay.set_halign(Gtk.Align.CENTER)
 
         self.lbl_live_tag = Gtk.Label(label="LIVE")
         self.lbl_live_tag.add_css_class("corner-tag")
@@ -95,41 +84,14 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_format_tag.set_visible(False)
         self.cover_overlay.add_overlay(self.lbl_format_tag)
 
-        self.flip_btn = Gtk.Button(icon_name="object-flip-horizontal-symbolic")
-        self.flip_btn.add_css_class("corner-tag-flip")
-        self.flip_btn.set_halign(Gtk.Align.END)
-        self.flip_btn.set_valign(Gtk.Align.END)
-        self.flip_btn.connect("clicked", self.on_flip_clicked)
-        self.cover_overlay.add_overlay(self.flip_btn)
+        # Title/artist/genre caption, docked to the art's bottom edge over a
+        # translucent scrim (see .art-caption) so it reads regardless of the
+        # art's own colors.
+        caption_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        caption_box.add_css_class("art-caption")
+        caption_box.set_halign(Gtk.Align.FILL)
+        caption_box.set_valign(Gtk.Align.END)
 
-        # REC corner tag (bottom-left, 4th corner) -- replaces RecordBubble.
-        # Plain text tag from the same .corner-tag family as LIVE/format;
-        # left-click toggles recording, right-click cycles FULL/TRACK mode.
-        self.rec_tag = Gtk.Button(label="REC")
-        self.rec_tag.add_css_class("corner-tag")
-        self.rec_tag.add_css_class("corner-tag-rec")
-        self.rec_tag.set_halign(Gtk.Align.START)
-        self.rec_tag.set_valign(Gtk.Align.END)
-        self.rec_tag.connect("clicked", self.on_record_clicked)
-        rec_right_click = Gtk.GestureClick.new()
-        rec_right_click.set_button(3)
-        rec_right_click.connect("released", self.on_rec_mode_cycle)
-        self.rec_tag.add_controller(rec_right_click)
-        self.cover_overlay.add_overlay(self.rec_tag)
-
-        art_text_row.append(self.cover_overlay)
-
-        # Title/artist/genre text, with the EQ strip painted behind it.
-        # The Overlay sizes to its main child (eq_strip) by default, which
-        # would clip the text block -- set_measure_overlay tells it to
-        # also account for the text_box overlay child's own size.
-        self.eq_strip = EqStrip()
-        self.eq_strip.set_halign(Gtk.Align.START)
-        self.eq_strip.set_valign(Gtk.Align.CENTER)
-
-        text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        text_box.set_halign(Gtk.Align.START)
-        text_box.set_valign(Gtk.Align.CENTER)
         self.lbl_title = Gtk.Label(xalign=0.0, justify=Gtk.Justification.LEFT)
         self.lbl_title.add_css_class("meta-title")
         self.lbl_title.set_wrap(True)
@@ -143,20 +105,42 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_genre = Gtk.Label(xalign=0.0, justify=Gtk.Justification.LEFT)
         self.lbl_genre.add_css_class("thread-label")
 
-        text_box.append(self.lbl_title)
-        text_box.append(self.lbl_artist)
-        text_box.append(self.lbl_genre)
+        caption_box.append(self.lbl_title)
+        caption_box.append(self.lbl_artist)
+        caption_box.append(self.lbl_genre)
+        self.cover_overlay.add_overlay(caption_box)
 
-        text_overlay = Gtk.Overlay()
-        text_overlay.set_child(self.eq_strip)
-        text_overlay.add_overlay(text_box)
-        text_overlay.set_measure_overlay(text_box, True)
-        text_overlay.set_hexpand(True)
-        art_text_row.append(text_overlay)
+        # REC corner tag (bottom-right). Added last so it floats on top of
+        # the caption scrim rather than being covered by it. Plain text tag
+        # from the same .corner-tag family as LIVE/format; left-click
+        # toggles recording, right-click cycles FULL/TRACK mode.
+        self.rec_tag = Gtk.Button(label="REC")
+        self.rec_tag.add_css_class("corner-tag")
+        self.rec_tag.add_css_class("corner-tag-rec")
+        self.rec_tag.set_halign(Gtk.Align.END)
+        self.rec_tag.set_valign(Gtk.Align.END)
+        self.rec_tag.connect("clicked", self.on_record_clicked)
+        rec_right_click = Gtk.GestureClick.new()
+        rec_right_click.set_button(3)
+        rec_right_click.connect("released", self.on_rec_mode_cycle)
+        self.rec_tag.add_controller(rec_right_click)
+        self.cover_overlay.add_overlay(self.rec_tag)
 
-        card.append(art_text_row)
+        card.append(self.cover_overlay)
 
-        # --- Row 3: Stop / Volume / Mute / Play, one merged control row ---
+        # --- Row 3: tracklist, permanently visible, scrolls past ~5-6 rows ---
+        track_scroll = Gtk.ScrolledWindow()
+        track_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        track_scroll.set_size_request(-1, _TRACKLIST_HEIGHT)
+        track_scroll.set_hexpand(True)
+        track_scroll.add_css_class("tracklist-panel")
+
+        self.track_list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        self.track_list_box.add_css_class("tracklist-container")
+        track_scroll.set_child(self.track_list_box)
+        card.append(track_scroll)
+
+        # --- Row 4: Stop / Volume (EQ strip behind it) / Mute / Play ---
         control_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
 
         btn_stop = Gtk.Button(icon_name="media-playback-stop-symbolic")
@@ -164,13 +148,25 @@ class NowPlayingPanel(Gtk.Box):
         btn_stop.connect("clicked", self.on_stop)
         control_row.append(btn_stop)
 
+        # EQ strip painted behind the volume slider; set_measure_overlay
+        # keeps the slider (not the FILL eq_strip) driving the overlay's size.
+        self.eq_strip = EqStrip()
+        self.eq_strip.set_halign(Gtk.Align.FILL)
+        self.eq_strip.set_valign(Gtk.Align.CENTER)
+
         self.vol_adj = Gtk.Adjustment(value=0.0, lower=0.0, upper=1.0, step_increment=0.05)
         self.vol_slider = ThreadSlider(self.vol_adj)
         self._vol_handler = self.vol_slider.connect("value-changed", self.on_vol_changed)
         self._pre_boost_vol: float | None = None
         self.vol_slider.connect("boost-toggled", self.on_boost_toggled)
         self.vol_slider.set_hexpand(True)
-        control_row.append(self.vol_slider)
+
+        vol_overlay = Gtk.Overlay()
+        vol_overlay.set_child(self.eq_strip)
+        vol_overlay.add_overlay(self.vol_slider)
+        vol_overlay.set_measure_overlay(self.vol_slider, True)
+        vol_overlay.set_hexpand(True)
+        control_row.append(vol_overlay)
 
         self.btn_mute = Gtk.Button(icon_name="audio-volume-high-symbolic")
         self.btn_mute.add_css_class("control-btn")
@@ -248,9 +244,7 @@ class NowPlayingPanel(Gtk.Box):
         self._cur_artist = None
         self._cur_title = None
 
-        # Sync back-plate layout status
-        self.stack_wrapper.remove_css_class("flipped")
-        self.deck_stack.set_visible_child_name("front")
+        self._sync_tracklist()
 
     def _update_readout(self):
         parts = []
@@ -282,8 +276,9 @@ class NowPlayingPanel(Gtk.Box):
     def get_current_track(self) -> tuple[str | None, str | None]:
         return self._cur_artist, self._cur_title
 
-    def _sync_back_plate(self):
-        """Populates the back-plate with the real album tracklist or drops back to fallback view."""
+    def _sync_tracklist(self):
+        """Populates the always-visible tracklist panel with the real album
+        tracklist, or drops back to a fallback view when none is cached yet."""
         while child := self.track_list_box.get_first_child():
             self.track_list_box.remove(child)
 
@@ -294,9 +289,12 @@ class NowPlayingPanel(Gtk.Box):
         if meta and meta.get("tracklist"):
             # Header tracklist render
             album_lbl = Gtk.Label(xalign=0.0)
-            album_lbl.set_markup(f"<b>{html.escape(meta.get('album') or 'Unknown Album')}</b>")
+            album = html.escape(meta.get('album') or 'Unknown Album')
+            year = meta.get('year')
+            header = f"<b>{album}</b>" + (f"  ·  {html.escape(str(year))}" if year else "")
+            album_lbl.set_markup(header)
             album_lbl.set_wrap(True)
-            album_lbl.set_max_width_chars(14)
+            album_lbl.set_max_width_chars(30)
             self.track_list_box.append(album_lbl)
 
             # Individual track matrix layout injection
@@ -304,35 +302,27 @@ class NowPlayingPanel(Gtk.Box):
             for track_item in meta["tracklist"]:
                 num = track_item.get("number", 0)
                 name = track_item.get("name", "")
+                dur = _fmt_duration(track_item.get("duration_ms"))
 
                 track_lbl = Gtk.Label(xalign=0.0)
                 escaped_name = html.escape(name)
+                line = f"{num}. {escaped_name}" + (f"  <i>{dur}</i>" if dur else "")
 
                 if name == canonical_track:
-                    track_lbl.set_markup(f"<b>{num}. {escaped_name}</b>")
+                    track_lbl.set_markup(f"<b>{line}</b>")
                 else:
-                    track_lbl.set_markup(f"{num}. {escaped_name}")
+                    track_lbl.set_markup(line)
 
                 track_lbl.set_wrap(True)
-                track_lbl.set_max_width_chars(14)
+                track_lbl.set_max_width_chars(30)
                 self.track_list_box.append(track_lbl)
         else:
             # Fallback rendering view
             lbl_info = Gtk.Label(xalign=0.0)
             lbl_info.set_markup(f"<b>A面:</b>\n{html.escape(self._cur_title or 'No Track')}\n\n<i>{html.escape(self._cur_artist or 'Unknown Artist')}</i>")
             lbl_info.set_wrap(True)
-            lbl_info.set_max_width_chars(14)
+            lbl_info.set_max_width_chars(30)
             self.track_list_box.append(lbl_info)
-
-    def on_flip_clicked(self, btn):
-        current = self.deck_stack.get_visible_child_name()
-        if current == "front":
-            self.stack_wrapper.add_css_class("flipped")
-            self.deck_stack.set_visible_child_name("back")
-            self._sync_back_plate()
-        else:
-            self.stack_wrapper.remove_css_class("flipped")
-            self.deck_stack.set_visible_child_name("front")
 
     def update(self, resp: dict | None, icy: tuple[str | None, str | None]):
         if not resp or not resp.get("ok") or not resp.get("current"):
@@ -346,6 +336,8 @@ class NowPlayingPanel(Gtk.Box):
         raw_artist, raw_title = icy
         artist = raw_artist.strip() if raw_artist else ""
         title = raw_title.strip() if raw_title else ""
+
+        prev_artist, prev_title = self._cur_artist, self._cur_title
 
         if not artist and not title:
             self.lbl_title.set_markup(f"<b>{html.escape(station_name)}</b>")
@@ -363,10 +355,13 @@ class NowPlayingPanel(Gtk.Box):
                 self._cur_title = title
                 metadata.run_enrich(artist, title)
                 threading.Thread(target=self._async_fetch_cover, args=(artist, title), daemon=True).start()
+                threading.Thread(target=self._async_resync_tracklist, args=(artist, title), daemon=True).start()
 
-        # Push real-time updates directly to the back ledger if open
-        if self.deck_stack.get_visible_child_name() == "back":
-            self._sync_back_plate()
+        # The tracklist is always visible now (no flip gate) -- rebuild it
+        # once whenever the track actually changed, rather than on every
+        # 1s daemon poll tick regardless of whether anything changed.
+        if (self._cur_artist, self._cur_title) != (prev_artist, prev_title):
+            self._sync_tracklist()
 
         genre = metadata.get_icy_genre()
         if not genre and self._cur_artist and self._cur_title:
@@ -392,10 +387,17 @@ class NowPlayingPanel(Gtk.Box):
         if mode == "local" and path and Path(path).exists():
             GLib.idle_add(self._apply_cover_path, path, artist, title)
 
+    def _async_resync_tracklist(self, artist: str, title: str):
+        import time
+        time.sleep(3.0)  # give sqlch-enrich time to write enriched.json
+        if self._cur_artist != artist or self._cur_title != title:
+            return  # track already changed, bail
+        GLib.idle_add(self._sync_tracklist)
+
     def _apply_cover_path(self, path: str, artist: str, title: str) -> bool:
         if self._cur_artist == artist and self._cur_title == title:
             try:
-                pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 98, 98, True)
+                pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, _COVER_SIZE, _COVER_SIZE, True)
                 self.cover_img.set_from_pixbuf(pb)
                 self.cover_stack.set_visible_child_name("art")
             except Exception:

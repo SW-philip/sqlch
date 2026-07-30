@@ -24,6 +24,7 @@ def load_custom_css():
     outline = colors.get('SHADOW', '#121214')
     score = colors.get('SCORE', '#121214')
     score_rgb = _hex_to_rgb(score)
+    dim_rgb = _hex_to_rgb(colors.get('DIM', '#4c4e3c'))
     staff = colors.get('STAFF', '20,20,24')
     shadow = f"rgba({staff}, 0.85)"
     bg_color = colors.get('GRAD_HALL_LO', '#cebfa5')
@@ -112,9 +113,32 @@ def load_custom_css():
     .cover-art {{
         background-color: {colors.get('WING', '#e2dacf')};
         border-radius: 10px;
+        border: 2px solid {outline};
         min-width: 220px;
         min-height: 220px;
         box-shadow: {slight};
+    }}
+    /* Title/artist/genre scrim docked to the art's bottom edge, tinted with
+       the palette's DIM color. GTK CSS has no backdrop-filter/blur, so a
+       translucent panel stands in for "blurred glass" while staying legible
+       over arbitrary album art. */
+    .art-caption {{
+        background-color: rgba({dim_rgb}, 0.72);
+        border-radius: 0 0 8px 8px;
+        padding: 4px 8px 3px;
+    }}
+    /* Base .meta-title/.meta-artist/.thread-label colors are tuned for the
+       light .card background -- override to light text for legibility
+       against this dark scrim. */
+    .art-caption .meta-title, .art-caption .meta-artist {{
+        color: {colors.get('HALL', '#fdf8ee')};
+        text-shadow: 0 1px 2px rgba({staff}, 0.9);
+    }}
+    .art-caption .thread-label {{
+        color: rgba(255, 255, 255, 0.55);
+    }}
+    .art-caption .thread-label.lit {{
+        color: {colors.get('ROOT', '#f4b84b')};
     }}
     .cover-glyph {{
         font-size: 38px;
