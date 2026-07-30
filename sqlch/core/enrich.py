@@ -164,8 +164,17 @@ def enrich_track(artist: str, track: str) -> dict[str, Any]:
     key = _cache_key(artist, track)
     cached = db.get(key)
 
-    # Return cache hit if fresh and already carrying tracklist data
-    if cached and not _is_stale(cached) and 'tracklist' in cached:
+    # Return cache hit if fresh and already carrying tracklist data with
+    # durations. Self-heals entries cached before duration_ms was captured
+    # (see spoti.get_album_tracks) by falling through to a fresh fetch
+    # instead of serving the old-shaped entry for the rest of its TTL.
+    cached_tracklist = cached.get('tracklist') if cached else None
+    if (
+        cached
+        and not _is_stale(cached)
+        and cached_tracklist is not None
+        and (not cached_tracklist or 'duration_ms' in cached_tracklist[0])
+    ):
         cached['source'] = 'cache'
         return cached
 

@@ -189,7 +189,12 @@ def enrich(artist: str, track: str) -> dict[str, Any] | None:
     k = _key(artist, track)
     if k in cache:
         entry = cache[k]
-        if (_now() - entry.get('cached_at', 0)) < CACHE_TTL and 'tracklist' in entry:
+        entry_tracklist = entry.get('tracklist')
+        if (
+            (_now() - entry.get('cached_at', 0)) < CACHE_TTL
+            and entry_tracklist is not None
+            and (not entry_tracklist or 'duration_ms' in entry_tracklist[0])
+        ):
             return entry
     token = _get_token()
     if not token:
