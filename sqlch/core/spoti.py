@@ -139,7 +139,11 @@ def get_album_tracks(album_id: str, token: str) -> list[dict]:
     cache = _load_json(cache_path)
 
     if album_id in cache:
-        return cache[album_id].get('tracks', [])
+        cached_tracks = cache[album_id].get('tracks', [])
+        # Self-heal caches written before duration_ms was captured, rather
+        # than withholding it forever for albums seen before this field existed.
+        if not cached_tracks or 'duration_ms' in cached_tracks[0]:
+            return cached_tracks
 
     tracks = []
     url = f'{_spotify_base()}/albums/{album_id}/tracks'

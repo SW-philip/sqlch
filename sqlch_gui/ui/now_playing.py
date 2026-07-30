@@ -104,6 +104,8 @@ class NowPlayingPanel(Gtk.Box):
 
         self.lbl_genre = Gtk.Label(xalign=0.0, justify=Gtk.Justification.LEFT)
         self.lbl_genre.add_css_class("thread-label")
+        self.lbl_genre.set_wrap(True)
+        self.lbl_genre.set_max_width_chars(22)
 
         caption_box.append(self.lbl_title)
         caption_box.append(self.lbl_artist)
@@ -199,6 +201,8 @@ class NowPlayingPanel(Gtk.Box):
         self._cur_station_id = None
         self._cur_artist = None
         self._cur_title = None
+        self._is_live = False
+        self._live_station_name = None
         self._loaded = False
         self._vol = 0.0
         self._bitrate = None
@@ -243,6 +247,8 @@ class NowPlayingPanel(Gtk.Box):
         self._cur_station_id = None
         self._cur_artist = None
         self._cur_title = None
+        self._is_live = False
+        self._live_station_name = None
 
         self._sync_tracklist()
 
@@ -281,6 +287,15 @@ class NowPlayingPanel(Gtk.Box):
         tracklist, or drops back to a fallback view when none is cached yet."""
         while child := self.track_list_box.get_first_child():
             self.track_list_box.remove(child)
+
+        if self._is_live:
+            lbl_info = Gtk.Label(xalign=0.0)
+            station = html.escape(self._live_station_name or "this stream")
+            lbl_info.set_markup(f"<i>No track metadata available for {station}.</i>")
+            lbl_info.set_wrap(True)
+            lbl_info.set_max_width_chars(30)
+            self.track_list_box.append(lbl_info)
+            return
 
         meta = None
         if self._cur_artist and self._cur_title:
@@ -345,10 +360,13 @@ class NowPlayingPanel(Gtk.Box):
             self.clear_cover()
             self.lbl_live_tag.set_visible(True)
             self._cur_artist, self._cur_title = None, None
+            self._is_live = True
+            self._live_station_name = station_name
         else:
             self.lbl_title.set_text(title or "Unknown Track")
             self.lbl_artist.set_text(artist or "Unknown Artist")
             self.lbl_live_tag.set_visible(False)
+            self._is_live = False
 
             if artist != self._cur_artist or title != self._cur_title:
                 self._cur_artist = artist
