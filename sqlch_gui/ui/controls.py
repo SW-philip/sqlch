@@ -339,14 +339,15 @@ class RecordBubble(Gtk.DrawingArea):
 
 
 class NavColumn(Gtk.Box):
-    """Horizontal nav-icon row: Mini (collapse), Library, Discover.
+    """Horizontal nav-icon row: Mini (collapse, labeled Now Playing), Library,
+    Discover.
 
     Not three independent toggle buttons -- clicking Library or Discover
     opens that section (auto-collapsing whichever was open), re-clicking
     the already-open one is a no-op, and only Mini collapses back down to
-    nothing selected. Mini's icon is a hand-drawn spool (thread wound back
-    up) rather than a stock symbolic icon, echoing the thread/button
-    vocabulary already established by ThreadSlider and RecordBubble.
+    nothing selected. Mini's icon is a hand-drawn display/monitor glyph
+    rather than a stock symbolic icon, matching the hand-drawn vocabulary
+    already established by ThreadSlider and RecordBubble.
     """
 
     __gsignals__ = {
@@ -360,15 +361,15 @@ class NavColumn(Gtk.Box):
         self.active = "mini"
         self._buttons = {}
 
-        self._spool = Gtk.DrawingArea()
-        self._spool.set_content_width(14)
-        self._spool.set_content_height(14)
-        self._spool.set_draw_func(self._draw_spool)
+        self._display = Gtk.DrawingArea()
+        self._display.set_content_width(14)
+        self._display.set_content_height(14)
+        self._display.set_draw_func(self._draw_display)
 
         btn_mini = Gtk.Button()
-        btn_mini.set_child(self._spool)
+        btn_mini.set_child(self._display)
         btn_mini.add_css_class("nav-btn")
-        btn_mini.set_tooltip_text("Mini")
+        btn_mini.set_tooltip_text("Now Playing")
         btn_mini.connect("clicked", lambda b: self._select("mini"))
         self.append(btn_mini)
         self._buttons["mini"] = btn_mini
@@ -397,7 +398,7 @@ class NavColumn(Gtk.Box):
         self._buttons[self.active].remove_css_class("active")
         self.active = name
         self._buttons[name].add_css_class("active")
-        self._spool.queue_draw()
+        self._display.queue_draw()
 
     def _select(self, name: str):
         if name == self.active:
@@ -405,34 +406,38 @@ class NavColumn(Gtk.Box):
         self.set_active(name)
         self.emit("nav-selected", name)
 
-    def _draw_spool(self, area, cr, width, height, user_data=None):
+    def _draw_display(self, area, cr, width, height, user_data=None):
         colors = palette.load()
         mini_active = self.active == "mini"
         # Matches .nav-btn.active's `color: {outline}` (palette SHADOW) when
-        # Mini is selected, .nav-btn's plain `color: {REST}` otherwise --
+        # Now Playing is selected, .nav-btn's plain `color: {REST}` otherwise --
         # Cairo draws don't pick up GTK CSS `color`, so it's read explicitly.
         rgb = _hex_to_rgb_floats(colors.get('SHADOW' if mini_active else 'REST', '#4e4e52'))
-
-        cx, cy = width / 2.0, height / 2.0
-        rx, ry = width * 0.42, height * 0.16
-        top, bottom = cy - height * 0.32, cy + height * 0.32
-
         cr.set_source_rgba(*rgb, 1.0)
         cr.set_line_width(1.4)
+        cr.set_line_join(cairo.LINE_JOIN_ROUND)
 
-        # Two solid rims (the spool's end-caps) joined by two verticals
-        # (the spindle) -- reads as thread wound back onto a spool.
-        for rim_y in (top, bottom):
-            cr.save()
-            cr.translate(cx, rim_y)
-            cr.scale(rx, ry)
-            cr.arc(0, 0, 1.0, 0, 2 * math.pi)
-            cr.restore()
-            cr.stroke()
-
-        cr.move_to(cx - rx, top)
-        cr.line_to(cx - rx, bottom)
+        # Screen: rounded rect
+        screen_w, screen_h = width * 0.72, height * 0.58
+        x0, y0 = (width - screen_w) / 2.0, height * 0.08
+        r = 1.6
+        cr.new_sub_path()
+        cr.arc(x0 + screen_w - r, y0 + r, r, -math.pi / 2, 0)
+        cr.arc(x0 + screen_w - r, y0 + screen_h - r, r, 0, math.pi / 2)
+        cr.arc(x0 + r, y0 + screen_h - r, r, math.pi / 2, math.pi)
+        cr.arc(x0 + r, y0 + r, r, math.pi, 3 * math.pi / 2)
+        cr.close_path()
         cr.stroke()
-        cr.move_to(cx + rx, top)
-        cr.line_to(cx + rx, bottom)
+
+        # Stand: short neck below the screen, plus a small base foot.
+        cx = width / 2.0
+        neck_top = y0 + screen_h
+        neck_bottom = neck_top + height * 0.14
+        cr.move_to(cx, neck_top)
+        cr.line_to(cx, neck_bottom)
+        cr.stroke()
+
+        foot_half = width * 0.16
+        cr.move_to(cx - foot_half, neck_bottom)
+        cr.line_to(cx + foot_half, neck_bottom)
         cr.stroke()

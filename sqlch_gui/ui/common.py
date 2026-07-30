@@ -301,7 +301,7 @@ def load_custom_css():
     .meta-genre {{
         font-family: "Fredoka", sans-serif;
         font-size: 0.85em;
-        color: {colors.get('BAR', '#6b6b70')};
+        color: {colors.get('ROOT', '#f4b84b')};
         font-style: italic;
         text-shadow: 0 1px 0 {lite_c};
     }}
@@ -348,7 +348,7 @@ def load_custom_css():
         font-weight: 700;
         font-size: 0.65em;
         background-color: {colors.get('MUTE', '#e5dcce')};
-        color: {colors.get('BAR', '#6b6b70')};
+        color: {colors.get('ROOT', '#f4b84b')};
         padding: 2px 6px;
         border-radius: 5px;
         text-shadow: 0 1px 0 {lite_c};
@@ -394,10 +394,21 @@ def load_custom_css():
         text-shadow: 0 1px 0 {lite_c};
     }}
 
+    /* Nav-icon strip framed as its own plate, matching .list-header/
+       .tracklist-panel's cardboard-cutout vocabulary instead of floating
+       bare over .card's background. */
+    .nav-row {{
+        background-color: {colors.get('WING', '#eaddca')};
+        border-radius: 8px;
+        padding: 3px 6px;
+        border: 2px solid {outline};
+        box-shadow: {cutout(2, 2)}, {slight};
+    }}
+
     .readout-line {{
         font-family: "Courier New", monospace;
         font-size: 0.72em;
-        color: {colors.get('BAR', '#6b6b70')};
+        color: {colors.get('PIANO', '#2c2c30')};
         letter-spacing: 0.02em;
         text-shadow: 0 1px 0 {lite_c};
     }}
@@ -425,7 +436,7 @@ def load_custom_css():
         background-color: {colors.get('GRAD_STAGE_LO', '#ece6da')};
     }}
     .context-menu label {{
-        color: {colors.get('REST', '#4e4e52')};
+        color: {score};
         font-size: 0.85em;
         font-weight: bold;
         margin-top: 4px;

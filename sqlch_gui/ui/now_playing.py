@@ -39,6 +39,7 @@ class NowPlayingPanel(Gtk.Box):
 
         # --- Row 1: nav row + plain-text readout ---
         nav_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        nav_row.add_css_class("nav-row")
 
         self.nav_column = NavColumn()
         self.nav_column.connect("nav-selected", lambda nav, name: self.emit("nav-selected", name))

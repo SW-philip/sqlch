@@ -32,6 +32,12 @@ def _shade(r: float, g: float, b: float, factor: float) -> tuple[float, float, f
     return r * factor, g * factor, b * factor
 
 
+def _lighten(r: float, g: float, b: float, amount: float) -> tuple[float, float, float]:
+    """Blend each channel toward white by `amount` (0-1) -- unlike _shade's
+    plain multiply, this actually brightens colors that start near-black."""
+    return r + (1.0 - r) * amount, g + (1.0 - g) * amount, b + (1.0 - b) * amount
+
+
 class RibbonBanner(Gtk.Overlay):
     """Section-header banner with a torn-ribbon shape (small triangle tails)."""
 
@@ -71,6 +77,8 @@ class RibbonBanner(Gtk.Overlay):
         colors = palette.load()
         body_hex = colors.get('ROOT', '#f4b84b') if self._gold else colors.get('BAR', '#6a6a6a')
         r, g, b = _hex_to_rgb_floats(body_hex)
+        if not self._gold:
+            r, g, b = _lighten(r, g, b, 0.35)
         tr, tg, tb = _shade(r, g, b, 0.55)
 
         body_h = max(0.0, height - self.TAIL_H)
@@ -230,7 +238,7 @@ class PennantTag(Gtk.Overlay):
 
     def _on_draw(self, area, cr, width, height, user_data=None):
         colors = palette.load()
-        body_hex = colors.get('SOTTO', '#d5a66d') if self._country else colors.get('BAR', '#6a6a6a')
+        body_hex = colors.get('SOTTO', '#d5a66d') if self._country else colors.get('ROOT', '#f4b84b')
         r, g, b = _hex_to_rgb_floats(body_hex)
         cr.set_source_rgba(r, g, b, 1.0)
 
