@@ -128,10 +128,12 @@ def load_custom_css():
         padding: 4px 8px 3px;
     }}
     /* Base .meta-title/.meta-artist/.thread-label colors are tuned for the
-       light .card background -- override to light text for legibility
-       against this dark scrim. */
+       light .card background -- override for legibility against this dark
+       scrim, tinted with ROOT (niri's active-window-border color, see
+       ~/nixos/home/niri/config.kdl.nix) so the overlay reads as "focused"
+       the same way a niri window does. */
     .art-caption .meta-title, .art-caption .meta-artist {{
-        color: {colors.get('HALL', '#fdf8ee')};
+        color: {colors.get('ROOT', '#fdf8ee')};
         text-shadow: 0 1px 2px rgba({staff}, 0.9);
     }}
     .art-caption .thread-label {{
