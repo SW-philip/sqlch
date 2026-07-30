@@ -159,7 +159,8 @@ def get_album_tracks(album_id: str, token: str) -> list[dict]:
             for item in data.get('items', []):
                 tracks.append({
                     "number": item.get('track_number'),
-                    "name": item.get('name')
+                    "name": item.get('name'),
+                    "duration_ms": item.get('duration_ms'),
                 })
 
             url = data.get('next')  # Follow pagination loop
@@ -205,6 +206,7 @@ def enrich(artist: str, track: str) -> dict[str, Any] | None:
         'album':        album['name'],
         'album_artist': album['artists'][0]['name'],
         'year':         album['release_date'][:4],
+        'duration_ms':  item.get('duration_ms'),
         'genres':       _artist_genres(primary_artist['id'], token),
         'art_url':      album['images'][0]['url'] if album['images'] else None,
         'spotify_id':   item['id'],

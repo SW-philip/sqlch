@@ -44,6 +44,7 @@ def _empty_result(artist: str, track: str) -> dict[str, Any]:
         'cover': None,
         'genres': [],
         'tracklist': [],
+        'duration_ms': None,
         'source': 'unknown',
         'ts': _now(),
     }
@@ -105,6 +106,9 @@ def _enrich_musicbrainz(artist: str, track: str) -> dict[str, Any]:
         genres = _mb_genres_for_recording(rec.get('id'))
         if genres:
             result['genres'] = genres
+
+        if rec.get('length'):
+            result['duration_ms'] = rec['length']
 
         result['source'] = 'musicbrainz'
 
@@ -179,6 +183,7 @@ def enrich_track(artist: str, track: str) -> dict[str, Any]:
             'genres':    sp.get('genres', []),
             'album_id':  sp.get('album_id'),
             'tracklist': sp.get('tracklist', []),
+            'duration_ms': sp.get('duration_ms'),
             'source':    'spotify',
         })
     else:
