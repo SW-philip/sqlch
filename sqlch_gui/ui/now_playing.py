@@ -9,8 +9,10 @@ from gi.repository import Gtk, GLib, GdkPixbuf, GObject
 from .. import daemon, metadata
 from .controls import VolumeMeter, RecordBubble, NavColumn
 
-_REC_MODE_LABELS = {"full": "F", "track": "T"}
 _COVER_SIZE = 220     # keep in sync with .cover-art's min-width/min-height in common.py
+_INFO_PANEL_WIDTH = 300  # fixed width for the info panel; wider than _COVER_SIZE so
+                         # the Codec/Bitrate/Buffer pills fit on one line without
+                         # wrapping -- the album art centers with padding to match.
 
 
 class NowPlayingPanel(Gtk.Box):
@@ -67,29 +69,17 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_live_tag.set_visible(False)
         self.cover_overlay.add_overlay(self.lbl_live_tag)
 
-        self.lbl_format_tag = Gtk.Label()
-        self.lbl_format_tag.add_css_class("corner-tag")
-        self.lbl_format_tag.add_css_class("corner-tag-right")
-        self.lbl_format_tag.set_halign(Gtk.Align.END)
-        self.lbl_format_tag.set_valign(Gtk.Align.START)
-        self.lbl_format_tag.set_visible(False)
-        self.cover_overlay.add_overlay(self.lbl_format_tag)
-
-        # REC corner tag (bottom-right) -- a passive status indicator now;
-        # the transport row's RecordBubble owns the actual record controls.
-        self.rec_tag = Gtk.Label(label="REC")
-        self.rec_tag.add_css_class("corner-tag")
-        self.rec_tag.add_css_class("corner-tag-rec")
-        self.rec_tag.set_halign(Gtk.Align.END)
-        self.rec_tag.set_valign(Gtk.Align.END)
-        self.cover_overlay.add_overlay(self.rec_tag)
-
         card.append(self.cover_overlay)
 
         # --- Row 3: radio-context info panel (Station / Now Playing /
         # Previous tracks) plus stream diagnostic pills ---
+        # Wrapped in a non-propagating ScrolledWindow pinned to the cover
+        # art's own measured width (same clip-content-not-window idiom the
+        # drawer/tracklist panels already use elsewhere in this codebase),
+        # so this row's width can never drive the window wider or narrower
+        # as station/track text or pill visibility changes -- only the
+        # fixed-size album art governs the card's width.
         info_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
-        info_panel.add_css_class("info-panel")
 
         self.lbl_station = Gtk.Label(xalign=0.0)
         self.lbl_station.add_css_class("info-line")
@@ -110,7 +100,17 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_previous.set_visible(False)
         info_panel.append(self.lbl_previous)
 
-        pills_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        # FlowBox (not a plain Box) so pills that don't fit on one line at
+        # the pinned width wrap onto a second line instead of being clipped.
+        pills_row = Gtk.FlowBox()
+        pills_row.set_selection_mode(Gtk.SelectionMode.NONE)
+        pills_row.set_max_children_per_line(3)
+        pills_row.set_row_spacing(4)
+        pills_row.set_column_spacing(4)
+        # Homogeneous (the default) sizes every cell to match the widest
+        # pill, which can waste enough space to force an awkward 2-then-1
+        # wrap even when all three would fit at their actual widths.
+        pills_row.set_homogeneous(False)
         self.pill_codec = Gtk.Label()
         self.pill_codec.add_css_class("tech-badge")
         self.pill_codec.set_visible(False)
@@ -125,14 +125,19 @@ class NowPlayingPanel(Gtk.Box):
         pills_row.append(self.pill_buffer)
         info_panel.append(pills_row)
 
-        card.append(info_panel)
+        info_scroll = Gtk.ScrolledWindow()
+        info_scroll.add_css_class("info-panel")
+        info_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.NEVER)
+        info_scroll.set_propagate_natural_height(True)
+        info_scroll.set_size_request(_INFO_PANEL_WIDTH, -1)
+        info_scroll.set_child(info_panel)
+        card.append(info_scroll)
 
         # --- Row 4: RecordBubble / stop-play toggle | speaker + volume meter ---
         control_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
 
         self.rec_bubble = RecordBubble()
         self.rec_bubble.connect("record-toggled", self.on_record_clicked)
-        self.rec_bubble.connect("mode-changed", lambda w, m: self._update_rec_tag())
         control_row.append(self.rec_bubble)
 
         self.btn_toggle = Gtk.Button()
@@ -179,8 +184,6 @@ class NowPlayingPanel(Gtk.Box):
         self._live_station_name = None
         self._history: deque[tuple[str, str]] = deque(maxlen=3)
         self._loaded = False
-        self._rec_active = False
-        self._rec_elapsed = 0
         self.reset_ui()
 
     def clear_cover(self):
@@ -192,14 +195,10 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_previous.set_visible(False)
         self.btn_toggle.set_icon_name("media-playback-start-symbolic")
         self.lbl_live_tag.set_visible(False)
-        self.lbl_format_tag.set_visible(False)
         self.pill_codec.set_visible(False)
         self.pill_bitrate.set_visible(False)
         self.pill_buffer.set_visible(False)
-        self._rec_active = False
-        self._rec_elapsed = 0
         self.rec_bubble.set_state(False, "full")
-        self._update_rec_tag()
         self.clear_cover()
         self._cur_station_id = None
         self._cur_frequency = None
@@ -207,17 +206,6 @@ class NowPlayingPanel(Gtk.Box):
         self._cur_title = None
         self._live_station_name = None
         self._history.clear()
-
-    def _update_rec_tag(self):
-        letter = _REC_MODE_LABELS[self.rec_bubble.mode]
-        self.rec_tag.set_text(f"REC·{letter}")
-        if self._rec_active:
-            self.rec_tag.add_css_class("active")
-            m, s = divmod(self._rec_elapsed, 60)
-            self.rec_tag.set_tooltip_text(f"Recording {m:02d}:{s:02d}")
-        else:
-            self.rec_tag.remove_css_class("active")
-            self.rec_tag.set_tooltip_text("Idle")
 
     def get_current_id(self) -> str | None:
         return self._cur_station_id
@@ -346,16 +334,13 @@ class NowPlayingPanel(Gtk.Box):
             self.speaker_icon.set_from_icon_name("audio-volume-high-symbolic")
 
         if fmt:
-            self.lbl_format_tag.set_text(fmt)
-            self.lbl_format_tag.set_visible(True)
             self.pill_codec.set_text(f"Codec: {fmt}")
             self.pill_codec.set_visible(True)
         else:
-            self.lbl_format_tag.set_visible(False)
             self.pill_codec.set_visible(False)
 
         if bitrate:
-            self.pill_bitrate.set_text(f"Bitrate: {bitrate} kbps")
+            self.pill_bitrate.set_text(f"Bitrate: {bitrate}k")
             self.pill_bitrate.set_visible(True)
         else:
             self.pill_bitrate.set_visible(False)
@@ -367,13 +352,10 @@ class NowPlayingPanel(Gtk.Box):
             self.pill_buffer.set_visible(False)
 
         rec = recording or {}
-        self._rec_active = bool(rec.get("active"))
         mode = rec.get("mode")
         if mode not in ("full", "track"):
             mode = self.rec_bubble.mode
-        self.rec_bubble.set_state(self._rec_active, mode)
-        self._rec_elapsed = int(rec.get("elapsed", 0))
-        self._update_rec_tag()
+        self.rec_bubble.set_state(bool(rec.get("active")), mode)
 
     def on_record_clicked(self, bubble, mode):
         daemon.send({"cmd": "record", "action": "toggle", "mode": mode})

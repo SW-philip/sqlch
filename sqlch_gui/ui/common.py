@@ -141,20 +141,6 @@ def load_custom_css():
         color: {outline};
         transform: rotate(-4deg);
     }}
-    .corner-tag-right {{
-        background-color: {colors.get('BAR', '#6a6a6a')};
-        color: {score};
-        transform: rotate(4deg);
-    }}
-    .corner-tag-rec {{
-        background-color: {colors.get('MUTE', '#e5dcce')};
-        color: {colors.get('BAR', '#6b6b70')};
-        transform: rotate(-4deg);
-    }}
-    .corner-tag-rec.active {{
-        background-color: {colors.get('FORTE', '#8c3b3b')};
-        color: {colors.get('HALL', '#fdf8ee')};
-    }}
 
     .list-plate {{
         background-color: {colors.get('HALL', '#fdf8ee')};
