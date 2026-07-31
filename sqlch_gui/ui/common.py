@@ -24,7 +24,6 @@ def load_custom_css():
     outline = colors.get('SHADOW', '#121214')
     score = colors.get('SCORE', '#121214')
     score_rgb = _hex_to_rgb(score)
-    dim_rgb = _hex_to_rgb(colors.get('DIM', '#4c4e3c'))
     staff = colors.get('STAFF', '20,20,24')
     shadow = f"rgba({staff}, 0.85)"
     bg_color = colors.get('GRAD_HALL_LO', '#cebfa5')
@@ -117,30 +116,6 @@ def load_custom_css():
         min-width: 220px;
         min-height: 220px;
         box-shadow: {slight};
-    }}
-    /* Title/artist/genre scrim docked to the art's bottom edge, tinted with
-       the palette's DIM color. GTK CSS has no backdrop-filter/blur, so a
-       translucent panel stands in for "blurred glass" while staying legible
-       over arbitrary album art. */
-    .art-caption {{
-        background-color: rgba({dim_rgb}, 0.72);
-        border-radius: 0 0 8px 8px;
-        padding: 4px 8px 3px;
-    }}
-    /* Base .meta-title/.meta-artist/.thread-label colors are tuned for the
-       light .card background -- override for legibility against this dark
-       scrim, tinted with ROOT (niri's active-window-border color, see
-       ~/nixos/home/niri/config.kdl.nix) so the overlay reads as "focused"
-       the same way a niri window does. */
-    .art-caption .meta-title, .art-caption .meta-artist {{
-        color: {colors.get('ROOT', '#fdf8ee')};
-        text-shadow: 0 1px 2px rgba({staff}, 0.9);
-    }}
-    .art-caption .thread-label {{
-        color: rgba(255, 255, 255, 0.55);
-    }}
-    .art-caption .thread-label.lit {{
-        color: {colors.get('ROOT', '#f4b84b')};
     }}
     .cover-glyph {{
         font-size: 38px;
@@ -501,10 +476,11 @@ def load_custom_css():
         box-shadow: 0 0 0 2px {colors.get('ROOT', '#f4b84b')};
     }}
 
-    /* Tracklist panel - permanent full-width row below the meta text,
-       no longer a flip-card back face. Looks like a typewriter ledger
-       scrap pasted to cardboard. */
-    .tracklist-panel {{
+    /* Radio-context info panel - permanent full-width row below the
+       album art showing Station/Now Playing/Previous-tracks context
+       plus stream diagnostic pills. Same cardboard-ledger look the
+       former tracklist panel had. */
+    .info-panel {{
         background-color: {colors.get('STAGE', '#f9f6f0')};
         border-radius: 12px;
         border: 2px solid {outline};
@@ -512,13 +488,13 @@ def load_custom_css():
         padding: 6px;
     }}
 
-    /* Track info container styling */
-    .tracklist-container label {{
+    /* Station/Previous line styling -- monospace ledger look. The Now
+       Playing line uses .meta-title instead, for visual prominence. */
+    .info-line {{
         font-family: "Courier New", monospace;
         font-size: 0.72em;
         font-weight: bold;
         color: {colors.get('PIANO', '#2c2c30')};
-        padding: 2px;
         text-shadow: 0 1px 0 {lite_c};
     }}
 
