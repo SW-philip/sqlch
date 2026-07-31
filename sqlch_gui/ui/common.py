@@ -370,7 +370,7 @@ def load_custom_css():
     }}
 
     /* Nav-icon strip framed as its own plate, matching .list-header/
-       .tracklist-panel's cardboard-cutout vocabulary instead of floating
+       .info-panel's cardboard-cutout vocabulary instead of floating
        bare over .card's background. */
     .nav-row {{
         background-color: {colors.get('WING', '#eaddca')};

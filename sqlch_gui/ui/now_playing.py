@@ -2,23 +2,16 @@
 
 import html
 import threading
+from collections import deque
 from pathlib import Path
 from gi.repository import Gtk, GLib, GdkPixbuf, GObject
 
 from .. import daemon, metadata
-from .controls import ThreadSlider, NavColumn
-from .eq_strip import EqStrip
+from .controls import VolumeMeter, RecordBubble, NavColumn
 
 _REC_MODE_LABELS = {"full": "F", "track": "T"}
 _COVER_SIZE = 220     # keep in sync with .cover-art's min-width/min-height in common.py
-_TRACKLIST_HEIGHT = 130  # ~5-6 track rows before scrolling
 
-
-def _fmt_duration(ms: int | None) -> str | None:
-    if not ms:
-        return None
-    total_s = ms // 1000
-    return f"{total_s // 60}:{total_s % 60:02d}"
 
 class NowPlayingPanel(Gtk.Box):
     __gsignals__ = {
@@ -85,102 +78,85 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_format_tag.set_visible(False)
         self.cover_overlay.add_overlay(self.lbl_format_tag)
 
-        # Title/artist/genre caption, docked to the art's bottom edge over a
-        # translucent scrim (see .art-caption) so it reads regardless of the
-        # art's own colors.
-        caption_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
-        caption_box.add_css_class("art-caption")
-        caption_box.set_halign(Gtk.Align.FILL)
-        caption_box.set_valign(Gtk.Align.END)
-
-        self.lbl_title = Gtk.Label(xalign=0.0, justify=Gtk.Justification.LEFT)
-        self.lbl_title.add_css_class("meta-title")
-        self.lbl_title.set_wrap(True)
-        self.lbl_title.set_max_width_chars(22)
-
-        self.lbl_artist = Gtk.Label(xalign=0.0, justify=Gtk.Justification.LEFT)
-        self.lbl_artist.add_css_class("meta-artist")
-        self.lbl_artist.set_wrap(True)
-        self.lbl_artist.set_max_width_chars(22)
-
-        self.lbl_genre = Gtk.Label(xalign=0.0, justify=Gtk.Justification.LEFT)
-        self.lbl_genre.add_css_class("thread-label")
-        self.lbl_genre.set_wrap(True)
-        self.lbl_genre.set_max_width_chars(22)
-
-        caption_box.append(self.lbl_title)
-        caption_box.append(self.lbl_artist)
-        caption_box.append(self.lbl_genre)
-        self.cover_overlay.add_overlay(caption_box)
-
-        # REC corner tag (bottom-right). Added last so it floats on top of
-        # the caption scrim rather than being covered by it. Plain text tag
-        # from the same .corner-tag family as LIVE/format; left-click
-        # toggles recording, right-click cycles FULL/TRACK mode.
-        self.rec_tag = Gtk.Button(label="REC")
+        # REC corner tag (bottom-right) -- a passive status indicator now;
+        # the transport row's RecordBubble owns the actual record controls.
+        self.rec_tag = Gtk.Label(label="REC")
         self.rec_tag.add_css_class("corner-tag")
         self.rec_tag.add_css_class("corner-tag-rec")
         self.rec_tag.set_halign(Gtk.Align.END)
         self.rec_tag.set_valign(Gtk.Align.END)
-        self.rec_tag.connect("clicked", self.on_record_clicked)
-        rec_right_click = Gtk.GestureClick.new()
-        rec_right_click.set_button(3)
-        rec_right_click.connect("released", self.on_rec_mode_cycle)
-        self.rec_tag.add_controller(rec_right_click)
         self.cover_overlay.add_overlay(self.rec_tag)
 
         card.append(self.cover_overlay)
 
-        # --- Row 3: tracklist, permanently visible, scrolls past ~5-6 rows ---
-        track_scroll = Gtk.ScrolledWindow()
-        track_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        track_scroll.set_size_request(-1, _TRACKLIST_HEIGHT)
-        track_scroll.set_hexpand(True)
-        track_scroll.add_css_class("tracklist-panel")
+        # --- Row 3: radio-context info panel (Station / Now Playing /
+        # Previous tracks) plus stream diagnostic pills ---
+        info_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        info_panel.add_css_class("info-panel")
 
-        self.track_list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        self.track_list_box.add_css_class("tracklist-container")
-        track_scroll.set_child(self.track_list_box)
-        card.append(track_scroll)
+        self.lbl_station = Gtk.Label(xalign=0.0)
+        self.lbl_station.add_css_class("info-line")
+        self.lbl_station.set_wrap(True)
+        self.lbl_station.set_max_width_chars(30)
+        info_panel.append(self.lbl_station)
 
-        # --- Row 4: Stop / Volume (EQ strip behind it) / Mute / Play ---
+        self.lbl_now_playing = Gtk.Label(xalign=0.0)
+        self.lbl_now_playing.add_css_class("meta-title")
+        self.lbl_now_playing.set_wrap(True)
+        self.lbl_now_playing.set_max_width_chars(30)
+        info_panel.append(self.lbl_now_playing)
+
+        self.lbl_previous = Gtk.Label(xalign=0.0)
+        self.lbl_previous.add_css_class("info-line")
+        self.lbl_previous.set_wrap(True)
+        self.lbl_previous.set_max_width_chars(30)
+        self.lbl_previous.set_visible(False)
+        info_panel.append(self.lbl_previous)
+
+        pills_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self.pill_codec = Gtk.Label()
+        self.pill_codec.add_css_class("tech-badge")
+        self.pill_codec.set_visible(False)
+        self.pill_bitrate = Gtk.Label()
+        self.pill_bitrate.add_css_class("tech-badge")
+        self.pill_bitrate.set_visible(False)
+        self.pill_buffer = Gtk.Label()
+        self.pill_buffer.add_css_class("tech-badge")
+        self.pill_buffer.set_visible(False)
+        pills_row.append(self.pill_codec)
+        pills_row.append(self.pill_bitrate)
+        pills_row.append(self.pill_buffer)
+        info_panel.append(pills_row)
+
+        card.append(info_panel)
+
+        # --- Row 4: RecordBubble / stop-play toggle | speaker + volume meter ---
         control_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
 
-        btn_stop = Gtk.Button(icon_name="media-playback-stop-symbolic")
-        btn_stop.add_css_class("control-btn")
-        btn_stop.connect("clicked", self.on_stop)
-        control_row.append(btn_stop)
-
-        # EQ strip painted behind the volume slider; set_measure_overlay
-        # keeps the slider (not the FILL eq_strip) driving the overlay's size.
-        self.eq_strip = EqStrip()
-        self.eq_strip.set_halign(Gtk.Align.FILL)
-        self.eq_strip.set_valign(Gtk.Align.CENTER)
-
-        self.vol_adj = Gtk.Adjustment(value=0.0, lower=0.0, upper=1.0, step_increment=0.05)
-        self.vol_slider = ThreadSlider(self.vol_adj)
-        self._vol_handler = self.vol_slider.connect("value-changed", self.on_vol_changed)
-        self._pre_boost_vol: float | None = None
-        self.vol_slider.connect("boost-toggled", self.on_boost_toggled)
-        self.vol_slider.set_hexpand(True)
-
-        vol_overlay = Gtk.Overlay()
-        vol_overlay.set_child(self.eq_strip)
-        vol_overlay.add_overlay(self.vol_slider)
-        vol_overlay.set_measure_overlay(self.vol_slider, True)
-        vol_overlay.set_hexpand(True)
-        control_row.append(vol_overlay)
-
-        self.btn_mute = Gtk.Button(icon_name="audio-volume-high-symbolic")
-        self.btn_mute.add_css_class("control-btn")
-        self.btn_mute.connect("clicked", self.on_toggle_mute)
-        control_row.append(self.btn_mute)
+        self.rec_bubble = RecordBubble()
+        self.rec_bubble.connect("record-toggled", self.on_record_clicked)
+        self.rec_bubble.connect("mode-changed", lambda w, m: self._update_rec_tag())
+        control_row.append(self.rec_bubble)
 
         self.btn_toggle = Gtk.Button()
         self.btn_toggle.add_css_class("control-btn")
         self.btn_toggle.add_css_class("primary")
         self.btn_toggle.connect("clicked", self.on_toggle_play)
         control_row.append(self.btn_toggle)
+
+        control_row.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+
+        self.speaker_icon = Gtk.Image(icon_name="audio-volume-high-symbolic")
+        self.speaker_icon.set_valign(Gtk.Align.CENTER)
+        control_row.append(self.speaker_icon)
+
+        self.vol_adj = Gtk.Adjustment(value=0.0, lower=0.0, upper=1.0, step_increment=0.05)
+        self.vol_meter = VolumeMeter(self.vol_adj)
+        self._vol_handler = self.vol_meter.connect("value-changed", self.on_vol_changed)
+        self._pre_boost_vol: float | None = None
+        self.vol_meter.connect("boost-toggled", self.on_boost_toggled)
+        self.vol_meter.set_hexpand(True)
+        control_row.append(self.vol_meter)
 
         card.append(control_row)
 
@@ -194,23 +170,23 @@ class NowPlayingPanel(Gtk.Box):
         # does NOT click-through by default (Gtk.Widget.pick() resolves to the
         # topmost can_target widget at a point, regardless of whether it has any
         # click handling), so explicitly opt this label out of hit-testing to
-        # guarantee stop/mute/knob clicks below always reach their real targets.
+        # guarantee toggle/meter clicks below always reach their real targets.
         lbl_brand.set_can_target(False)
         card_overlay.add_overlay(lbl_brand)
         self.append(card_overlay)
 
         self._cur_station_id = None
+        self._cur_frequency = None
         self._cur_artist = None
         self._cur_title = None
-        self._is_live = False
         self._live_station_name = None
+        self._history: deque[tuple[str, str]] = deque(maxlen=3)
         self._loaded = False
         self._vol = 0.0
         self._bitrate = None
         self._channels = None
         self._bt = False
         self._device_name = None
-        self._rec_mode = "full"
         self._rec_active = False
         self._rec_elapsed = 0
         self.reset_ui()
@@ -218,44 +194,36 @@ class NowPlayingPanel(Gtk.Box):
     def clear_cover(self):
         self.cover_stack.set_visible_child_name("placeholder")
 
-    def _set_genre(self, genre: str | None):
-        if genre:
-            self.lbl_genre.set_text(genre)
-            self.lbl_genre.add_css_class("lit")
-        else:
-            self.lbl_genre.set_text("GENRE")
-            self.lbl_genre.remove_css_class("lit")
-
     def reset_ui(self):
-        self.lbl_title.set_markup("<b>Not Playing</b>")
-        self.lbl_artist.set_text("Select a station from the library")
-        self._set_genre(None)
+        self.lbl_station.set_text("")
+        self.lbl_now_playing.set_markup("<b>Not Playing</b>")
+        self.lbl_previous.set_visible(False)
         self.btn_toggle.set_icon_name("media-playback-start-symbolic")
-        self.eq_strip.set_active(False)
         self.lbl_live_tag.set_visible(False)
         self.lbl_format_tag.set_visible(False)
+        self.pill_codec.set_visible(False)
+        self.pill_bitrate.set_visible(False)
+        self.pill_buffer.set_visible(False)
         self._vol = 0.0
         self._bitrate = None
         self._channels = None
         self._bt = False
         self._device_name = None
         self._update_readout()
-        self._rec_mode = "full"
         self._rec_active = False
         self._rec_elapsed = 0
+        self.rec_bubble.set_state(False, "full")
         self._update_rec_tag()
         self.clear_cover()
         self._cur_station_id = None
+        self._cur_frequency = None
         self._cur_artist = None
         self._cur_title = None
-        self._is_live = False
         self._live_station_name = None
-
-        self._sync_tracklist()
+        self._history.clear()
 
     def _update_readout(self):
         parts = []
-        parts.append(f"{int(self._vol * 100)}%")
         if self._bitrate:
             parts.append(f"{self._bitrate}k")
         if self._channels:
@@ -267,15 +235,15 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_readout.set_text(" · ".join(parts))
 
     def _update_rec_tag(self):
-        letter = _REC_MODE_LABELS[self._rec_mode]
-        self.rec_tag.set_label(f"REC·{letter}")
+        letter = _REC_MODE_LABELS[self.rec_bubble.mode]
+        self.rec_tag.set_text(f"REC·{letter}")
         if self._rec_active:
             self.rec_tag.add_css_class("active")
             m, s = divmod(self._rec_elapsed, 60)
-            self.rec_tag.set_tooltip_text(f"Recording {m:02d}:{s:02d} · left-click to stop · right-click: mode")
+            self.rec_tag.set_tooltip_text(f"Recording {m:02d}:{s:02d}")
         else:
             self.rec_tag.remove_css_class("active")
-            self.rec_tag.set_tooltip_text("Left-click to record · right-click: mode")
+            self.rec_tag.set_tooltip_text("Idle")
 
     def get_current_id(self) -> str | None:
         return self._cur_station_id
@@ -283,62 +251,27 @@ class NowPlayingPanel(Gtk.Box):
     def get_current_track(self) -> tuple[str | None, str | None]:
         return self._cur_artist, self._cur_title
 
-    def _sync_tracklist(self):
-        """Populates the always-visible tracklist panel with the real album
-        tracklist, or drops back to a fallback view when none is cached yet."""
-        while child := self.track_list_box.get_first_child():
-            self.track_list_box.remove(child)
-
-        if self._is_live:
-            lbl_info = Gtk.Label(xalign=0.0)
-            station = html.escape(self._live_station_name or "this stream")
-            lbl_info.set_markup(f"<i>No track metadata available for {station}.</i>")
-            lbl_info.set_wrap(True)
-            lbl_info.set_max_width_chars(30)
-            self.track_list_box.append(lbl_info)
-            return
-
-        meta = None
-        if self._cur_artist and self._cur_title:
+    def _update_station_line(self):
+        freq_txt = f"{self._cur_frequency:.1f} FM · " if self._cur_frequency else ""
+        genre = metadata.get_icy_genre()
+        if not genre and self._cur_artist and self._cur_title:
             meta = metadata.get_enriched_meta(self._cur_artist, self._cur_title)
+            if meta and meta.get("genres"):
+                genre = meta["genres"][0]
+        suffix = f" · {html.escape(genre)}" if genre else ""
+        name = html.escape(self._live_station_name or "Unknown Station")
+        self.lbl_station.set_markup(f"<b>STATION</b>  {freq_txt}{name}{suffix}")
 
-        if meta and meta.get("tracklist"):
-            # Header tracklist render
-            album_lbl = Gtk.Label(xalign=0.0)
-            album = html.escape(meta.get('album') or 'Unknown Album')
-            year = meta.get('year')
-            header = f"<b>{album}</b>" + (f"  ·  {html.escape(str(year))}" if year else "")
-            album_lbl.set_markup(header)
-            album_lbl.set_wrap(True)
-            album_lbl.set_max_width_chars(30)
-            self.track_list_box.append(album_lbl)
-
-            # Individual track matrix layout injection
-            canonical_track = meta.get("track", "")
-            for track_item in meta["tracklist"]:
-                num = track_item.get("number", 0)
-                name = track_item.get("name", "")
-                dur = _fmt_duration(track_item.get("duration_ms"))
-
-                track_lbl = Gtk.Label(xalign=0.0)
-                escaped_name = html.escape(name)
-                line = f"{num}. {escaped_name}" + (f"  <i>{dur}</i>" if dur else "")
-
-                if name == canonical_track:
-                    track_lbl.set_markup(f"<b>{line}</b>")
-                else:
-                    track_lbl.set_markup(line)
-
-                track_lbl.set_wrap(True)
-                track_lbl.set_max_width_chars(30)
-                self.track_list_box.append(track_lbl)
-        else:
-            # Fallback rendering view
-            lbl_info = Gtk.Label(xalign=0.0)
-            lbl_info.set_markup(f"<b>A面:</b>\n{html.escape(self._cur_title or 'No Track')}\n\n<i>{html.escape(self._cur_artist or 'Unknown Artist')}</i>")
-            lbl_info.set_wrap(True)
-            lbl_info.set_max_width_chars(30)
-            self.track_list_box.append(lbl_info)
+    def _update_previous_line(self):
+        if not self._history:
+            self.lbl_previous.set_visible(False)
+            return
+        lines = [
+            f"{i}. {html.escape(a)} — {html.escape(t)}"
+            for i, (a, t) in enumerate(self._history, start=1)
+        ]
+        self.lbl_previous.set_markup("<b>PREVIOUS</b>\n" + "\n".join(lines))
+        self.lbl_previous.set_visible(True)
 
     def update(self, resp: dict | None, icy: tuple[str | None, str | None]):
         if not resp or not resp.get("ok") or not resp.get("current"):
@@ -346,48 +279,49 @@ class NowPlayingPanel(Gtk.Box):
             return
 
         curr = resp["current"]
-        self._cur_station_id = curr.get("id")
-        station_name = curr.get("name", "Unknown Station")
+        # resp["current"] is {"type": "station", "item": station}, not a
+        # flat station dict -- id/name/frequency live under "item".
+        item = curr.get("item") or {}
+        station_id = item.get("id")
+        station_name = item.get("name") or "Unknown Station"
+        frequency = item.get("frequency")
+
+        if station_id != self._cur_station_id:
+            self._history.clear()
+
+        self._cur_station_id = station_id
+        self._cur_frequency = frequency
+        self._live_station_name = station_name
 
         raw_artist, raw_title = icy
         artist = raw_artist.strip() if raw_artist else ""
         title = raw_title.strip() if raw_title else ""
 
-        prev_artist, prev_title = self._cur_artist, self._cur_title
-
         if not artist and not title:
-            self.lbl_title.set_markup(f"<b>{html.escape(station_name)}</b>")
-            self.lbl_artist.set_text("Live Stream")
             self.clear_cover()
             self.lbl_live_tag.set_visible(True)
+            self.lbl_now_playing.set_markup("<i>Live Stream</i>")
             self._cur_artist, self._cur_title = None, None
-            self._is_live = True
-            self._live_station_name = station_name
         else:
-            self.lbl_title.set_text(title or "Unknown Track")
-            self.lbl_artist.set_text(artist or "Unknown Artist")
             self.lbl_live_tag.set_visible(False)
-            self._is_live = False
+            display_artist = artist or "Unknown Artist"
+            display_title = title or "Unknown Track"
+            self.lbl_now_playing.set_markup(
+                f"<b>{html.escape(display_artist)} — {html.escape(display_title)}</b>"
+            )
 
             if artist != self._cur_artist or title != self._cur_title:
+                if self._cur_artist or self._cur_title:
+                    self._history.appendleft(
+                        (self._cur_artist or "Unknown Artist", self._cur_title or "Unknown Track")
+                    )
                 self._cur_artist = artist
                 self._cur_title = title
                 metadata.run_enrich(artist, title)
                 threading.Thread(target=self._async_fetch_cover, args=(artist, title), daemon=True).start()
-                threading.Thread(target=self._async_resync_tracklist, args=(artist, title), daemon=True).start()
 
-        # The tracklist is always visible now (no flip gate) -- rebuild it
-        # once whenever the track actually changed, rather than on every
-        # 1s daemon poll tick regardless of whether anything changed.
-        if (self._cur_artist, self._cur_title) != (prev_artist, prev_title):
-            self._sync_tracklist()
-
-        genre = metadata.get_icy_genre()
-        if not genre and self._cur_artist and self._cur_title:
-            meta = metadata.get_enriched_meta(self._cur_artist, self._cur_title)
-            if meta and meta.get("genres"):
-                genre = meta["genres"][0]
-        self._set_genre(genre)
+        self._update_station_line()
+        self._update_previous_line()
 
     def _async_fetch_cover(self, artist: str, title: str):
         import time
@@ -406,13 +340,6 @@ class NowPlayingPanel(Gtk.Box):
         if mode == "local" and path and Path(path).exists():
             GLib.idle_add(self._apply_cover_path, path, artist, title)
 
-    def _async_resync_tracklist(self, artist: str, title: str):
-        import time
-        time.sleep(3.0)  # give sqlch-enrich time to write enriched.json
-        if self._cur_artist != artist or self._cur_title != title:
-            return  # track already changed, bail
-        GLib.idle_add(self._sync_tracklist)
-
     def _apply_cover_path(self, path: str, artist: str, title: str) -> bool:
         if self._cur_artist == artist and self._cur_title == title:
             try:
@@ -425,24 +352,23 @@ class NowPlayingPanel(Gtk.Box):
 
     def update_indicators(self, bitrate: int | None, vol: float, muted: bool, bt: bool, playing: bool,
                           channels: int | None, recording: dict | None = None, fmt: str | None = None,
-                          device_name: str | None = None):
+                          device_name: str | None = None, buffer: int | None = None):
         self._loaded = playing
-        self.btn_toggle.set_icon_name("media-playback-pause-symbolic" if playing else "media-playback-start-symbolic")
-        self.eq_strip.set_active(playing)
+        self.btn_toggle.set_icon_name("media-playback-stop-symbolic" if playing else "media-playback-start-symbolic")
 
         # Block signals temporarily to prevent loopback configuration cascades
-        self.vol_slider.handler_block(self._vol_handler)
+        self.vol_meter.handler_block(self._vol_handler)
         self.vol_adj.set_value(vol)
-        self.vol_slider.handler_unblock(self._vol_handler)
+        self.vol_meter.handler_unblock(self._vol_handler)
 
         if muted:
-            self.btn_mute.set_icon_name("audio-volume-muted-symbolic")
+            self.speaker_icon.set_from_icon_name("audio-volume-muted-symbolic")
         elif vol < 0.4:
-            self.btn_mute.set_icon_name("audio-volume-low-symbolic")
+            self.speaker_icon.set_from_icon_name("audio-volume-low-symbolic")
         elif vol < 0.8:
-            self.btn_mute.set_icon_name("audio-volume-medium-symbolic")
+            self.speaker_icon.set_from_icon_name("audio-volume-medium-symbolic")
         else:
-            self.btn_mute.set_icon_name("audio-volume-high-symbolic")
+            self.speaker_icon.set_from_icon_name("audio-volume-high-symbolic")
 
         self._vol = vol
         self._bitrate = bitrate
@@ -454,49 +380,49 @@ class NowPlayingPanel(Gtk.Box):
         if fmt:
             self.lbl_format_tag.set_text(fmt)
             self.lbl_format_tag.set_visible(True)
+            self.pill_codec.set_text(f"Codec: {fmt}")
+            self.pill_codec.set_visible(True)
         else:
             self.lbl_format_tag.set_visible(False)
+            self.pill_codec.set_visible(False)
+
+        if bitrate:
+            self.pill_bitrate.set_text(f"Bitrate: {bitrate} kbps")
+            self.pill_bitrate.set_visible(True)
+        else:
+            self.pill_bitrate.set_visible(False)
+
+        if buffer is not None:
+            self.pill_buffer.set_text(f"Buffer: {buffer}%")
+            self.pill_buffer.set_visible(True)
+        else:
+            self.pill_buffer.set_visible(False)
 
         rec = recording or {}
         self._rec_active = bool(rec.get("active"))
         mode = rec.get("mode")
-        if mode in ("full", "track"):
-            self._rec_mode = mode
+        if mode not in ("full", "track"):
+            mode = self.rec_bubble.mode
+        self.rec_bubble.set_state(self._rec_active, mode)
         self._rec_elapsed = int(rec.get("elapsed", 0))
         self._update_rec_tag()
 
-    def on_record_clicked(self, btn):
-        daemon.send({"cmd": "record", "action": "toggle", "mode": self._rec_mode})
-
-    def on_rec_mode_cycle(self, gesture, n_press, x, y):
-        if self._rec_active:
-            return  # mode locked while a take is rolling
-        modes = ("full", "track")
-        i = modes.index(self._rec_mode)
-        self._rec_mode = modes[(i + 1) % len(modes)]
-        self._update_rec_tag()
+    def on_record_clicked(self, bubble, mode):
+        daemon.send({"cmd": "record", "action": "toggle", "mode": mode})
 
     def on_toggle_play(self, btn):
         if self._loaded:
-            daemon.send({"cmd": "pause"})
+            daemon.send({"cmd": "stop"})
         else:
             daemon.send({"cmd": "play", "query": "__last__"})
 
-    def on_stop(self, btn):
-        daemon.send({"cmd": "stop"})
-
-    def on_toggle_mute(self, btn):
-        import subprocess
-        subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"],
-                       stdout=subprocess.DEVNULL)
-
-    def on_vol_changed(self, slider, val):
+    def on_vol_changed(self, meter, val):
         self._vol = val
         self._update_readout()
         import subprocess
         subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val:.2f}"], stdout=subprocess.DEVNULL)
 
-    def on_boost_toggled(self, slider, active):
+    def on_boost_toggled(self, meter, active):
         import subprocess
         if active:
             self._pre_boost_vol = self.vol_adj.get_value()

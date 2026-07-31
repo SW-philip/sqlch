@@ -285,7 +285,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         self._pal_reload_pending = False
         load_custom_css()
         self.station_list.refresh()  # group headers bake palette hex into markup
-        self.now_playing.vol_slider.queue_draw()  # zipper tape re-reads palette on next draw
+        self.now_playing.vol_meter.queue_draw()  # VU meter re-reads palette on next draw
         return False
 
     def on_close_request(self, win):
@@ -302,14 +302,15 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
             channels = daemon.get_stream_channels()
             fmt = daemon.get_stream_format()
             device_name = daemon.get_sink_name()
+            buffer = daemon.get_stream_buffer()
 
             GLib.idle_add(
                 self._apply_daemon_state,
-                resp, icy, vol, muted, bitrate, channels, fmt, device_name
+                resp, icy, vol, muted, bitrate, channels, fmt, device_name, buffer
             )
             time.sleep(1.0)
 
-    def _apply_daemon_state(self, resp, icy, vol, muted, bitrate, channels, fmt, device_name) -> bool:
+    def _apply_daemon_state(self, resp, icy, vol, muted, bitrate, channels, fmt, device_name, buffer) -> bool:
         if not self._keep_running:
             return False
         self.now_playing.update(resp, icy=icy)
@@ -317,7 +318,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         recording = resp.get("recording") if resp else None
         self.now_playing.update_indicators(
             bitrate, vol, muted, self._bt_active, playing, channels,
-            recording=recording, fmt=fmt, device_name=device_name,
+            recording=recording, fmt=fmt, device_name=device_name, buffer=buffer,
         )
         artist, title = self.now_playing.get_current_track()
         self.station_list.set_active(self.now_playing.get_current_id(), artist, title)
