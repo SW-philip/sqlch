@@ -288,6 +288,7 @@ class NowPlayingPanel(Gtk.Box):
 
         if station_id != self._cur_station_id:
             self._history.clear()
+            self._cur_artist, self._cur_title = None, None
 
         self._cur_station_id = station_id
         self._cur_frequency = frequency
