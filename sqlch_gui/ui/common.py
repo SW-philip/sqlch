@@ -483,6 +483,12 @@ def load_custom_css():
         padding: 4px 8px;
         border: 2px solid {outline};
         box-shadow: {cutout(2, 2)}, {slight_press};
+        /* GTK4's default button theme paints its own background-image over
+           background-color -- without resetting it here, the button ignores
+           WING and falls back to the theme's own (dark) button chrome. Only
+           visible as a bug once tested against a light palette; invisible
+           against orca's dark WING, which happens to look similar. */
+        background-image: none;
         background-color: {colors.get('WING', '#fff5dd')};
         color: {score};
     }}
