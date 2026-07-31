@@ -109,6 +109,17 @@ def get_stream_format() -> str | None:
     return None
 
 
+def get_stream_buffer() -> int | None:
+    """Return mpv's cache-buffering-state (0-100), or None."""
+    val = _mpv_get_property("cache-buffering-state")
+    if val is not None:
+        try:
+            return int(val)
+        except (ValueError, TypeError):
+            pass
+    return None
+
+
 def get_sink_name() -> str | None:
     """Return the default audio sink's friendly description from wpctl, or None."""
     try:
