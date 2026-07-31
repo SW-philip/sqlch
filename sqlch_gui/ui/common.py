@@ -219,7 +219,7 @@ def load_custom_css():
     .station-live {{
         font-size: 0.8em;
         font-style: italic;
-        color: {colors.get('FIFTH', '#6b6b70')};
+        color: {colors.get('SEVENTH', '#79a383')};
         text-shadow: 0 1px 0 {lite_c};
     }}
     .station-row.active .station-live {{
@@ -474,6 +474,20 @@ def load_custom_css():
     .field-entry:focus-within {{
         border: 2px solid {colors.get('ROOT', '#f4b84b')};
         box-shadow: 0 0 0 2px {colors.get('ROOT', '#f4b84b')};
+    }}
+
+    /* Matches .field-entry's height/border/shadow so Discover's search
+       button doesn't sit visually offset from the entry beside it. */
+    .search-btn {{
+        border-radius: 8px;
+        padding: 4px 8px;
+        border: 2px solid {outline};
+        box-shadow: {cutout(2, 2)}, {slight_press};
+        background-color: {colors.get('WING', '#fff5dd')};
+        color: {score};
+    }}
+    .search-btn:hover {{
+        background-color: {colors.get('MUTE', '#e5dcce')};
     }}
 
     /* Radio-context info panel - permanent full-width row below the

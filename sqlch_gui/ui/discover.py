@@ -26,6 +26,7 @@ class DiscoverPanel(Gtk.Box):
         self.ent_query.connect("activate", self.on_search)
 
         btn_go = Gtk.Button(icon_name="edit-find-symbolic")
+        btn_go.add_css_class("search-btn")
         btn_go.connect("clicked", self.on_search)
 
         search_box.append(self.ent_query)
@@ -76,6 +77,7 @@ class DiscoverPanel(Gtk.Box):
         self.results_box = Gtk.ListBox()
         self.results_box.add_css_class("list-plate")
         self.results_box.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.results_box.set_vexpand(True)
         scroll.set_child(self.results_box)
         self.append(scroll)
 
