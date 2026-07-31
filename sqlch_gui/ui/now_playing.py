@@ -30,19 +30,13 @@ class NowPlayingPanel(Gtk.Box):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         card.add_css_class("card")
 
-        # --- Row 1: nav row + plain-text readout ---
+        # --- Row 1: nav row (Mini/Library/Discover view buttons only) ---
         nav_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         nav_row.add_css_class("nav-row")
 
         self.nav_column = NavColumn()
         self.nav_column.connect("nav-selected", lambda nav, name: self.emit("nav-selected", name))
         nav_row.append(self.nav_column)
-
-        self.lbl_readout = Gtk.Label(xalign=1.0)
-        self.lbl_readout.add_css_class("readout-line")
-        self.lbl_readout.set_hexpand(True)
-        self.lbl_readout.set_halign(Gtk.Align.END)
-        nav_row.append(self.lbl_readout)
 
         card.append(nav_row)
 
@@ -182,11 +176,6 @@ class NowPlayingPanel(Gtk.Box):
         self._live_station_name = None
         self._history: deque[tuple[str, str]] = deque(maxlen=3)
         self._loaded = False
-        self._vol = 0.0
-        self._bitrate = None
-        self._channels = None
-        self._bt = False
-        self._device_name = None
         self._rec_active = False
         self._rec_elapsed = 0
         self.reset_ui()
@@ -204,12 +193,6 @@ class NowPlayingPanel(Gtk.Box):
         self.pill_codec.set_visible(False)
         self.pill_bitrate.set_visible(False)
         self.pill_buffer.set_visible(False)
-        self._vol = 0.0
-        self._bitrate = None
-        self._channels = None
-        self._bt = False
-        self._device_name = None
-        self._update_readout()
         self._rec_active = False
         self._rec_elapsed = 0
         self.rec_bubble.set_state(False, "full")
@@ -221,18 +204,6 @@ class NowPlayingPanel(Gtk.Box):
         self._cur_title = None
         self._live_station_name = None
         self._history.clear()
-
-    def _update_readout(self):
-        parts = []
-        if self._bitrate:
-            parts.append(f"{self._bitrate}k")
-        if self._channels:
-            parts.append("Stereo" if self._channels == 2 else "Mono" if self._channels == 1 else f"{self._channels}Ch")
-        if self._bt:
-            parts.append("BT")
-        if self._device_name:
-            parts.append(self._device_name)
-        self.lbl_readout.set_text(" · ".join(parts))
 
     def _update_rec_tag(self):
         letter = _REC_MODE_LABELS[self.rec_bubble.mode]
@@ -351,9 +322,9 @@ class NowPlayingPanel(Gtk.Box):
                 self.clear_cover()
         return False
 
-    def update_indicators(self, bitrate: int | None, vol: float, muted: bool, bt: bool, playing: bool,
-                          channels: int | None, recording: dict | None = None, fmt: str | None = None,
-                          device_name: str | None = None, buffer: int | None = None):
+    def update_indicators(self, bitrate: int | None, vol: float, muted: bool, playing: bool,
+                          recording: dict | None = None, fmt: str | None = None,
+                          buffer: int | None = None):
         self._loaded = playing
         self.btn_toggle.set_icon_name("media-playback-stop-symbolic" if playing else "media-playback-start-symbolic")
 
@@ -370,13 +341,6 @@ class NowPlayingPanel(Gtk.Box):
             self.speaker_icon.set_from_icon_name("audio-volume-medium-symbolic")
         else:
             self.speaker_icon.set_from_icon_name("audio-volume-high-symbolic")
-
-        self._vol = vol
-        self._bitrate = bitrate
-        self._channels = channels
-        self._bt = bt
-        self._device_name = device_name
-        self._update_readout()
 
         if fmt:
             self.lbl_format_tag.set_text(fmt)
@@ -418,8 +382,6 @@ class NowPlayingPanel(Gtk.Box):
             daemon.send({"cmd": "play", "query": "__last__"})
 
     def on_vol_changed(self, meter, val):
-        self._vol = val
-        self._update_readout()
         import subprocess
         subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{val:.2f}"], stdout=subprocess.DEVNULL)
 

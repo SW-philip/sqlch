@@ -105,12 +105,10 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         self.now_playing.connect("nav-selected", self.on_nav_selected)
 
         # Runtime environment loops initialization parameters
-        self._bt_active = False
         self._keep_running = True
-        
+
         # Fire monitoring loop threads
         threading.Thread(target=self._daemon_monitor_loop, daemon=True).start()
-        threading.Thread(target=self._bluetooth_monitor_loop, daemon=True).start()
 
         # Re-skin live when the system theme rewrites palette.sh
         self._pal_reload_pending = False
@@ -299,38 +297,25 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
             icy = metadata.get_icy_track()
             vol, muted = daemon.get_vol_state()
             bitrate = daemon.get_stream_bitrate()
-            channels = daemon.get_stream_channels()
             fmt = daemon.get_stream_format()
-            device_name = daemon.get_sink_name()
             buffer = daemon.get_stream_buffer()
 
             GLib.idle_add(
                 self._apply_daemon_state,
-                resp, icy, vol, muted, bitrate, channels, fmt, device_name, buffer
+                resp, icy, vol, muted, bitrate, fmt, buffer
             )
             time.sleep(1.0)
 
-    def _apply_daemon_state(self, resp, icy, vol, muted, bitrate, channels, fmt, device_name, buffer) -> bool:
+    def _apply_daemon_state(self, resp, icy, vol, muted, bitrate, fmt, buffer) -> bool:
         if not self._keep_running:
             return False
         self.now_playing.update(resp, icy=icy)
         playing = bool(resp and resp.get("ok") and resp.get("current"))
         recording = resp.get("recording") if resp else None
         self.now_playing.update_indicators(
-            bitrate, vol, muted, self._bt_active, playing, channels,
-            recording=recording, fmt=fmt, device_name=device_name, buffer=buffer,
+            bitrate, vol, muted, playing,
+            recording=recording, fmt=fmt, buffer=buffer,
         )
         artist, title = self.now_playing.get_current_track()
         self.station_list.set_active(self.now_playing.get_current_id(), artist, title)
-        return False
-
-    def _bluetooth_monitor_loop(self):
-        import time
-        while self._keep_running:
-            active = daemon.get_bt_active()
-            GLib.idle_add(self._apply_bluetooth_state, active)
-            time.sleep(4.0)
-
-    def _apply_bluetooth_state(self, active: bool) -> bool:
-        self._bt_active = active
         return False

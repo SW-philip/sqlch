@@ -380,14 +380,6 @@ def load_custom_css():
         box-shadow: {cutout(2, 2)}, {slight};
     }}
 
-    .readout-line {{
-        font-family: "Courier New", monospace;
-        font-size: 0.72em;
-        color: {colors.get('PIANO', '#2c2c30')};
-        letter-spacing: 0.02em;
-        text-shadow: 0 1px 0 {lite_c};
-    }}
-
     .brand-tag {{
         font-family: "Courier New", monospace;
         font-weight: 700;

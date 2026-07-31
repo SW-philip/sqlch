@@ -1,7 +1,6 @@
 """sqlch control socket + MPV IPC queries."""
 
 import json
-import re
 import socket
 import subprocess
 
@@ -46,15 +45,6 @@ def get_vol_state() -> tuple[float, bool]:
         return 0.0, False
 
 
-def get_bt_active() -> bool:
-    """Return True if any bluez_output sink node exists in PipeWire."""
-    try:
-        r = subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=1)
-        return "bluez_output" in r.stdout
-    except Exception:
-        return False
-
-
 def _mpv_get_property(prop: str):
     if not MPV_SOCK.exists():
         return None
@@ -90,17 +80,6 @@ def get_stream_bitrate() -> int | None:
     return None
 
 
-def get_stream_channels() -> int | None:
-    """Return channel count from MPV (1 = mono, 2 = stereo), or None."""
-    val = _mpv_get_property("audio-params/channel-count")
-    if val is not None:
-        try:
-            return int(val)
-        except (ValueError, TypeError):
-            pass
-    return None
-
-
 def get_stream_format() -> str | None:
     """Return the short audio codec name (e.g. 'mp3', 'aac') from MPV, or None."""
     val = _mpv_get_property("audio-codec-name")
@@ -118,18 +97,3 @@ def get_stream_buffer() -> int | None:
         except (ValueError, TypeError):
             pass
     return None
-
-
-def get_sink_name() -> str | None:
-    """Return the default audio sink's friendly description from wpctl, or None."""
-    try:
-        r = subprocess.run(
-            ["wpctl", "inspect", "@DEFAULT_AUDIO_SINK@"],
-            capture_output=True,
-            text=True,
-            timeout=1,
-        )
-        m = re.search(r'node\.description\s*=\s*"([^"]+)"', r.stdout)
-        return m.group(1) if m else None
-    except Exception:
-        return None
