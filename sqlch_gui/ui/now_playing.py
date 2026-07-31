@@ -30,12 +30,15 @@ class NowPlayingPanel(Gtk.Box):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         card.add_css_class("card")
 
-        # --- Row 1: nav row (Mini/Library/Discover view buttons only) ---
+        # --- Row 1: nav row (Mini/Library/Discover view buttons, centered
+        # in a full-width bar rather than left-hugging with dead space) ---
         nav_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         nav_row.add_css_class("nav-row")
 
         self.nav_column = NavColumn()
         self.nav_column.connect("nav-selected", lambda nav, name: self.emit("nav-selected", name))
+        self.nav_column.set_hexpand(True)
+        self.nav_column.set_halign(Gtk.Align.CENTER)
         nav_row.append(self.nav_column)
 
         card.append(nav_row)
