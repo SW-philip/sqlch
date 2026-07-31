@@ -38,6 +38,7 @@ class VolumeMeter(Gtk.DrawingArea):
     N_SEGMENTS = 10
     _GAP = 2.0
     _MARGIN = 2.0
+    _BOOST_ZONE = 16.0
 
     def __init__(self, adjustment: Gtk.Adjustment):
         super().__init__()
@@ -77,8 +78,9 @@ class VolumeMeter(Gtk.DrawingArea):
 
     def _segment_rects(self, width: float, height: float) -> list[tuple[float, float, float, float]]:
         """(x, y, w, h) for each of the N_SEGMENTS regular pips, evenly
-        spaced across the widget width."""
-        usable = width - 2.0 * self._MARGIN
+        spaced across the widget width, with _BOOST_ZONE reserved past
+        the last pip for the boost overflow indicator."""
+        usable = width - 2.0 * self._MARGIN - self._BOOST_ZONE
         seg_w = (usable - self._GAP * (self.N_SEGMENTS - 1)) / self.N_SEGMENTS
         rects = []
         for i in range(self.N_SEGMENTS):
@@ -125,7 +127,7 @@ class VolumeMeter(Gtk.DrawingArea):
 
     def _on_click(self, gesture, n_press, x, y):
         width = self.get_width()
-        usable = width - 2.0 * self._MARGIN
+        usable = width - 2.0 * self._MARGIN - self._BOOST_ZONE
         if usable <= 0:
             return
         if self.boosted:
