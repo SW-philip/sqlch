@@ -1,6 +1,5 @@
-"""Custom GTK 4 tactile controls: pop-it bubble, thread-and-button volume slider, spool nav rail."""
+"""Custom GTK 4 tactile controls: pop-it bubble, VU-meter volume, spool nav rail."""
 
-import colorsys
 import math
 import cairo
 import gi
@@ -17,27 +16,18 @@ def _hex_to_rgb_floats(hex_val: str) -> tuple[float, float, float]:
     return r, g, b
 
 
-def _shade(rgb: tuple[float, float, float], factor: float) -> tuple[float, float, float]:
-    """Lighten (factor > 1) or darken (factor < 1) an RGB triple by scaling HSV value."""
-    r, g, b = rgb
-    h, s, v = colorsys.rgb_to_hsv(r, g, b)
-    v = max(0.0, min(1.0, v * factor))
-    return colorsys.hsv_to_rgb(h, s, v)
+class VolumeMeter(Gtk.DrawingArea):
+    """Segmented volume VU meter: pips fill left-to-right with the current
+    volume level, colored on a green-to-red gradient. Click a pip to jump
+    the volume to that segment; scroll to nudge. Reads as a level meter,
+    not a scrubber -- unlike the ThreadSlider it replaces, there is no
+    drag gesture at all.
 
-
-class ThreadSlider(Gtk.DrawingArea):
-    """Full-width volume fader: a plain dot riding a flat track.
-    Backs onto a Gtk.Adjustment, same as before -- click anywhere on
-    the track to jump there; drag the button; scroll to nudge.
-
-    Scrolling up while already at 100% engages a hard-coded 120% volume
-    boost: the button docks in a small overflow zone past the track's
-    right edge and re-colors hot (palette FORTE). The adjustment itself
-    is never changed by boosting; only NowPlayingPanel's boost-toggled
-    handler drives the actual wpctl volume change. Scrolling down while
-    boosted disengages it and resumes normal volume stepping. There is
-    no drag-to-boost gesture -- boost is scroll-only, and drag/click
-    always operate on the plain 0-100% range.
+    Scrolling up while already at 100% engages the same 120% boost
+    ThreadSlider had: an extra hot-colored overflow pip lights up past the
+    N_SEGMENTS regular pips. The adjustment itself is never changed by
+    boosting; only NowPlayingPanel's boost-toggled handler drives the
+    actual wpctl volume change.
     """
 
     __gsignals__ = {
@@ -45,11 +35,9 @@ class ThreadSlider(Gtk.DrawingArea):
         'boost-toggled': (GObject.SignalFlags.RUN_LAST, None, (bool,)),
     }
 
-    # Single source of truth for the button's edge margin and the
-    # boost-overflow zone reserved past the track's right edge, so
-    # drawing and hit-testing can never drift apart.
-    _MARGIN = 8.0
-    _BOOST_ZONE = 16.0
+    N_SEGMENTS = 10
+    _GAP = 2.0
+    _MARGIN = 2.0
 
     def __init__(self, adjustment: Gtk.Adjustment):
         super().__init__()
@@ -57,25 +45,16 @@ class ThreadSlider(Gtk.DrawingArea):
         self.boosted = False
         self.set_focusable(True)
         self.set_hexpand(True)
-        self.set_size_request(-1, 26)
+        self.set_size_request(-1, 18)
 
         self.adj.connect("value-changed", lambda _: self.queue_draw())
         self.set_draw_func(self._on_draw)
         self._update_tooltip()
 
-        self.drag_start_val = 0.0
-        self._dragging = False
-
         click_gest = Gtk.GestureClick.new()
         click_gest.set_button(1)
         click_gest.connect("released", self._on_click)
         self.add_controller(click_gest)
-
-        drag_gest = Gtk.GestureDrag.new()
-        drag_gest.connect("drag-begin", self._on_drag_begin)
-        drag_gest.connect("drag-update", self._on_drag_update)
-        drag_gest.connect("drag-end", self._on_drag_end)
-        self.add_controller(drag_gest)
 
         scroll_gest = Gtk.EventControllerScroll.new(Gtk.EventControllerScrollFlags.VERTICAL)
         scroll_gest.connect("scroll", self._on_scroll)
@@ -96,101 +75,67 @@ class ThreadSlider(Gtk.DrawingArea):
         self.adj.set_value(new_val)
         self.emit('value-changed', new_val)
 
-    def _usable_width(self, width: float) -> float:
-        return width - 2.0 * self._MARGIN - self._BOOST_ZONE
+    def _segment_rects(self, width: float, height: float) -> list[tuple[float, float, float, float]]:
+        """(x, y, w, h) for each of the N_SEGMENTS regular pips, evenly
+        spaced across the widget width."""
+        usable = width - 2.0 * self._MARGIN
+        seg_w = (usable - self._GAP * (self.N_SEGMENTS - 1)) / self.N_SEGMENTS
+        rects = []
+        for i in range(self.N_SEGMENTS):
+            x = self._MARGIN + i * (seg_w + self._GAP)
+            rects.append((x, 0.0, seg_w, height))
+        return rects
 
-    def _button_x(self, width: float) -> float:
-        return self._MARGIN + self._norm() * self._usable_width(width)
-
-    def _track_right(self, width: float) -> float:
-        return self._MARGIN + self._usable_width(width)
+    @staticmethod
+    def _rounded_bar(cr, x, y, w, h):
+        r = min(w / 2.0, h / 2.0, 3.0)
+        cr.new_sub_path()
+        cr.arc(x + w - r, y + r, r, -math.pi / 2, 0)
+        cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
+        cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi)
+        cr.arc(x + r, y + r, r, math.pi, 3 * math.pi / 2)
+        cr.close_path()
 
     def _on_draw(self, area, cr, width, height, user_data=None):
-        cy = height / 2.0
-        track_right = self._track_right(width)
-        button_x = track_right + self._BOOST_ZONE if self.boosted else self._button_x(width)
-
         colors = palette.load()
-        bar_rgb = _hex_to_rgb_floats(colors.get('BAR', '#6e6a86'))
-        thread_rgb = _shade(bar_rgb, 1.15)
-        button_rgb = _shade(bar_rgb, 1.05)
-        forte_rgb = _hex_to_rgb_floats(colors.get('FORTE', '#eb6f92'))
+        low_rgb = _hex_to_rgb_floats(colors.get('SEVENTH', '#79a383'))
+        hot_rgb = _hex_to_rgb_floats(colors.get('FORTE', '#eb6f92'))
 
-        # Flat solid track bar underneath the button.
-        cr.save()
-        cr.set_source_rgba(*thread_rgb, 0.7)
-        cr.set_line_width(2.0)
-        cr.move_to(self._MARGIN - 2.0, cy)
-        cr.line_to(track_right, cy)
-        cr.stroke()
-        cr.restore()
+        norm = self._norm()
+        filled = round(norm * self.N_SEGMENTS)
+        rects = self._segment_rects(width, height)
+
+        for i, (x, y, w, h) in enumerate(rects):
+            t = i / (self.N_SEGMENTS - 1)
+            r = low_rgb[0] + (hot_rgb[0] - low_rgb[0]) * t
+            g = low_rgb[1] + (hot_rgb[1] - low_rgb[1]) * t
+            b = low_rgb[2] + (hot_rgb[2] - low_rgb[2]) * t
+            alpha = 1.0 if i < filled else 0.18
+            cr.set_source_rgba(r, g, b, alpha)
+            self._rounded_bar(cr, x, y + 2.0, w, h - 4.0)
+            cr.fill()
 
         if self.boosted:
-            # Filled overflow highlight showing the boosted zone is active.
-            cr.save()
-            cr.set_source_rgba(*forte_rgb, 0.35)
-            cr.rectangle(track_right, cy - 2.0, self._BOOST_ZONE, 4.0)
-            cr.fill()
-            cr.restore()
-
-        # The button: a small flat disc with a hint of a highlight so it
-        # still reads as round, nothing more. Hot-colored (FORTE) while
-        # boosted, neutral otherwise.
-        base_rgb = forte_rgb if self.boosted else button_rgb
-        radius = 6.0
-        gradient = cairo.RadialGradient(
-            button_x - radius * 0.3, cy - radius * 0.3, radius * 0.1,
-            button_x, cy, radius,
-        )
-        gradient.add_color_stop_rgba(0.0, *_shade(base_rgb, 1.3), 1.0)
-        gradient.add_color_stop_rgba(1.0, *_shade(base_rgb, 0.8), 1.0)
-        cr.set_source(gradient)
-        cr.arc(button_x, cy, radius, 0, 2 * math.pi)
-        cr.fill()
+            last_x = rects[-1][0] + rects[-1][2]
+            overflow_w = width - self._MARGIN - last_x - self._GAP
+            if overflow_w > 0:
+                cr.set_source_rgba(*hot_rgb, 0.9)
+                self._rounded_bar(cr, last_x + self._GAP, 2.0, overflow_w, height - 4.0)
+                cr.fill()
 
     def _on_click(self, gesture, n_press, x, y):
-        if self._dragging:
-            return
         width = self.get_width()
-        usable = self._usable_width(width)
+        usable = width - 2.0 * self._MARGIN
         if usable <= 0:
             return
         if self.boosted:
             self.boosted = False
             self._update_tooltip()
             self.emit('boost-toggled', False)
-        self._set_from_norm((x - self._MARGIN) / usable)
-
-    def _on_drag_begin(self, gesture, start_x, start_y):
-        self.drag_start_val = self.adj.get_value()
-        self.grab_focus()
-
-    def _on_drag_update(self, gesture, offset_x, offset_y):
-        self._dragging = True
-        width = self.get_width()
-        usable = self._usable_width(width)
-        if usable <= 0:
-            return
-        if self.boosted:
-            self.boosted = False
-            self._update_tooltip()
-            self.emit('boost-toggled', False)
-        total_range = self.adj.get_upper() - self.adj.get_lower()
-        delta_norm = offset_x / usable
-        raw_val = self.drag_start_val + delta_norm * total_range
-        new_val = max(self.adj.get_lower(), min(self.adj.get_upper(), raw_val))
-        self.adj.set_value(new_val)
-        self.emit('value-changed', new_val)
-
-    def _on_drag_end(self, gesture, offset_x, offset_y):
-        # Deferred to idle so any 'released' from the co-installed
-        # GestureClick for this same button-up is still guarded by
-        # _dragging, no matter which controller GTK dispatches first.
-        GLib.idle_add(self._clear_dragging)
-
-    def _clear_dragging(self):
-        self._dragging = False
-        return GLib.SOURCE_REMOVE
+        seg_w = usable / self.N_SEGMENTS
+        idx = int((x - self._MARGIN) / seg_w)
+        idx = max(0, min(self.N_SEGMENTS - 1, idx))
+        self._set_from_norm((idx + 1) / self.N_SEGMENTS)
 
     def _on_scroll(self, controller, dx, dy):
         increasing = dy < 0
@@ -347,7 +292,7 @@ class NavColumn(Gtk.Box):
     the already-open one is a no-op, and only Mini collapses back down to
     nothing selected. Mini's icon is a hand-drawn display/monitor glyph
     rather than a stock symbolic icon, matching the hand-drawn vocabulary
-    already established by ThreadSlider and RecordBubble.
+    already established by VolumeMeter and RecordBubble.
     """
 
     __gsignals__ = {
