@@ -125,13 +125,18 @@ class NowPlayingPanel(Gtk.Box):
         pills_row.append(self.pill_buffer)
         info_panel.append(pills_row)
 
-        info_scroll = Gtk.ScrolledWindow()
-        info_scroll.add_css_class("info-panel")
-        info_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.NEVER)
-        info_scroll.set_propagate_natural_height(True)
-        info_scroll.set_size_request(_INFO_PANEL_WIDTH, -1)
-        info_scroll.set_child(info_panel)
-        card.append(info_scroll)
+        self.info_scroll = Gtk.ScrolledWindow()
+        self.info_scroll.add_css_class("info-panel")
+        self.info_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.NEVER)
+        self.info_scroll.set_propagate_natural_height(True)
+        self.info_scroll.set_size_request(_INFO_PANEL_WIDTH, -1)
+        self.info_scroll.set_child(info_panel)
+        # A touch more than the card's uniform row spacing -- the art's
+        # matted frame/cutout shadow reads as visually heavier than the
+        # nav row above it, so the plain 4px spacing looked tighter here
+        # than the gap up top.
+        self.info_scroll.set_margin_top(4)
+        card.append(self.info_scroll)
 
         # --- Row 4: RecordBubble / stop-play toggle | speaker + volume meter ---
         control_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -189,17 +194,37 @@ class NowPlayingPanel(Gtk.Box):
     def clear_cover(self):
         self.cover_stack.set_visible_child_name("placeholder")
 
+    def _set_stale(self, stale: bool):
+        """Dim the info panel and cover art while stopped, without touching
+        their content -- the idle card keeps showing the last-known station
+        and track instead of collapsing to blank."""
+        for widget in (self.info_scroll, self.cover_stack):
+            if stale:
+                widget.add_css_class("stale")
+            else:
+                widget.remove_css_class("stale")
+
+    def _set_pills_placeholder(self):
+        self.pill_codec.set_text("Codec: --")
+        self.pill_codec.set_visible(True)
+        self.pill_bitrate.set_text("Bitrate: --")
+        self.pill_bitrate.set_visible(True)
+        self.pill_buffer.set_text("Buffer: --")
+        self.pill_buffer.set_visible(True)
+
     def reset_ui(self):
-        self.lbl_station.set_text("")
-        self.lbl_now_playing.set_markup("<b>Not Playing</b>")
+        """Initial, never-played state -- same dimmed/idle look as stopping
+        after a station has played, just with placeholder text instead of
+        last-known station/track."""
+        self.lbl_station.set_markup("<b>STATION</b>  —")
+        self.lbl_now_playing.set_markup("<i>Not Playing</i>")
         self.lbl_previous.set_visible(False)
         self.btn_toggle.set_icon_name("media-playback-start-symbolic")
         self.lbl_live_tag.set_visible(False)
-        self.pill_codec.set_visible(False)
-        self.pill_bitrate.set_visible(False)
-        self.pill_buffer.set_visible(False)
+        self._set_pills_placeholder()
         self.rec_bubble.set_state(False, "full")
         self.clear_cover()
+        self._set_stale(True)
         self._cur_station_id = None
         self._cur_frequency = None
         self._cur_artist = None
@@ -237,9 +262,14 @@ class NowPlayingPanel(Gtk.Box):
 
     def update(self, resp: dict | None, icy: tuple[str | None, str | None]):
         if not resp or not resp.get("ok") or not resp.get("current"):
-            self.reset_ui()
+            # Stopped: leave the last-rendered station/track/previous/cover
+            # in place (dimmed via _set_stale) instead of wiping them --
+            # only the LIVE tag is no longer accurate and gets hidden.
+            self._set_stale(True)
+            self.lbl_live_tag.set_visible(False)
             return
 
+        self._set_stale(False)
         curr = resp["current"]
         # resp["current"] is {"type": "station", "item": station}, not a
         # flat station dict -- id/name/frequency live under "item".
@@ -333,23 +363,26 @@ class NowPlayingPanel(Gtk.Box):
         else:
             self.speaker_icon.set_from_icon_name("audio-volume-high-symbolic")
 
-        if fmt:
-            self.pill_codec.set_text(f"Codec: {fmt}")
-            self.pill_codec.set_visible(True)
+        if not playing:
+            self._set_pills_placeholder()
         else:
-            self.pill_codec.set_visible(False)
+            if fmt:
+                self.pill_codec.set_text(f"Codec: {fmt}")
+                self.pill_codec.set_visible(True)
+            else:
+                self.pill_codec.set_visible(False)
 
-        if bitrate:
-            self.pill_bitrate.set_text(f"Bitrate: {bitrate}k")
-            self.pill_bitrate.set_visible(True)
-        else:
-            self.pill_bitrate.set_visible(False)
+            if bitrate:
+                self.pill_bitrate.set_text(f"Bitrate: {bitrate}k")
+                self.pill_bitrate.set_visible(True)
+            else:
+                self.pill_bitrate.set_visible(False)
 
-        if buffer is not None:
-            self.pill_buffer.set_text(f"Buffer: {buffer}%")
-            self.pill_buffer.set_visible(True)
-        else:
-            self.pill_buffer.set_visible(False)
+            if buffer is not None:
+                self.pill_buffer.set_text(f"Buffer: {buffer}%")
+                self.pill_buffer.set_visible(True)
+            else:
+                self.pill_buffer.set_visible(False)
 
         rec = recording or {}
         mode = rec.get("mode")

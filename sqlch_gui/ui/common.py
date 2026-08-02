@@ -38,6 +38,12 @@ def load_custom_css():
         """Hard-edged offset duplicate; pair with `border: Npx solid {outline}`."""
         return f"{dx}px {dy}px 0 0 {outline}"
 
+    # Palette-agnostic raised-panel sheen: a top highlight fading to a faint
+    # bottom tint, layered over any flat background-color so small chrome
+    # (round icon buttons, strips) reads as a physical raised surface without
+    # needing a dedicated GRAD_* pair per hue.
+    sheen = "linear-gradient(160deg, rgba(255,255,255,0.20), rgba(0,0,0,0.08))"
+
     svg_tactile_filter = (
         "url(\"data:image/svg+xml;utf8,"
         "<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'>"
@@ -75,12 +81,14 @@ def load_custom_css():
         margin: 2px 0px;
         border-radius: 6px;
         color: {colors.get('REST', '#4e4e52')};
-        background: transparent;
-        border: 2px solid transparent;
+        background-color: {colors.get('WING', '#f2ece1')};
+        background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_WING_HI', '#443f60')}, {colors.get('GRAD_WING_LO', '#2d2944')});
+        border: 2px solid {outline};
+        box-shadow: {cutout(1, 1)}, {slight_press};
         transition: transform 80ms ease, box-shadow 80ms ease;
     }}
     .nav-btn:hover {{
-        background-image: {svg_tactile_filter};
+        background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_WING_HI', '#443f60')}, {colors.get('GRAD_WING_LO', '#2d2944')});
         background-color: {colors.get('WING', '#fff5dd')};
         color: {score};
         transform: scale(1.05) translateY(-1px);
@@ -99,8 +107,8 @@ def load_custom_css():
 
     .card {{
         background-color: {colors.get('STAGE', '#f9f6f0')};
-        background-image: {svg_tactile_filter};
-        background-repeat: repeat;
+        background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_STAGE_HI', '#fbf9f5')}, {colors.get('GRAD_STAGE_LO', '#ece6da')});
+        background-repeat: repeat, no-repeat;
         border-radius: 10px;
         padding: 4px;
         border: 2px solid {outline};
@@ -108,14 +116,22 @@ def load_custom_css():
         margin-bottom: 2px;
     }}
 
-    /* Size kept in sync with _COVER_SIZE in now_playing.py */
+    /* Size kept in sync with _COVER_SIZE in now_playing.py. Framed like a
+       matted picture frame -- thick ink border, a ROOT-accent mat ring,
+       then a thin inner rule -- so the art reads as the card's focal point
+       instead of just another panel. Rings are inset box-shadows (kept
+       inside the border box) rather than outline/outline-offset, since the
+       corner-tag LIVE badge overlays flush against this edge and an
+       outward-expanding ring would fight its positioning. */
     .cover-art {{
         background-color: {colors.get('WING', '#e2dacf')};
+        background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_WING_HI', '#443f60')}, {colors.get('GRAD_WING_LO', '#2d2944')});
+        background-repeat: repeat, no-repeat;
         border-radius: 10px;
-        border: 2px solid {outline};
+        border: 3px solid {outline};
         min-width: 220px;
         min-height: 220px;
-        box-shadow: {slight};
+        box-shadow: inset 0 0 0 3px {colors.get('ROOT', '#f4b84b')}, inset 0 0 0 5px {outline}, {cutout(4, 4)}, {slight_lift};
     }}
     .cover-glyph {{
         font-size: 38px;
@@ -144,8 +160,8 @@ def load_custom_css():
 
     .list-plate {{
         background-color: {colors.get('HALL', '#fdf8ee')};
-        background-image: {svg_tactile_filter};
-        background-repeat: repeat;
+        background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_HALL_HI', '#e6dfce')}, {colors.get('GRAD_HALL_LO', '#cebfa5')});
+        background-repeat: repeat, no-repeat;
         border-radius: 12px;
         padding: 5px;
         border: 2px solid {outline};
@@ -157,6 +173,8 @@ def load_custom_css():
 
     .list-header {{
         background-color: {colors.get('WING', '#eaddca')};
+        background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_WING_HI', '#443f60')}, {colors.get('GRAD_WING_LO', '#2d2944')});
+        background-repeat: repeat, no-repeat;
         color: {score};
         font-weight: bold;
         border-radius: 8px;
@@ -172,11 +190,13 @@ def load_custom_css():
         border-radius: 8px;
         margin-bottom: 2px;
         background-color: {colors.get('STAGE', '#f9f6f0')};
+        background-image: linear-gradient(160deg, {colors.get('GRAD_STAGE_HI', '#fbf9f5')}, {colors.get('GRAD_STAGE_LO', '#ece6da')});
         border: 2px solid {outline};
         box-shadow: {cutout(2, 2)}, {slight};
     }}
     .station-row:hover {{
         background-color: {colors.get('WING', '#fff5dd')};
+        background-image: linear-gradient(160deg, {colors.get('GRAD_WING_HI', '#443f60')}, {colors.get('GRAD_WING_LO', '#2d2944')});
         border: 2px solid {outline};
         box-shadow: {cutout(3, 3)}, {slight_lift};
         transform: translateY(-1px);
@@ -219,12 +239,14 @@ def load_custom_css():
         min-height: 28px;
         padding: 0;
         background-color: {colors.get('WING', '#f2ece1')};
+        background-image: {sheen};
         color: {score};
         box-shadow: {slight};
         transition: transform 80ms ease, box-shadow 80ms ease;
     }}
     .control-btn:hover {{
         background-color: {colors.get('MUTE', '#e5dcce')};
+        background-image: {sheen};
         box-shadow: 0 0 0 1px {outline}, {slight_lift};
         transform: translateY(-1px);
     }}
@@ -237,12 +259,14 @@ def load_custom_css():
         min-height: 36px;
         border-radius: 13px;
         background-color: {colors.get('PIANO', '#2c2c30')};
+        background-image: {sheen};
         color: {colors.get('HALL', '#fdf8ee')};
         box-shadow: 0 0 0 2px {outline}, {slight};
         text-shadow: 0 -1px 0 rgba(255,255,255,0.30), 0 1px 2px rgba({staff}, 0.70);
     }}
     .control-btn.primary:hover {{
         background-color: {colors.get('SOTTO', '#454549')};
+        background-image: {sheen};
         box-shadow: 0 0 0 2px {outline}, {slight_lift};
     }}
 
@@ -360,6 +384,7 @@ def load_custom_css():
        bare over .card's background. */
     .nav-row {{
         background-color: {colors.get('WING', '#eaddca')};
+        background-image: linear-gradient(160deg, {colors.get('GRAD_WING_HI', '#443f60')}, {colors.get('GRAD_WING_LO', '#2d2944')});
         border-radius: 8px;
         padding: 3px 6px;
         border: 2px solid {outline};
@@ -417,12 +442,14 @@ def load_custom_css():
         border-radius: 8px;
         color: {score};
         background-color: {colors.get('WING', '#fff5dd')};
+        background-image: {sheen};
         border: 2px solid {outline};
         box-shadow: {cutout(3, 3)}, {slight};
         transition: transform 80ms ease, box-shadow 80ms ease;
     }}
     .menu-btn:hover {{
         background-color: {colors.get('MUTE', '#e5dcce')};
+        background-image: {sheen};
         border: 2px solid {outline};
         box-shadow: {cutout(4, 4)}, {slight_lift};
         transform: translateY(-1px);
@@ -466,12 +493,13 @@ def load_custom_css():
            WING and falls back to the theme's own (dark) button chrome. Only
            visible as a bug once tested against a light palette; invisible
            against orca's dark WING, which happens to look similar. */
-        background-image: none;
+        background-image: {sheen};
         background-color: {colors.get('WING', '#fff5dd')};
         color: {score};
     }}
     .search-btn:hover {{
         background-color: {colors.get('MUTE', '#e5dcce')};
+        background-image: {sheen};
     }}
 
     /* Radio-context info panel - permanent full-width row below the
@@ -484,6 +512,13 @@ def load_custom_css():
         border: 2px solid {outline};
         box-shadow: inset 0 0 4px rgba({staff}, 0.15), {cutout(3, 3)}, {slight};
         padding: 6px;
+    }}
+
+    /* Idle treatment: station/track info and cover art stay populated with
+       the last-known state instead of clearing, just dimmed -- applied to
+       .info-panel and .cover-art while stopped. */
+    .info-panel.stale, .cover-art.stale {{
+        opacity: 0.5;
     }}
 
     /* Station/Previous line styling -- monospace ledger look. The Now

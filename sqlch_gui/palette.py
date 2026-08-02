@@ -23,6 +23,8 @@ _DEFAULTS: dict[str, str] = {
     "GRAD_HALL_LO": "#1a1828",
     "GRAD_STAGE_HI": "#302c4d",
     "GRAD_STAGE_LO": "#211f36",
+    "GRAD_WING_HI": "#443f60",
+    "GRAD_WING_LO": "#2d2944",
     "STAFF": "15,14,23",
 }
 
