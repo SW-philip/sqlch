@@ -122,6 +122,12 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
     def on_nav_selected(self, panel, name: str):
         if name == "mini":
             self.station_list.abort_probes()
+            # Unmount the heavy panel before the shrink starts rather than
+            # after it settles, so the crossfade reads as a fade-out instead
+            # of content hanging around fully allocated through the whole
+            # shrink. (The dominant per-frame cost during the animation
+            # turned out to be elsewhere -- see _animate_drawer_to.)
+            self.dropdown_stack.set_visible_child_name("mini")
             self._animate_drawer_to(0.0)
         else:
             self._drawer_panel = name
@@ -226,6 +232,8 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         else:
             self.now_playing.nav_column.set_active("mini")
             self.station_list.abort_probes()
+            # See on_nav_selected: unmount before the shrink, not after.
+            self.dropdown_stack.set_visible_child_name("mini")
             self._animate_drawer_to(0.0, initial_vel=self._drag_vel)
 
     def _animate_drawer_to(self, target: float, initial_vel: float = 0.0):
@@ -238,9 +246,10 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         c = 2.0 * DRAWER_SPRING_ZETA * DRAWER_SPRING_OMEGA
         vel = initial_vel
         last_us = None
+        frame_n = 0
 
         def tick(widget, frame_clock):
-            nonlocal vel, last_us
+            nonlocal vel, last_us, frame_n
             now_us = frame_clock.get_frame_time()
             if last_us is None:
                 last_us = now_us
@@ -264,7 +273,18 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
                     self.dropdown_stack.set_visible_child_name("mini")
                 return GLib.SOURCE_REMOVE
 
-            self._set_drawer_pos(pos)
+            # Physics integrates every frame, but each committed position
+            # forces a real layer-shell surface resize + full-window repaint
+            # (the actually expensive part, confirmed by frame-gap logging --
+            # unmounting the drawer's own content didn't help, so the cost is
+            # dominated by the always-visible Now Playing chrome repainting
+            # on every resize regardless of what's in the drawer). Committing
+            # every other frame halves the number of resizes without a
+            # visible step in the motion.
+            self._drawer_pos = pos
+            frame_n += 1
+            if frame_n % 2 == 0:
+                self.dropdown_scroll.set_size_request(max(0, round(pos)), -1)
             return GLib.SOURCE_CONTINUE
 
         self._drawer_tick_id = self.dropdown_scroll.add_tick_callback(tick)
