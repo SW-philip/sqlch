@@ -86,15 +86,15 @@ class StationListPanel(Gtk.Box):
 
         # Extract textual tags or names hidden in sub-elements
         for widget in child:
-            if isinstance(widget, Gtk.Box): # Primary center box
+            if isinstance(widget, PennantTag): # Group tag pennant
+                if search_text in widget.label.get_text().lower():
+                    return True
+            elif isinstance(widget, Gtk.Box): # Primary center box
                 for label in widget:
                     if isinstance(label, Gtk.Label) and search_text in label.get_text().lower():
                         return True
             elif isinstance(widget, Gtk.Label): # Side info chips
                 if search_text in widget.get_text().lower():
-                    return True
-            elif isinstance(widget, PennantTag): # Group tag pennant
-                if search_text in widget.label.get_text().lower():
                     return True
 
         return False

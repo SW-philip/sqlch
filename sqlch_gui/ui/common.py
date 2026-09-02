@@ -69,7 +69,7 @@ def _build_css(colors: dict) -> str:
     window {{
         background-color: transparent;
         font-family: {mono};
-        font-size: 12px;
+        font-size: {colors.get('TEMPO', '12px')};
         color: {score};
     }}
 
@@ -209,6 +209,9 @@ def _build_css(colors: dict) -> str:
     .station-row.active .station-live {{
         color: {hall};
     }}
+    .station-row.active .tag-chip label {{
+        color: {lyric};
+    }}
 
     .control-btn {{
         border-radius: 7px;
@@ -272,6 +275,7 @@ def _build_css(colors: dict) -> str:
         font-weight: 700;
         font-size: 0.72em;
         background-color: {wing};
+        background-image: none;
         color: {lyric};
         padding: 2px 7px;
         border-radius: 7px;

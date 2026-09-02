@@ -1,6 +1,9 @@
+import pathlib
 import unittest
 
 from sqlch_gui import palette
+
+_REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # Keys the flat CSS vocabulary and Cairo widgets read via colors.get(...).
 # They exist in the current-generation palette.sh; these must also be in
@@ -92,9 +95,13 @@ class TestBannerWidgets(unittest.TestCase):
         from sqlch_gui.ui.banner import TornSeparator
         for orient in (Gtk.Orientation.VERTICAL, Gtk.Orientation.HORIZONTAL):
             sep = TornSeparator(orient)
-            surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 18, 200)
+            if orient == Gtk.Orientation.HORIZONTAL:
+                w, h = 200, 18
+            else:
+                w, h = 18, 200
+            surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
             cr = cairo.Context(surf)
-            sep._on_draw(sep, cr, 18, 200)
+            sep._on_draw(sep, cr, w, h)
 
 
 class TestControlWidgetsFlat(unittest.TestCase):
@@ -122,8 +129,7 @@ class TestControlWidgetsFlat(unittest.TestCase):
         m._on_draw(m, self._ctx(160, 18), 160, 18)
 
     def test_controls_source_has_no_hardcoded_rgb_literals(self):
-        import pathlib
-        src = pathlib.Path("sqlch_gui/ui/controls.py").read_text()
+        src = (_REPO_ROOT / "sqlch_gui/ui/controls.py").read_text()
         # the pop-it bubble's hardcoded reds / greys are gone
         self.assertNotIn("0.86, 0.20, 0.18", src)
         self.assertNotIn("cairo.RadialGradient", src)
@@ -131,13 +137,13 @@ class TestControlWidgetsFlat(unittest.TestCase):
 
 class TestEqStrip(unittest.TestCase):
     def test_bead_draw_no_raise_and_single_tone(self):
-        import cairo, pathlib
+        import cairo
         from sqlch_gui.ui.eq_strip import EqStrip
         s = EqStrip(n_beads=3, width=18, height=11)
         s._running = True
         surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 18, 11)
         s._on_draw(s, cairo.Context(surf), 18, 11)
-        src = pathlib.Path("sqlch_gui/ui/eq_strip.py").read_text()
+        src = (_REPO_ROOT / "sqlch_gui/ui/eq_strip.py").read_text()
         # the ROOT->SEVENTH cross-fade is gone
         self.assertNotIn("tail_r", src)
 
