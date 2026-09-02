@@ -26,6 +26,16 @@ _DEFAULTS: dict[str, str] = {
     "GRAD_WING_HI": "#443f60",
     "GRAD_WING_LO": "#2d2944",
     "STAFF": "15,14,23",
+    "DIM": "#1a1828",
+    "LYRIC": "#c9c5da",
+    "STAFF_A_OUTER": "0.50",
+    "STAFF_A_DROP": "0.55",
+    "STAFF_A_HOVER": "0.65",
+    "STAFF_A_INSET_TOP": "0.08",
+    "STAFF_A_INSET_BOT": "0.30",
+    "STAFF_A_BORDER": "0.07",
+    "MEASURE": "0 1px 2px rgba(0,0,0,0.80)",
+    "TEMPO": "12px",
 }
 
 
