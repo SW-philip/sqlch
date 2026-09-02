@@ -100,6 +100,8 @@ class VolumeMeter(Gtk.DrawingArea):
 
     def _on_draw(self, area, cr, width, height, user_data=None):
         colors = palette.load()
+        trough = _hex_to_rgb_floats(colors.get('DIM', '#1a1828'))
+        score = _hex_to_rgb_floats(colors.get('SCORE', '#e0def4'))
         low_rgb = _hex_to_rgb_floats(colors.get('SEVENTH', '#79a383'))
         hot_rgb = _hex_to_rgb_floats(colors.get('FORTE', '#eb6f92'))
 
@@ -107,13 +109,21 @@ class VolumeMeter(Gtk.DrawingArea):
         filled = round(norm * self.N_SEGMENTS)
         rects = self._segment_rects(width, height)
 
+        # Recessed trough behind the whole pip strip (matches the CSS
+        # slider-trough idiom -- DIM well, pips sit proud of it).
+        cr.set_source_rgba(*trough, 1.0)
+        self._rounded_bar(cr, 0.0, 1.0, width, max(0.0, height - 2.0))
+        cr.fill()
+
         for i, (x, y, w, h) in enumerate(rects):
             t = i / (self.N_SEGMENTS - 1)
             r = low_rgb[0] + (hot_rgb[0] - low_rgb[0]) * t
             g = low_rgb[1] + (hot_rgb[1] - low_rgb[1]) * t
             b = low_rgb[2] + (hot_rgb[2] - low_rgb[2]) * t
-            alpha = 1.0 if i < filled else 0.18
-            cr.set_source_rgba(r, g, b, alpha)
+            if i < filled:
+                cr.set_source_rgba(r, g, b, 1.0)
+            else:
+                cr.set_source_rgba(*score, 0.12)
             self._rounded_bar(cr, x, y + 2.0, w, h - 4.0)
             cr.fill()
 
@@ -121,7 +131,7 @@ class VolumeMeter(Gtk.DrawingArea):
             last_x = rects[-1][0] + rects[-1][2]
             overflow_w = width - self._MARGIN - last_x - self._GAP
             if overflow_w > 0:
-                cr.set_source_rgba(*hot_rgb, 0.9)
+                cr.set_source_rgba(*hot_rgb, 1.0)
                 self._rounded_bar(cr, last_x + self._GAP, 2.0, overflow_w, height - 4.0)
                 cr.fill()
 
@@ -230,59 +240,33 @@ class RecordBubble(Gtk.DrawingArea):
         self.emit('mode-changed', self.mode)
 
     def _on_draw(self, area, cr, width, height, user_data=None):
-        cx = width / 2.0
-        cy = height / 2.0
-        radius = min(width, height) / 2.0 - 4.0
-
+        colors = palette.load()
         if self.recording:
-            # Soft glow behind the pressed bubble
-            cr.set_source_rgba(0.86, 0.20, 0.18, 0.25)
-            cr.arc(cx, cy, radius + 5.0, 0, 2 * math.pi)
-            cr.fill()
-
-        # Solid ink ring; turns red while recording
-        cr.save()
-        cr.set_line_width(1.5)
-        if self.recording:
-            cr.set_source_rgba(0.86, 0.20, 0.18, 0.6)
+            face = _hex_to_rgb_floats(colors.get('FORTE', '#eb6f92'))
+            glyph = _hex_to_rgb_floats(colors.get('SCORE', '#e0def4'))
         else:
-            cr.set_source_rgba(0.9, 0.9, 0.9, 0.35)
-        cr.arc(cx, cy, radius + 4.0, 0, 2 * math.pi)
-        cr.stroke()
-        cr.restore()
+            face = _hex_to_rgb_floats(colors.get('WING', '#393552'))
+            glyph = _hex_to_rgb_floats(colors.get('LYRIC', '#c9c5da'))
+        ring = _hex_to_rgb_floats(colors.get('SCORE', '#e0def4'))
 
-        # Silicone bubble face: convex bump when idle, pressed-in dimple
-        # when recording. Same gradient trick fakes both: a highlight near
-        # the upper-left reads as "light hitting a bump sticking up"; a
-        # highlight shifted toward the center/lower-right of a darker,
-        # more saturated fill reads as "light entering a pressed dimple."
-        if self.recording:
-            gradient = cairo.RadialGradient(
-                cx - radius * 0.15, cy - radius * 0.1, radius * 0.05,
-                cx, cy, radius,
-            )
-            gradient.add_color_stop_rgba(0.0, 0.53, 0.14, 0.13, 1.0)
-            gradient.add_color_stop_rgba(0.55, 0.86, 0.20, 0.18, 1.0)
-            gradient.add_color_stop_rgba(1.0, 0.66, 0.27, 0.24, 1.0)
-        else:
-            gradient = cairo.RadialGradient(
-                cx - radius * 0.35, cy - radius * 0.35, radius * 0.1,
-                cx, cy, radius,
-            )
-            gradient.add_color_stop_rgba(0.0, 0.23, 0.23, 0.24, 1.0)
-            gradient.add_color_stop_rgba(0.55, 0.16, 0.16, 0.18, 1.0)
-            gradient.add_color_stop_rgba(1.0, 0.12, 0.12, 0.13, 1.0)
-        cr.set_source(gradient)
+        cx, cy = width / 2.0, height / 2.0
+        radius = min(width, height) / 2.0 - 3.0
+
+        # Flat disc + hairline ring, same vocabulary as the CSS .control-btn.
+        cr.set_source_rgba(*face, 1.0)
         cr.arc(cx, cy, radius, 0, 2 * math.pi)
         cr.fill()
 
-        # Drop shadow under the bump (idle only — a pressed dimple casts
-        # no shadow of its own).
-        if not self.recording:
-            cr.set_source_rgba(0.0, 0.0, 0.0, 0.25)
-            cr.arc(cx, cy + 1.5, radius, 0, 2 * math.pi)
-            cr.set_line_width(1.0)
-            cr.stroke_preserve()
+        cr.set_line_width(1.0)
+        cr.set_source_rgba(*ring, 0.15)
+        cr.arc(cx, cy, radius, 0, 2 * math.pi)
+        cr.stroke()
+
+        # Centered record glyph: a small filled square.
+        s = radius * 0.5
+        cr.set_source_rgba(*glyph, 1.0)
+        cr.rectangle(cx - s / 2.0, cy - s / 2.0, s, s)
+        cr.fill()
 
 
 class NavColumn(Gtk.Box):
@@ -356,10 +340,10 @@ class NavColumn(Gtk.Box):
     def _draw_display(self, area, cr, width, height, user_data=None):
         colors = palette.load()
         mini_active = self.active == "mini"
-        # Matches .nav-btn.active's `color: {outline}` (palette SHADOW) when
-        # Now Playing is selected, .nav-btn's plain `color: {REST}` otherwise --
-        # Cairo draws don't pick up GTK CSS `color`, so it's read explicitly.
-        rgb = _hex_to_rgb_floats(colors.get('SHADOW' if mini_active else 'REST', '#4e4e52'))
+        # Matches the new .nav-btn foreground: SCORE when Now Playing is the
+        # active view, plain REST otherwise. Cairo draws don't pick up GTK
+        # CSS `color`, so it's read from the palette explicitly.
+        rgb = _hex_to_rgb_floats(colors.get('SCORE' if mini_active else 'REST', '#e0def4'))
         cr.set_source_rgba(*rgb, 1.0)
         cr.set_line_width(1.4)
         cr.set_line_join(cairo.LINE_JOIN_ROUND)

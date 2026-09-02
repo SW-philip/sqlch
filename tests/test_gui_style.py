@@ -97,5 +97,37 @@ class TestBannerWidgets(unittest.TestCase):
             sep._on_draw(sep, cr, 18, 200)
 
 
+class TestControlWidgetsFlat(unittest.TestCase):
+    def _ctx(self, w, h):
+        import cairo
+        surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
+        return cairo.Context(surf)
+
+    def test_record_bubble_draw_flat_no_raise(self):
+        from sqlch_gui.ui.controls import RecordBubble
+        b = RecordBubble()
+        b._on_draw(b, self._ctx(34, 34), 34, 34)
+        b.set_state(True, "track")
+        b._on_draw(b, self._ctx(34, 34), 34, 34)
+
+    def test_volume_meter_draw_flat_no_raise(self):
+        import gi
+        gi.require_version("Gtk", "4.0")
+        from gi.repository import Gtk
+        from sqlch_gui.ui.controls import VolumeMeter
+        adj = Gtk.Adjustment(value=0.6, lower=0.0, upper=1.0, step_increment=0.05)
+        m = VolumeMeter(adj)
+        m._on_draw(m, self._ctx(160, 18), 160, 18)
+        m.boosted = True
+        m._on_draw(m, self._ctx(160, 18), 160, 18)
+
+    def test_controls_source_has_no_hardcoded_rgb_literals(self):
+        import pathlib
+        src = pathlib.Path("sqlch_gui/ui/controls.py").read_text()
+        # the pop-it bubble's hardcoded reds / greys are gone
+        self.assertNotIn("0.86, 0.20, 0.18", src)
+        self.assertNotIn("cairo.RadialGradient", src)
+
+
 if __name__ == "__main__":
     unittest.main()
