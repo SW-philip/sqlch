@@ -129,5 +129,18 @@ class TestControlWidgetsFlat(unittest.TestCase):
         self.assertNotIn("cairo.RadialGradient", src)
 
 
+class TestEqStrip(unittest.TestCase):
+    def test_bead_draw_no_raise_and_single_tone(self):
+        import cairo, pathlib
+        from sqlch_gui.ui.eq_strip import EqStrip
+        s = EqStrip(n_beads=3, width=18, height=11)
+        s._running = True
+        surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 18, 11)
+        s._on_draw(s, cairo.Context(surf), 18, 11)
+        src = pathlib.Path("sqlch_gui/ui/eq_strip.py").read_text()
+        # the ROOT->SEVENTH cross-fade is gone
+        self.assertNotIn("tail_r", src)
+
+
 if __name__ == "__main__":
     unittest.main()

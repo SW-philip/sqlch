@@ -57,9 +57,10 @@ class EqStrip(Gtk.DrawingArea):
         return self._running
 
     def _on_draw(self, area, cr, width, height, user_data=None):
+        # One flat tone that reads against the .station-row.active fill
+        # (SEVENTH) these beads sit on -- HALL is that row's own text color.
         colors = palette.load()
-        top_r, top_g, top_b = _hex_to_rgb_floats(colors.get('ROOT', '#f6b83c'))
-        tail_r, tail_g, tail_b = _hex_to_rgb_floats(colors.get('SEVENTH', '#c8723c'))
+        r, g, b = _hex_to_rgb_floats(colors.get('HALL', '#232136'))
 
         n = self.n_beads
         gap = 3.0
@@ -73,12 +74,7 @@ class EqStrip(Gtk.DrawingArea):
             bead_h = max(3.0, height * level)
             x = i * (bead_w + gap)
             y = height - bead_h
-
-            t = i / (n - 1) if n > 1 else 0.0
-            r = top_r + (tail_r - top_r) * t
-            g = top_g + (tail_g - top_g) * t
-            b = top_b + (tail_b - top_b) * t
-            cr.set_source_rgba(r, g, b, 1.0)
+            cr.set_source_rgba(r, g, b, 0.85)
             self._rounded_bar(cr, x, y, bead_w, bead_h)
             cr.fill()
 
