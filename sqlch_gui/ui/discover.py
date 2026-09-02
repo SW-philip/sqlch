@@ -36,7 +36,6 @@ class DiscoverPanel(Gtk.Box):
         # Scoped Container for Category Discovery
         self.discovery_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         self.browse_title = RibbonBanner("Browse Categories", gold=True)
-        self.browse_title.set_halign(Gtk.Align.START)
         self.discovery_container.append(self.browse_title)
 
         # Genre browse grid

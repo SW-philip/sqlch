@@ -77,6 +77,9 @@ class StationListPanel(Gtk.Box):
             return True
 
         child = row.get_child()
+        # Section-rule headers never participate in filtering.
+        if isinstance(child, RibbonBanner):
+            return False
         # Let explicit structural heading text rows through without suppression
         if not isinstance(child, Gtk.Box):
             return True
@@ -115,15 +118,8 @@ class StationListPanel(Gtk.Box):
 
         colors = palette.load()
         for g_name in sorted(groups.keys()):
-            # Category Header Separator
-            header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-            header_box.set_margin_top(8)
-            header_box.set_margin_bottom(4)
-
-            ribbon = RibbonBanner(g_name)
-            ribbon.set_halign(Gtk.Align.START)
-            header_box.append(ribbon)
-            self.list_box.append(header_box)
+            # Category header: a hairline section rule spanning the list.
+            self.list_box.append(RibbonBanner(g_name))
 
             def _freq(v):
                 try:

@@ -58,5 +58,44 @@ class TestFlatStylesheet(unittest.TestCase):
             self.assertEqual(errors, [], f"CSS parse errors: {errors}")
 
 
+class TestBannerWidgets(unittest.TestCase):
+    def test_ribbon_banner_is_a_box_with_engraved_label(self):
+        import gi
+        gi.require_version("Gtk", "4.0")
+        from gi.repository import Gtk
+        from sqlch_gui.ui.banner import RibbonBanner
+        b = RibbonBanner("jazz")
+        self.assertIsInstance(b, Gtk.Box)
+        self.assertTrue(b.has_css_class("section-rule"))
+        self.assertEqual(b.label.get_text(), "JAZZ")
+        b.set_text("news")
+        self.assertEqual(b.label.get_text(), "NEWS")
+        g = RibbonBanner("browse categories", gold=True)
+        self.assertTrue(g.has_css_class("gold"))
+
+    def test_pennant_tag_is_a_box_exposing_label(self):
+        import gi
+        gi.require_version("Gtk", "4.0")
+        from gi.repository import Gtk
+        from sqlch_gui.ui.banner import PennantTag
+        p = PennantTag("US", country=True)
+        self.assertIsInstance(p, Gtk.Box)
+        self.assertTrue(p.has_css_class("tag-chip"))
+        self.assertTrue(p.has_css_class("country"))
+        self.assertEqual(p.label.get_text(), "US")
+
+    def test_torn_separator_draw_does_not_raise(self):
+        import cairo
+        import gi
+        gi.require_version("Gtk", "4.0")
+        from gi.repository import Gtk
+        from sqlch_gui.ui.banner import TornSeparator
+        for orient in (Gtk.Orientation.VERTICAL, Gtk.Orientation.HORIZONTAL):
+            sep = TornSeparator(orient)
+            surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 18, 200)
+            cr = cairo.Context(surf)
+            sep._on_draw(sep, cr, 18, 200)
+
+
 if __name__ == "__main__":
     unittest.main()
