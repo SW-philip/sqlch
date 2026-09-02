@@ -1,6 +1,4 @@
-"""Shared UI styling and custom CSS loading utilities with a Paper-Craft & Fabric Vibe."""
-
-from pathlib import Path
+"""Shared UI styling: generates and installs the flat, swaync-style stylesheet."""
 
 import gi
 gi.require_version('Gtk', '4.0')
@@ -9,350 +7,312 @@ from .. import palette
 
 _css_provider: Gtk.CssProvider | None = None
 
+
 def _hex_to_rgb(hex_val: str) -> str:
-    """Convert a '#rrggbb' (or '#rgb') string into a bare 'r, g, b' triple for rgba() strings."""
+    """Convert '#rrggbb' (or '#rgb') into a bare 'r, g, b' triple for rgba() strings."""
     h = hex_val.lstrip('#')
     if len(h) == 3:
         h = ''.join(c * 2 for c in h)
     r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
     return f"{r}, {g}, {b}"
 
-def load_custom_css():
-    global _css_provider
-    colors = palette.load()
 
-    outline = colors.get('SHADOW', '#121214')
-    score = colors.get('SCORE', '#121214')
+def _build_css(colors: dict) -> str:
+    """Build the app stylesheet from a palette color dict. Pure — no display,
+    no side effects. Mirrors the vocabulary of ~/.config/swaync/style.css:
+    flat fills, a hairline border, one soft drop; the hard-offset shadow and
+    the faint fiber-noise live only on the outer .popup-window shell."""
+    outline = colors.get('SHADOW', '#0f0e17')
+    score = colors.get('SCORE', '#e0def4')
     score_rgb = _hex_to_rgb(score)
-    staff = colors.get('STAFF', '20,20,24')
-    shadow = f"rgba({staff}, 0.85)"
-    bg_color = colors.get('GRAD_HALL_LO', '#cebfa5')
+    staff = colors.get('STAFF', '15, 14, 23')
 
-    lite_c = "rgba(255,255,255,0.40)"
+    stage = colors.get('STAGE', '#2a273f')
+    wing = colors.get('WING', '#393552')
+    dim = colors.get('DIM', '#1a1828')
+    hall = colors.get('HALL', '#232136')
+    lyric = colors.get('LYRIC', '#c9c5da')
+    rest = colors.get('REST', '#908caa')
+    root = colors.get('ROOT', '#c4a7e7')
+    seventh = colors.get('SEVENTH', '#3e8fb0')
+    piano = colors.get('PIANO', '#f6c177')
+    forte = colors.get('FORTE', '#eb6f92')
+    sotto = colors.get('SOTTO', '#ea9a97')
 
-    slight = f"0 2px 3px rgba({staff}, 0.30)"
-    slight_lift = f"0 3px 4px rgba({staff}, 0.35)"
-    slight_press = f"0 1px 2px rgba({staff}, 0.25)"
+    a_outer = colors.get('STAFF_A_OUTER', '0.50')
+    a_drop = colors.get('STAFF_A_DROP', '0.55')
+    a_inset = colors.get('STAFF_A_INSET_BOT', '0.30')
 
-    def cutout(dx: int, dy: int) -> str:
-        """Hard-edged offset duplicate; pair with `border: Npx solid {outline}`."""
-        return f"{dx}px {dy}px 0 0 {outline}"
+    mono = '"JetBrains Mono", "Courier New", monospace'
+    prop = '"Inter", "system-ui", sans-serif'
 
-    # Palette-agnostic raised-panel sheen: a top highlight fading to a faint
-    # bottom tint, layered over any flat background-color so small chrome
-    # (round icon buttons, strips) reads as a physical raised surface without
-    # needing a dedicated GRAD_* pair per hue.
-    sheen = "linear-gradient(160deg, rgba(255,255,255,0.20), rgba(0,0,0,0.08))"
+    hairline = f"1px solid rgba({score_rgb}, 0.14)"
+    rule = f"1px solid rgba({score_rgb}, 0.13)"
+    drop = f"0 1px 1px rgba({staff}, {a_drop})"
+    recess = f"inset 0 1px 2px rgba({staff}, {a_inset})"
+    press = f"inset 0 1px 3px rgba({staff}, 0.6)"
+    shell_shadow = f"3px 4px 0 0 rgba({staff}, {a_drop})"
 
-    svg_tactile_filter = (
+    shell_noise = (
         "url(\"data:image/svg+xml;utf8,"
-        "<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'>"
-        "<filter id='craft-texture'>"
-        "  <feTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='3' result='noise1'/>"
-        "  <feColorMatrix type='matrix' values='0 0 0 0 0   0 0 0 0 0   0 0 0 0 0  0 0 0 0.10 0' in='noise1' result='fiber1'/>"
-        "  <feTurbulence type='turbulence' baseFrequency='0.08' numOctaves='2' result='noise2'/>"
-        "  <feColorMatrix type='matrix' values='0 0 0 0 0   0 0 0 0 0   0 0 0 0 0  0 0 0 0.08 0' in='noise2' result='fiber2'/>"
-        "  <feBlend mode='multiply' in='SourceGraphic' in2='fiber1' result='blend1'/>"
-        "  <feBlend mode='multiply' in='blend1' in2='fiber2'/>"
+        "<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90'>"
+        "<filter id='craft'>"
+        "<feTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='3' result='n'/>"
+        "<feColorMatrix type='matrix' values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.06 0' in='n' result='fiber'/>"
+        "<feBlend mode='multiply' in='SourceGraphic' in2='fiber'/>"
         "</filter>"
-        "<rect width='100%25' height='100%25' filter='url(%23craft-texture)' fill='transparent'/>"
+        "<rect width='100%25' height='100%25' filter='url(%23craft)' fill='transparent'/>"
         "</svg>\")"
     )
 
-    css = f"""
+    return f"""
     window {{
         background-color: transparent;
+        font-family: {mono};
+        font-size: 12px;
+        color: {score};
     }}
 
     .popup-window {{
-        background-color: {bg_color};
-        background-image: {svg_tactile_filter}, linear-gradient(165deg, {colors.get('GRAD_HALL_HI', '#e6dfce')}, {bg_color});
-        background-repeat: repeat, no-repeat;
+        background-color: {wing};
+        background-image: {shell_noise};
+        background-repeat: repeat;
         color: {score};
-        border-radius: 13px;
-        border: 2px solid {outline};
-        box-shadow: 6px 6px 0 3px {outline}, 10px 10px 0 3px {shadow};
+        font-family: {mono};
+        border-radius: 18px;
+        border: 1px solid rgba({score_rgb}, {a_outer});
+        box-shadow: {shell_shadow};
         margin: 2px 10px 10px 2px;
         padding: 2px;
     }}
 
+    .nav-row {{
+        background-color: {stage};
+        border-radius: 7px;
+        padding: 3px 6px;
+        border: {hairline};
+        box-shadow: {drop};
+    }}
+
     .nav-btn {{
         padding: 4px;
-        margin: 2px 0px;
-        border-radius: 6px;
-        color: {colors.get('REST', '#4e4e52')};
-        background-color: {colors.get('WING', '#f2ece1')};
-        background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_WING_HI', '#443f60')}, {colors.get('GRAD_WING_LO', '#2d2944')});
-        border: 2px solid {outline};
-        box-shadow: {cutout(1, 1)}, {slight_press};
-        transition: transform 80ms ease, box-shadow 80ms ease;
+        margin: 2px 0;
+        border-radius: 7px;
+        color: {rest};
+        background-color: {wing};
+        background-image: none;
+        border: {hairline};
+        box-shadow: {drop};
     }}
     .nav-btn:hover {{
-        background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_WING_HI', '#443f60')}, {colors.get('GRAD_WING_LO', '#2d2944')});
-        background-color: {colors.get('WING', '#fff5dd')};
+        background-color: {stage};
         color: {score};
-        transform: scale(1.05) translateY(-1px);
-        border: 2px solid {outline};
-        box-shadow: {cutout(2, 2)}, {slight_lift};
     }}
     .nav-btn.active {{
-        background-image: {svg_tactile_filter};
-        background-color: {colors.get('ROOT', '#f4b84b')};
+        background-color: {root};
         color: {outline};
-        font-weight: 900;
-        border: 2px solid {outline};
-        box-shadow: {cutout(2, 2)}, {slight};
-        transform: scale(1.1);
+        font-weight: 700;
+        box-shadow: {drop};
     }}
 
     .card {{
-        background-color: {colors.get('STAGE', '#f9f6f0')};
-        background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_STAGE_HI', '#fbf9f5')}, {colors.get('GRAD_STAGE_LO', '#ece6da')});
-        background-repeat: repeat, no-repeat;
-        border-radius: 10px;
+        background-color: {stage};
+        border-radius: 12px;
         padding: 4px;
-        border: 2px solid {outline};
-        box-shadow: {cutout(4, 4)}, {slight};
+        border: {hairline};
+        box-shadow: {drop};
         margin-bottom: 2px;
     }}
 
-    /* Size kept in sync with _COVER_SIZE in now_playing.py. Framed like a
-       matted picture frame -- thick ink border, a ROOT-accent mat ring,
-       then a thin inner rule -- so the art reads as the card's focal point
-       instead of just another panel. Rings are inset box-shadows (kept
-       inside the border box) rather than outline/outline-offset, since the
-       corner-tag LIVE badge overlays flush against this edge and an
-       outward-expanding ring would fight its positioning. */
     .cover-art {{
-        background-color: {colors.get('WING', '#e2dacf')};
-        background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_WING_HI', '#443f60')}, {colors.get('GRAD_WING_LO', '#2d2944')});
-        background-repeat: repeat, no-repeat;
-        border-radius: 10px;
-        border: 3px solid {outline};
+        background-color: {wing};
+        border-radius: 12px;
+        border: {hairline};
         min-width: 220px;
         min-height: 220px;
-        box-shadow: inset 0 0 0 3px {colors.get('ROOT', '#f4b84b')}, inset 0 0 0 5px {outline}, {cutout(4, 4)}, {slight_lift};
+        box-shadow: {drop};
     }}
     .cover-glyph {{
         font-size: 38px;
-        font-weight: 900;
-        color: {colors.get('PIANO', '#2c2c30')};
-        text-shadow: 0 2px 0 {lite_c};
-        transform: rotate(-6deg);
+        font-weight: 700;
+        color: {lyric};
     }}
 
     .corner-tag {{
-        font-family: "Courier New", monospace;
-        font-weight: 900;
+        font-family: {mono};
+        font-weight: 700;
         font-size: 0.6em;
-        padding: 2px 5px;
-        border-radius: 8px;
-        border: 2px solid {outline};
-        box-shadow: {cutout(2, 2)};
-        margin: 5px;
-        text-shadow: 0 -1px 0 rgba(255,255,255,0.35), 0 1px 1px rgba({staff},0.5);
+        padding: 2px 6px;
+        border-radius: 7px;
+        border: {hairline};
+        margin: 6px;
     }}
     .corner-tag-left {{
-        background-color: {colors.get('ROOT', '#f4b84b')};
+        background-color: {root};
         color: {outline};
-        transform: rotate(-4deg);
     }}
 
     .list-plate {{
-        background-color: {colors.get('HALL', '#fdf8ee')};
-        background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_HALL_HI', '#e6dfce')}, {colors.get('GRAD_HALL_LO', '#cebfa5')});
-        background-repeat: repeat, no-repeat;
+        background-color: {dim};
         border-radius: 12px;
         padding: 5px;
-        border: 2px solid {outline};
-        box-shadow: {cutout(4, 4)}, {slight};
+        border: {hairline};
+        box-shadow: {recess};
     }}
     .list-plate row {{
         background: transparent;
     }}
 
     .list-header {{
-        background-color: {colors.get('WING', '#eaddca')};
-        background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_WING_HI', '#443f60')}, {colors.get('GRAD_WING_LO', '#2d2944')});
-        background-repeat: repeat, no-repeat;
+        background-color: {stage};
         color: {score};
-        font-weight: bold;
-        border-radius: 8px;
+        font-family: {mono};
+        font-weight: 700;
+        border-radius: 7px;
         padding: 5px 8px;
         margin-bottom: 5px;
-        border: 2px solid {outline};
-        box-shadow: {cutout(3, 3)}, {slight};
-        text-shadow: 0 -1px 0 rgba(255,255,255,0.40), 0 1px 1px rgba({staff},0.5);
+        border: {hairline};
+        box-shadow: {drop};
     }}
 
     .station-row {{
-        padding: 4px 6px;
-        border-radius: 8px;
-        margin-bottom: 2px;
-        background-color: {colors.get('STAGE', '#f9f6f0')};
-        background-image: linear-gradient(160deg, {colors.get('GRAD_STAGE_HI', '#fbf9f5')}, {colors.get('GRAD_STAGE_LO', '#ece6da')});
-        border: 2px solid {outline};
-        box-shadow: {cutout(2, 2)}, {slight};
+        padding: 5px 7px;
+        border-radius: 7px;
+        margin-bottom: 3px;
+        background-color: {stage};
+        border: {hairline};
+        box-shadow: {drop};
     }}
     .station-row:hover {{
-        background-color: {colors.get('WING', '#fff5dd')};
-        background-image: linear-gradient(160deg, {colors.get('GRAD_WING_HI', '#443f60')}, {colors.get('GRAD_WING_LO', '#2d2944')});
-        border: 2px solid {outline};
-        box-shadow: {cutout(3, 3)}, {slight_lift};
-        transform: translateY(-1px);
+        background-color: {wing};
     }}
     .station-row.active {{
-        background-image: {svg_tactile_filter};
-        background-color: {colors.get('SEVENTH', '#79a383')};
-        color: {colors.get('HALL', '#fdf8ee')};
-        border: 2px solid {colors.get('ROOT', '#f4b84b')};
-        box-shadow: {cutout(2, 2)}, {slight};
+        background-color: {seventh};
+        color: {hall};
+        border-color: {root};
     }}
     .station-row.active label {{
-        color: {colors.get('HALL', '#fdf8ee')};
-        text-shadow: 0 -1px 0 rgba(255,255,255,0.30), 0 1px 2px rgba({staff}, 0.80);
+        color: {hall};
     }}
     .station-freq {{
-        color: {colors.get('PIANO', '#2c2c30')};
-        font-weight: 900;
-        font-family: "Courier New", monospace;
-        text-shadow: 0 1px 0 {lite_c};
+        color: {lyric};
+        font-weight: 700;
+        font-family: {mono};
     }}
     .station-row.active .station-freq {{
-        color: {colors.get('HALL', '#fdf8ee')};
-        text-shadow: 0 -1px 0 rgba(255,255,255,0.20), 0 1px 1px rgba({staff}, 0.70);
+        color: {hall};
     }}
     .station-live {{
         font-size: 0.8em;
-        font-style: italic;
-        color: {colors.get('SEVENTH', '#79a383')};
-        text-shadow: 0 1px 0 {lite_c};
+        color: {seventh};
     }}
     .station-row.active .station-live {{
-        color: {colors.get('HALL', '#fdf8ee')};
-        text-shadow: none;
+        color: {hall};
     }}
 
     .control-btn {{
-        border-radius: 11px;
+        border-radius: 7px;
         min-width: 28px;
         min-height: 28px;
         padding: 0;
-        background-color: {colors.get('WING', '#f2ece1')};
-        background-image: {sheen};
+        background-color: {wing};
+        background-image: none;
         color: {score};
-        box-shadow: {slight};
-        transition: transform 80ms ease, box-shadow 80ms ease;
+        border: {hairline};
+        box-shadow: {drop};
     }}
     .control-btn:hover {{
-        background-color: {colors.get('MUTE', '#e5dcce')};
-        background-image: {sheen};
-        box-shadow: 0 0 0 1px {outline}, {slight_lift};
-        transform: translateY(-1px);
+        background-color: {stage};
     }}
     .control-btn:active {{
-        transform: translateY(2px);
-        box-shadow: {slight_press};
+        box-shadow: {press};
     }}
     .control-btn.primary {{
         min-width: 36px;
         min-height: 36px;
-        border-radius: 13px;
-        background-color: {colors.get('PIANO', '#2c2c30')};
-        background-image: {sheen};
-        color: {colors.get('HALL', '#fdf8ee')};
-        box-shadow: 0 0 0 2px {outline}, {slight};
-        text-shadow: 0 -1px 0 rgba(255,255,255,0.30), 0 1px 2px rgba({staff}, 0.70);
+        border-radius: 9px;
+        background-color: {piano};
+        background-image: none;
+        color: {hall};
     }}
     .control-btn.primary:hover {{
-        background-color: {colors.get('SOTTO', '#454549')};
-        background-image: {sheen};
-        box-shadow: 0 0 0 2px {outline}, {slight_lift};
+        background-color: {forte};
+        color: {hall};
     }}
 
     .meta-title {{
-        font-family: "Fredoka", "Baloo 2", "Chalkboard SE", sans-serif;
+        font-family: {prop};
         font-size: 1.05em;
-        font-weight: 900;
+        font-weight: 700;
         color: {score};
-        text-shadow: 0 -1px 0 rgba(255,255,255,0.45), 0 1px 1px rgba({staff},0.6), 1px 3px 0 {outline};
     }}
     .meta-artist {{
-        font-family: "Fredoka", sans-serif;
-        font-size: 0.88em;
-        color: {colors.get('FORTE', '#8c3b3b')};
-        text-shadow: 0 -1px 0 rgba(255,255,255,0.35), 0 1px 1px rgba({staff},0.4), 1px 2px 0 {outline};
+        font-family: {prop};
+        font-size: 0.9em;
+        color: {forte};
     }}
     .meta-genre {{
-        font-family: "Fredoka", sans-serif;
+        font-family: {mono};
         font-size: 0.85em;
-        color: {colors.get('ROOT', '#f4b84b')};
-        font-style: italic;
-        text-shadow: 0 1px 0 {lite_c};
+        color: {root};
     }}
 
     .thread-label {{
-        font-family: "Fredoka", sans-serif;
+        font-family: {mono};
         font-size: 0.75em;
-        font-style: italic;
         color: rgba({score_rgb}, 0.28);
-        text-shadow: 0 1px 0 {lite_c};
     }}
     .thread-label.lit {{
-        color: {colors.get('ROOT', '#f4b84b')};
+        color: {root};
         font-weight: 700;
     }}
 
     .tech-badge, .tag-chip {{
-        font-family: "Courier New", monospace;
-        font-weight: 900;
+        font-family: {mono};
+        font-weight: 700;
         font-size: 0.72em;
-        background-color: {colors.get('WING', '#fff5dd')};
-        color: {score};
-        padding: 2px 6px;
-        border-radius: 6px;
-        border: 1px solid {outline};
-        box-shadow: {cutout(1, 1)}, {slight_press};
-        text-shadow: 0 -1px 0 rgba(255,255,255,0.40), 0 1px 1px rgba({staff},0.4);
+        background-color: {wing};
+        color: {lyric};
+        padding: 2px 7px;
+        border-radius: 7px;
+        border: {hairline};
     }}
     .tag-chip:hover {{
-        background-color: {colors.get('MUTE', '#e5dcce')};
-        transform: translateY(-1px);
-        border: 1px solid {outline};
-        box-shadow: {cutout(2, 2)}, {slight_lift};
+        background-color: {stage};
+        color: {score};
+    }}
+    .tag-chip.country {{
+        color: {sotto};
     }}
     .tech-badge.rec-badge {{
-        background-color: {colors.get('FORTE', '#8c3b3b')};
-        color: {colors.get('HALL', '#fdf8ee')};
-        text-shadow: 0 1px 0 rgba({staff}, 0.60);
-        outline: 1px solid {outline};
+        background-color: {forte};
+        color: {hall};
     }}
 
     .small-badge {{
-        font-family: "Courier New", monospace;
+        font-family: {mono};
         font-weight: 700;
         font-size: 0.65em;
-        background-color: {colors.get('MUTE', '#e5dcce')};
-        color: {colors.get('ROOT', '#f4b84b')};
+        background-color: {dim};
+        color: {root};
         padding: 2px 6px;
-        border-radius: 5px;
-        text-shadow: 0 1px 0 {lite_c};
+        border-radius: 6px;
     }}
 
-    .ribbon-label {{
-        font-weight: 900;
-        font-size: 0.7em;
-        letter-spacing: 0.08em;
-        color: {outline};
-        text-shadow: 0 1px 0 rgba(255,255,255,0.25);
+    .section-rule {{
+        border-top: {rule};
+        margin: 20px 4px 8px;
+        padding: 8px 2px 0;
     }}
-
-    .pennant-label {{
-        font-family: "Courier New", monospace;
+    .section-rule label {{
+        color: {lyric};
+        font-family: {mono};
         font-weight: 700;
-        font-size: 0.7em;
-        color: {outline};
-        text-shadow: 0 1px 0 rgba(255,255,255,0.25);
+        font-size: 10px;
+        letter-spacing: 0.14em;
+    }}
+    .section-rule.gold label {{
+        color: {root};
     }}
 
     .pennant-btn {{
@@ -360,178 +320,138 @@ def load_custom_css():
         border: none;
         box-shadow: none;
         padding: 0;
-        transition: transform 80ms ease;
     }}
     .pennant-btn:hover {{
         background: transparent;
-        transform: translateY(-1px);
-    }}
-    .pennant-btn:active {{
-        transform: translateY(1px);
     }}
 
     .knob-tag {{
-        font-family: "Courier New", monospace;
-        font-weight: 900;
+        font-family: {mono};
+        font-weight: 700;
         font-size: 0.58em;
-        color: {colors.get('BAR', '#6b6b70')};
+        color: {rest};
         letter-spacing: 0.05em;
-        text-shadow: 0 1px 0 {lite_c};
-    }}
-
-    /* Nav-icon strip framed as its own plate, matching .list-header/
-       .info-panel's cardboard-cutout vocabulary instead of floating
-       bare over .card's background. */
-    .nav-row {{
-        background-color: {colors.get('WING', '#eaddca')};
-        background-image: linear-gradient(160deg, {colors.get('GRAD_WING_HI', '#443f60')}, {colors.get('GRAD_WING_LO', '#2d2944')});
-        border-radius: 8px;
-        padding: 3px 6px;
-        border: 2px solid {outline};
-        box-shadow: {cutout(2, 2)}, {slight};
     }}
 
     .brand-tag {{
-        font-family: "Courier New", monospace;
+        font-family: {mono};
         font-weight: 700;
         font-size: 0.56em;
         letter-spacing: 0.08em;
         color: rgba({score_rgb}, 0.35);
-        text-shadow: 0 1px 0 {lite_c};
         margin: 6px 8px;
     }}
 
     popover.context-menu > contents {{
-        background-color: {colors.get('GRAD_STAGE_LO', '#ece6da')};
-        background-image: {svg_tactile_filter}, linear-gradient(160deg, {colors.get('GRAD_STAGE_HI', '#fbf9f5')}, {colors.get('GRAD_STAGE_LO', '#ece6da')});
+        background-color: {stage};
+        background-image: none;
         color: {score};
-        border-radius: 14px;
-        border: 2px solid {outline};
-        box-shadow: 8px 8px 0 3px {shadow};
+        border-radius: 12px;
+        border: {hairline};
+        box-shadow: 0 4px 12px rgba({staff}, {a_drop});
         padding: 10px;
     }}
     popover.context-menu > arrow {{
-        background-color: {colors.get('GRAD_STAGE_LO', '#ece6da')};
+        background-color: {stage};
+        border: {hairline};
     }}
     .context-menu label {{
         color: {score};
+        font-family: {mono};
         font-size: 0.85em;
-        font-weight: bold;
+        font-weight: 700;
         margin-top: 4px;
-        text-shadow: 0 1px 0 {lite_c};
     }}
     .context-menu entry {{
-        background-color: {colors.get('WING', '#fff5dd')};
-        border-radius: 8px;
+        background-color: {dim};
+        color: {score};
+        border-radius: 7px;
         padding: 6px;
-        border: 1px solid {outline};
-        box-shadow: {cutout(1, 1)}, {slight_press};
+        border: {hairline};
+        box-shadow: {recess};
     }}
     .context-menu entry:focus-within {{
-        border: 1px solid {colors.get('ROOT', '#f4b84b')};
-        box-shadow: 0 0 0 2px {colors.get('ROOT', '#f4b84b')};
+        border: 1px solid {root};
     }}
     .context-menu separator {{
-        background-color: rgba({staff}, 0.35);
-        min-height: 2px;
+        background-color: rgba({score_rgb}, 0.13);
+        min-height: 1px;
         margin: 6px 0;
     }}
 
     .menu-btn {{
-        padding: 5px 8px;
-        border-radius: 8px;
+        padding: 6px 8px;
+        border-radius: 7px;
         color: {score};
-        background-color: {colors.get('WING', '#fff5dd')};
-        background-image: {sheen};
-        border: 2px solid {outline};
-        box-shadow: {cutout(3, 3)}, {slight};
-        transition: transform 80ms ease, box-shadow 80ms ease;
+        background-color: {wing};
+        background-image: none;
+        border: {hairline};
+        box-shadow: {drop};
     }}
     .menu-btn:hover {{
-        background-color: {colors.get('MUTE', '#e5dcce')};
-        background-image: {sheen};
-        border: 2px solid {outline};
-        box-shadow: {cutout(4, 4)}, {slight_lift};
-        transform: translateY(-1px);
+        background-color: {stage};
     }}
     .menu-btn:active {{
-        transform: translateY(1px);
-        box-shadow: {cutout(2, 2)}, {slight_press};
+        box-shadow: {press};
     }}
     .menu-btn.destructive-action {{
-        color: {colors.get('FORTE', '#8c3b3b')};
-        border-color: {colors.get('FORTE', '#8c3b3b')};
+        color: {forte};
     }}
     .menu-btn.destructive-action:hover {{
-        background-color: {colors.get('FORTE', '#8c3b3b')};
-        color: {colors.get('HALL', '#fdf8ee')};
-        border-color: transparent;
+        background-color: {forte};
+        color: {hall};
     }}
 
     .field-entry {{
-        background-color: {colors.get('WING', '#fff5dd')};
+        background-color: {dim};
+        background-image: none;
         color: {score};
-        border-radius: 8px;
-        padding: 4px 8px;
-        border: 2px solid {outline};
-        box-shadow: {cutout(2, 2)}, {slight_press};
+        border-radius: 7px;
+        padding: 5px 8px;
+        border: {hairline};
+        box-shadow: {recess};
     }}
     .field-entry:focus-within {{
-        border: 2px solid {colors.get('ROOT', '#f4b84b')};
-        box-shadow: 0 0 0 2px {colors.get('ROOT', '#f4b84b')};
+        border: 1px solid {root};
     }}
 
-    /* Matches .field-entry's height/border/shadow so Discover's search
-       button doesn't sit visually offset from the entry beside it. */
     .search-btn {{
-        border-radius: 8px;
-        padding: 4px 8px;
-        border: 2px solid {outline};
-        box-shadow: {cutout(2, 2)}, {slight_press};
-        /* GTK4's default button theme paints its own background-image over
-           background-color -- without resetting it here, the button ignores
-           WING and falls back to the theme's own (dark) button chrome. Only
-           visible as a bug once tested against a light palette; invisible
-           against orca's dark WING, which happens to look similar. */
-        background-image: {sheen};
-        background-color: {colors.get('WING', '#fff5dd')};
+        border-radius: 7px;
+        padding: 5px 10px;
+        border: {hairline};
+        box-shadow: {drop};
+        background-image: none;
+        background-color: {wing};
         color: {score};
+        font-family: {mono};
+        font-weight: 700;
     }}
     .search-btn:hover {{
-        background-color: {colors.get('MUTE', '#e5dcce')};
-        background-image: {sheen};
+        background-color: {stage};
     }}
 
-    /* Radio-context info panel - permanent full-width row below the
-       album art showing Station/Now Playing/Previous-tracks context
-       plus stream diagnostic pills. Same cardboard-ledger look the
-       former tracklist panel had. */
     .info-panel {{
-        background-color: {colors.get('STAGE', '#f9f6f0')};
+        background-color: {stage};
         border-radius: 12px;
-        border: 2px solid {outline};
-        box-shadow: inset 0 0 4px rgba({staff}, 0.15), {cutout(3, 3)}, {slight};
-        padding: 6px;
+        border: {hairline};
+        box-shadow: {recess};
+        padding: 8px;
     }}
-
-    /* Idle treatment: station/track info and cover art stay populated with
-       the last-known state instead of clearing, just dimmed -- applied to
-       .info-panel and .cover-art while stopped. */
     .info-panel.stale, .cover-art.stale {{
         opacity: 0.5;
     }}
-
-    /* Station/Previous line styling -- monospace ledger look. The Now
-       Playing line uses .meta-title instead, for visual prominence. */
     .info-line {{
-        font-family: "Courier New", monospace;
+        font-family: {mono};
         font-size: 0.72em;
-        font-weight: bold;
-        color: {colors.get('PIANO', '#2c2c30')};
-        text-shadow: 0 1px 0 {lite_c};
+        font-weight: 700;
+        color: {lyric};
     }}
-
     """
+
+
+def load_custom_css():
+    global _css_provider
+    css = _build_css(palette.load())
 
     display = Gdk.Display.get_default()
     if _css_provider is not None:

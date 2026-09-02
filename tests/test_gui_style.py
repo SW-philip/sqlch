@@ -24,5 +24,39 @@ class TestPaletteDefaults(unittest.TestCase):
             self.assertTrue(colors[k], f"{k} resolved empty")
 
 
+class TestFlatStylesheet(unittest.TestCase):
+    def _all_color_dicts(self):
+        return (palette.load(), dict(palette._DEFAULTS))
+
+    def test_build_css_is_a_pure_function(self):
+        from sqlch_gui.ui import common
+        css = common._build_css(dict(palette._DEFAULTS))
+        self.assertIsInstance(css, str)
+        self.assertIn(".popup-window", css)
+        self.assertIn(".section-rule", css)
+
+    def test_no_paper_cutout_vocabulary(self):
+        from sqlch_gui.ui import common
+        css = common._build_css(palette.load())
+        self.assertNotIn("linear-gradient", css)
+        self.assertNotIn("text-shadow", css)
+        # a single faint noise texture, on the shell only
+        self.assertLessEqual(css.count("feTurbulence"), 1)
+
+    def test_css_parses_without_error_on_every_palette(self):
+        import gi
+        gi.require_version("Gtk", "4.0")
+        from gi.repository import Gtk
+        from sqlch_gui.ui import common
+        for colors in self._all_color_dicts():
+            css = common._build_css(colors)
+            errors = []
+            prov = Gtk.CssProvider()
+            prov.connect("parsing-error",
+                         lambda p, sec, err: errors.append(err.message))
+            prov.load_from_string(css)
+            self.assertEqual(errors, [], f"CSS parse errors: {errors}")
+
+
 if __name__ == "__main__":
     unittest.main()
