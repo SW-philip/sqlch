@@ -59,8 +59,7 @@ station-list endpoint supports.
 - `self._results: list[dict]` — every station shown, in order.
 - `self._active_term: str` — the current query or tag.
 - `self._active_kind: str` — `"name"` or `"tag"`.
-- `self._offset: int` — kept implicitly as `len(self._results)`; no separate
-  field needed.
+- The next offset is always `len(self._results)`; no separate offset field.
 - `self._page_size = 25`.
 - `self._search_gen: int` — bumped on every new search; captured by workers to
   drop stale responses.
