@@ -4,6 +4,7 @@ import html
 import threading
 from gi.repository import Gtk, GLib
 from .. import radiobrowser
+from .. import library
 from .banner import RibbonBanner, PennantTag
 
 GENRE_TAGS = ["Jazz", "News", "Rock", "Electronic", "Classical", "Talk", "Ambient", "Sports", "80s"]
@@ -17,6 +18,7 @@ class DiscoverPanel(Gtk.Box):
         self.set_margin_top(6)
         self.set_margin_bottom(6)
         self.win = parent_window
+        self._results: list[dict] = []
 
         # Execution query controls
         search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
@@ -93,7 +95,7 @@ class DiscoverPanel(Gtk.Box):
         threading.Thread(target=self._async_search_by_tag, args=(tag,), daemon=True).start()
 
     def _async_search_by_tag(self, tag: str):
-        results = radiobrowser.run_search_by_tag(tag)
+        results = radiobrowser.search_by_tag(tag)
         GLib.idle_add(self._apply_results, results)
 
     def on_search(self, button=None, *args):
@@ -109,7 +111,7 @@ class DiscoverPanel(Gtk.Box):
         threading.Thread(target=self._async_search, args=(q,), daemon=True).start()
 
     def _async_search(self, query: str):
-        results = radiobrowser.run_search(query)
+        results = radiobrowser.search(query)
         GLib.idle_add(self._apply_results, results)
 
     def reset_discovery_view(self, button=None):
@@ -121,6 +123,7 @@ class DiscoverPanel(Gtk.Box):
 
     def _apply_results(self, results: list[dict]) -> bool:
         self.spinner.stop()
+        self._results = results
         if not results:
             lbl = Gtk.Label(label="No stations matched query parameters.")
             lbl.set_margin_top(12)
@@ -161,13 +164,13 @@ class DiscoverPanel(Gtk.Box):
 
             btn_import = Gtk.Button(icon_name="bookmark-new-symbolic")
             btn_import.set_tooltip_text("Import into local station library")
-            btn_import.connect("clicked", lambda b, idx=r["index"]: self.on_import(idx))
+            btn_import.connect("clicked", lambda b, st=r: self.on_import(st))
             row.append(btn_import)
 
             self.results_box.append(row)
         return False
 
-    def on_import(self, index: int):
-        err = radiobrowser.add_from_search(index)
+    def on_import(self, station: dict):
+        err = library.add_url(station["name"], station["url"])
         if not err and self.win:
             self.win.trigger_library_refresh()
