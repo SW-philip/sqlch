@@ -7,12 +7,6 @@ import urllib.request
 from . import LOGOS_DIR
 
 _RB_API = "de1.api.radio-browser.info"
-_RB_MIRRORS = [
-    "de1.api.radio-browser.info",
-    "fr1.api.radio-browser.info",
-    "nl1.api.radio-browser.info",
-    "at1.api.radio-browser.info",
-]
 
 def _fetch_logo_url(url: str) -> bytes | None:
     try:
@@ -65,19 +59,19 @@ def _fetch_stations(url: str, limit: int, offset: int = 0) -> list[dict]:
         )
         with urllib.request.urlopen(req, timeout=4) as resp:
             raw = json.loads(resp.read().decode("utf-8", errors="replace"))
+        return [
+            {
+                "name": item.get("name", "Unknown").strip(),
+                "url": item.get("url_resolved", item.get("url", "")),
+                "favicon": item.get("favicon", ""),
+                "tags": item.get("tags", ""),
+                "country": item.get("countrycode", ""),
+                "bitrate": item.get("bitrate"),
+            }
+            for item in raw[:limit]
+        ]
     except Exception:
         return []
-    return [
-        {
-            "name": item.get("name", "Unknown").strip(),
-            "url": item.get("url_resolved", item.get("url", "")),
-            "favicon": item.get("favicon", ""),
-            "tags": item.get("tags", ""),
-            "country": item.get("countrycode", ""),
-            "bitrate": item.get("bitrate"),
-        }
-        for item in raw[:limit]
-    ]
 
 
 def search(query: str, limit: int = 25, offset: int = 0) -> list[dict]:
@@ -86,7 +80,7 @@ def search(query: str, limit: int = 25, offset: int = 0) -> list[dict]:
         return []
     url = (
         f"https://{_RB_API}/json/stations/byname/"
-        f"{urllib.parse.quote(query)}?hidebroken=true"
+        f"{urllib.parse.quote(query, safe='')}?hidebroken=true&order=name"
     )
     return _fetch_stations(url, limit, offset)
 
@@ -99,7 +93,7 @@ def search_by_tag(tag: str, limit: int = 25, offset: int = 0) -> list[dict]:
     # bytag matching is case-sensitive server-side and RadioBrowser tags are
     # normalized lowercase, so lowercasing here is what makes "Rock" match.
     url = (
-        f"https://{_RB_API}/json/stations/bytag/{urllib.parse.quote(tag)}"
+        f"https://{_RB_API}/json/stations/bytag/{urllib.parse.quote(tag, safe='')}"
         "?order=votes&reverse=true&hidebroken=true"
     )
     return _fetch_stations(url, limit, offset)

@@ -122,12 +122,17 @@ class DiscoverPanel(Gtk.Box):
         self._start_search("name", q)
 
     def _fetch_page(self, gen: int, offset: int):
-        if self._active_kind == "name":
-            results = radiobrowser.search(self._active_term, offset=offset)
-        else:
-            results = radiobrowser.search_by_tag(
-                self._active_term, offset=offset
-            )
+        try:
+            if self._active_kind == "name":
+                results = radiobrowser.search(
+                    self._active_term, limit=self._page_size, offset=offset
+                )
+            else:
+                results = radiobrowser.search_by_tag(
+                    self._active_term, limit=self._page_size, offset=offset
+                )
+        except Exception:
+            results = []
         GLib.idle_add(self._apply_page, gen, offset, results)
 
     def reset_discovery_view(self, button=None):
@@ -138,6 +143,9 @@ class DiscoverPanel(Gtk.Box):
         self._results = []
         self._active_term = ""
         self._load_more_row = None
+        self._search_gen += 1
+        self.spinner.stop()
+        self._active_kind = "name"
         self.discovery_container.set_visible(True)
 
     def _build_row(self, r: dict) -> Gtk.Box:

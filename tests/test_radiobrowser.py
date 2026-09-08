@@ -1,5 +1,6 @@
 import json
 import unittest
+import urllib.parse
 from unittest.mock import patch
 
 from sqlch_gui import radiobrowser
@@ -51,6 +52,13 @@ class TestSearchUrlBuilding(unittest.TestCase):
         self.assertIn("limit=25", urls[0])
         self.assertIn("offset=0", urls[0])
 
+    def test_search_non_default_limit_reaches_url(self):
+        urls = []
+        with patch("urllib.request.urlopen", _capture(urls)):
+            radiobrowser.search("x", limit=10)
+        self.assertIn("limit=10", urls[0])
+        self.assertNotIn("limit=25", urls[0])
+
     def test_search_offset_advances(self):
         urls = []
         with patch("urllib.request.urlopen", _capture(urls)):
@@ -63,10 +71,17 @@ class TestSearchUrlBuilding(unittest.TestCase):
             radiobrowser.search_by_tag("Jazz", offset=50)
         u = urls[0]
         self.assertIn("bytag/jazz", u)
-        self.assertIn("order=votes", u)
-        self.assertIn("hidebroken=true", u)
-        self.assertIn("limit=25", u)
-        self.assertIn("offset=50", u)
+        params = urllib.parse.parse_qs(urllib.parse.urlsplit(u).query)
+        self.assertEqual(
+            params,
+            {
+                "order": ["votes"],
+                "reverse": ["true"],
+                "hidebroken": ["true"],
+                "limit": ["25"],
+                "offset": ["50"],
+            },
+        )
 
     def test_blank_query_skips_request(self):
         urls = []
@@ -92,6 +107,17 @@ class TestNormalization(unittest.TestCase):
     def test_empty_response_returns_empty(self):
         with patch("urllib.request.urlopen", _capture([], payload=[])):
             self.assertEqual(radiobrowser.search("jazz"), [])
+
+    def test_non_list_payload_returns_empty(self):
+        with patch(
+            "urllib.request.urlopen",
+            _capture([], payload={"error": "rate limited"}),
+        ):
+            self.assertEqual(radiobrowser.search("x"), [])
+
+    def test_non_dict_element_returns_empty(self):
+        with patch("urllib.request.urlopen", _capture([], payload=["oops"])):
+            self.assertEqual(radiobrowser.search("x"), [])
 
     def test_network_error_returns_empty(self):
         def _boom(req, timeout=0):
