@@ -434,6 +434,26 @@ def _build_css(colors: dict) -> str:
         background-color: {stage};
     }}
 
+    .load-more-row {{
+        border-radius: 7px;
+        padding: 6px 10px;
+        margin-top: 4px;
+        border: {hairline};
+        background-image: none;
+        background-color: {wing};
+        color: {lyric};
+        font-family: {mono};
+        font-weight: 700;
+        font-size: 0.8em;
+    }}
+    .load-more-row:hover {{
+        background-color: {stage};
+        color: {score};
+    }}
+    .load-more-row:disabled {{
+        opacity: 0.55;
+    }}
+
     .info-panel {{
         background-color: {stage};
         border-radius: 12px;
