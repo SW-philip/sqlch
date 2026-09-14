@@ -237,3 +237,16 @@ def backfill_freqs():
                 changed = True
     if changed:
         _save_library(lib)
+
+
+def get_collapsed_groups() -> list[str]:
+    """Return the list of category group names currently collapsed in the UI."""
+    lib = _load_library()
+    return list(lib.get("collapsed_groups", []))
+
+
+def set_collapsed_groups(names: list[str]):
+    """Persist the full set of currently-collapsed category group names."""
+    lib = _load_library()
+    lib["collapsed_groups"] = list(names)
+    _save_library(lib)

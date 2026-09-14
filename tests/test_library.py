@@ -52,5 +52,24 @@ class TestFavorite(_LibraryBackedTestCase):
         self.assertFalse(library.set_favorite("no-such-id", True))
 
 
+class TestCollapsedGroups(_LibraryBackedTestCase):
+    def test_defaults_to_empty_list(self):
+        self.assertEqual(library.get_collapsed_groups(), [])
+
+    def test_set_and_get_round_trip(self):
+        library.set_collapsed_groups(["Rock", "News"])
+        self.assertEqual(library.get_collapsed_groups(), ["Rock", "News"])
+
+    def test_set_overwrites_previous_value(self):
+        library.set_collapsed_groups(["Rock"])
+        library.set_collapsed_groups(["News"])
+        self.assertEqual(library.get_collapsed_groups(), ["News"])
+
+    def test_persists_to_disk(self):
+        library.set_collapsed_groups(["Jazz"])
+        data = json.loads(self._lib_path.read_text())
+        self.assertEqual(data["collapsed_groups"], ["Jazz"])
+
+
 if __name__ == "__main__":
     unittest.main()
