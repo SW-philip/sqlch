@@ -76,15 +76,19 @@ class StationListPanel(Gtk.Box):
         self._probe_running = False
         self._abort_probes = threading.Event()
         self._last_probe = 0.0
+        self._collapsed_groups: set[str] = set(library.get_collapsed_groups())
         GLib.timeout_add_seconds(PROBE_TICK_SECS, self._probe_tick)
         self.refresh()
 
     def filter_station_rows(self, row) -> bool:
         search_text = self.filter_entry.get_text().lower().strip()
-        if not search_text:
-            return True
-
         child = row.get_child()
+
+        if not search_text:
+            if isinstance(child, RibbonBanner):
+                return True
+            return getattr(child, "_group_name", None) not in self._collapsed_groups
+
         # Section-rule headers never participate in filtering.
         if isinstance(child, RibbonBanner):
             return False
@@ -151,11 +155,27 @@ class StationListPanel(Gtk.Box):
 
     def _append_group_rows(self, group_name: str, stations: list[dict], gold: bool = False):
         # Category header: a hairline section rule spanning the list.
-        self.list_box.append(RibbonBanner(group_name, gold=gold))
+        banner = RibbonBanner(
+            group_name,
+            gold=gold,
+            collapsible=True,
+            collapsed=group_name in self._collapsed_groups,
+            on_toggle=lambda collapsed, g=group_name: self.on_toggle_group(g, collapsed),
+        )
+        self.list_box.append(banner)
         for s in stations:
             row, live_lbl, mini_eq = self._build_station_row(s)
+            row._group_name = group_name
             self.list_box.append(row)
             self._rows_map.setdefault(s["id"], []).append((row, live_lbl, mini_eq))
+
+    def on_toggle_group(self, group_name: str, collapsed: bool):
+        if collapsed:
+            self._collapsed_groups.add(group_name)
+        else:
+            self._collapsed_groups.discard(group_name)
+        library.set_collapsed_groups(sorted(self._collapsed_groups))
+        self.list_box.invalidate_filter()
 
     def _build_station_row(self, s: dict) -> tuple[Gtk.Box, Gtk.Label, EqStrip]:
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)

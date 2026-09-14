@@ -98,7 +98,7 @@ class TestFavoritesSection(_LibraryBackedTestCase):
         library.set_favorite(sid, True)
         panel = _make_panel()
         first_row = panel.list_box.get_first_child()
-        self.assertEqual(first_row.get_child().label.get_text(), "★ FAVORITES")
+        self.assertEqual(first_row.get_child().label.get_text(), "▾ ★ FAVORITES")
 
     def test_favorited_station_has_two_row_entries(self):
         sid = self._add("Zeta", "http://z")
@@ -122,6 +122,56 @@ class TestFavoritesSection(_LibraryBackedTestCase):
         second_station_row = first_station_row.get_next_sibling()
         self.assertEqual(_station_name(first_station_row), "Alpha")
         self.assertEqual(_station_name(second_station_row), "Zeta")
+
+
+class TestCollapsibleCategories(_LibraryBackedTestCase):
+    def _add(self, name, url, group=None):
+        library.add_url(name, url)
+        sid = library.get_station_list()[-1]["id"]
+        if group:
+            library.set_group(sid, group)
+        return sid
+
+    def test_group_banner_starts_expanded(self):
+        self._add("Alpha", "http://a", group="Rock")
+        panel = _make_panel()
+        banner_row = next(r for r in _iter_rows(panel.list_box) if _is_banner(r))
+        self.assertEqual(banner_row.get_child().label.get_text(), "▾ ROCK")
+
+    def test_toggling_group_hides_its_rows_and_persists(self):
+        self._add("Alpha", "http://a", group="Rock")
+        panel = _make_panel()
+        panel.on_toggle_group("Rock", True)
+        self.assertIn("Rock", panel._collapsed_groups)
+        self.assertEqual(library.get_collapsed_groups(), ["Rock"])
+        station_row = next(r for r in _iter_rows(panel.list_box) if not _is_banner(r))
+        self.assertFalse(panel.filter_station_rows(station_row))
+
+    def test_expanding_group_shows_rows_again(self):
+        self._add("Alpha", "http://a", group="Rock")
+        panel = _make_panel()
+        panel.on_toggle_group("Rock", True)
+        panel.on_toggle_group("Rock", False)
+        self.assertEqual(library.get_collapsed_groups(), [])
+        station_row = next(r for r in _iter_rows(panel.list_box) if not _is_banner(r))
+        self.assertTrue(panel.filter_station_rows(station_row))
+
+    def test_collapsed_state_loaded_on_construction(self):
+        library.set_collapsed_groups(["Rock"])
+        self._add("Alpha", "http://a", group="Rock")
+        panel = _make_panel()
+        banner_row = next(r for r in _iter_rows(panel.list_box) if _is_banner(r))
+        self.assertEqual(banner_row.get_child().label.get_text(), "▸ ROCK")
+        station_row = next(r for r in _iter_rows(panel.list_box) if not _is_banner(r))
+        self.assertFalse(panel.filter_station_rows(station_row))
+
+    def test_search_overrides_collapse(self):
+        self._add("Alpha", "http://a", group="Rock")
+        panel = _make_panel()
+        panel.on_toggle_group("Rock", True)
+        panel.filter_entry.set_text("alpha")
+        station_row = next(r for r in _iter_rows(panel.list_box) if not _is_banner(r))
+        self.assertTrue(panel.filter_station_rows(station_row))
 
 
 if __name__ == "__main__":
