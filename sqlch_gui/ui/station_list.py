@@ -18,6 +18,13 @@ def format_live_text(artist: str | None, title: str | None) -> str:
         return ""
     return "♫ " + " — ".join(parts)
 
+
+def _parse_freq(v) -> float:
+    try:
+        return float(str(v or "0").split()[0])
+    except (ValueError, IndexError):
+        return 0.0
+
 class StationListPanel(Gtk.Box):
     def __init__(self, parent_window):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
@@ -116,54 +123,12 @@ class StationListPanel(Gtk.Box):
             g = s.get("group", "Unsorted")
             groups.setdefault(g, []).append(s)
 
-        colors = palette.load()
         for g_name in sorted(groups.keys()):
             # Category header: a hairline section rule spanning the list.
             self.list_box.append(RibbonBanner(g_name))
 
-            def _freq(v):
-                try:
-                    return float(str(v or "0").split()[0])
-                except (ValueError, IndexError):
-                    return 0.0
-
-            for s in sorted(groups[g_name], key=lambda x: _freq(x.get("frequency"))):
-                row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-                row.add_css_class("station-row")
-
-                freq_lbl = Gtk.Label()
-                freq_lbl.add_css_class("station-freq")
-                freq_lbl.set_text(f"{_freq(s.get('frequency')):.1f}")
-
-                body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
-                body.set_hexpand(True)
-                name_lbl = Gtk.Label(label=s.get("name"), xalign=0.0)
-                name_lbl.set_ellipsize(3) # Pango.EllipsizeMode.END
-                live_lbl = Gtk.Label(xalign=0.0)
-                live_lbl.add_css_class("station-live")
-                live_lbl.set_ellipsize(3)
-                live_lbl.set_visible(False)
-                body.append(name_lbl)
-                body.append(live_lbl)
-
-                mini_eq = EqStrip(n_beads=3, width=18, height=11)
-                mini_eq.set_valign(Gtk.Align.CENTER)
-                mini_eq.set_visible(False)
-
-                tag_pennant = PennantTag(s.get("group", "Unsorted"))
-                tag_pennant.set_valign(Gtk.Align.CENTER)
-
-                row.append(freq_lbl)
-                row.append(body)
-                row.append(mini_eq)
-                row.append(tag_pennant)
-
-                # Secondary click binding context setup
-                click_gesture = Gtk.GestureClick()
-                click_gesture.set_button(0)
-                click_gesture.connect("released", lambda g, n, x, y, st=s: self.on_row_clicked(g, n, x, y, st))
-                row.add_controller(click_gesture)
-
+            for s in sorted(groups[g_name], key=lambda x: _parse_freq(x.get("frequency"))):
+                row, live_lbl, mini_eq = self._build_station_row(s)
                 self.list_box.append(row)
                 self._rows_map[s["id"]] = (row, live_lbl, mini_eq)
 
@@ -177,6 +142,62 @@ class StationListPanel(Gtk.Box):
                 row.add_css_class("active")
                 mini_eq.set_visible(True)
                 mini_eq.set_active(True)
+
+    def _build_station_row(self, s: dict) -> tuple[Gtk.Box, Gtk.Label, EqStrip]:
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        row.add_css_class("station-row")
+
+        btn_star = Gtk.Button(
+            icon_name="starred-symbolic" if s.get("favorite") else "non-starred-symbolic"
+        )
+        btn_star.add_css_class("control-btn")
+        btn_star.set_tooltip_text("Toggle favorite")
+        btn_star.connect(
+            "clicked",
+            lambda b, sid=s["id"], fav=s.get("favorite", False): self.on_toggle_favorite(sid, fav),
+        )
+
+        freq_lbl = Gtk.Label()
+        freq_lbl.add_css_class("station-freq")
+        freq_lbl.set_text(f"{_parse_freq(s.get('frequency')):.1f}")
+
+        body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        body.set_hexpand(True)
+        name_lbl = Gtk.Label(label=s.get("name"), xalign=0.0)
+        name_lbl.set_ellipsize(3)  # Pango.EllipsizeMode.END
+        live_lbl = Gtk.Label(xalign=0.0)
+        live_lbl.add_css_class("station-live")
+        live_lbl.set_ellipsize(3)
+        live_lbl.set_visible(False)
+        body.append(name_lbl)
+        body.append(live_lbl)
+
+        mini_eq = EqStrip(n_beads=3, width=18, height=11)
+        mini_eq.set_valign(Gtk.Align.CENTER)
+        mini_eq.set_visible(False)
+
+        tag_pennant = PennantTag(s.get("group", "Unsorted"))
+        tag_pennant.set_valign(Gtk.Align.CENTER)
+
+        row.append(btn_star)
+        row.append(freq_lbl)
+        row.append(body)
+        row.append(mini_eq)
+        row.append(tag_pennant)
+
+        # Secondary click binding context setup
+        click_gesture = Gtk.GestureClick()
+        click_gesture.set_button(0)
+        click_gesture.connect(
+            "released", lambda g, n, x, y, st=s: self.on_row_clicked(g, n, x, y, st)
+        )
+        row.add_controller(click_gesture)
+
+        return row, live_lbl, mini_eq
+
+    def on_toggle_favorite(self, station_id: str, currently_favorite: bool):
+        library.set_favorite(station_id, not currently_favorite)
+        self.refresh()
 
     def on_row_clicked(self, gesture, n_press, x, y, station):
         button = gesture.get_current_button()
@@ -195,12 +216,7 @@ class StationListPanel(Gtk.Box):
         # Modification entries
         ent_edit_name = Gtk.Entry(text=station["name"])
         ent_edit_url = Gtk.Entry(text=station["url"])
-        def _freq(v):
-            try:
-                return float(str(v or "0").split()[0])
-            except (ValueError, IndexError):
-                return 0.0
-        ent_edit_freq = Gtk.Entry(text=f"{_freq(station.get('frequency')):.1f}")
+        ent_edit_freq = Gtk.Entry(text=f"{_parse_freq(station.get('frequency')):.1f}")
         ent_edit_group = Gtk.Entry(text=station.get("group", "Unsorted"))
 
         btn_save = Gtk.Button(label="Save Modifications")
