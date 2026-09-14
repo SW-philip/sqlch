@@ -11,6 +11,7 @@ from .eq_strip import EqStrip
 PROBE_STALE_SECS = 45
 PROBE_TICK_SECS = 60
 PROBE_WORKERS = 4
+FAVORITES_GROUP = "★ Favorites"
 
 def format_live_text(artist: str | None, title: str | None) -> str:
     parts = [p for p in (artist, title) if p]
@@ -123,25 +124,38 @@ class StationListPanel(Gtk.Box):
             g = s.get("group", "Unsorted")
             groups.setdefault(g, []).append(s)
 
-        for g_name in sorted(groups.keys()):
-            # Category header: a hairline section rule spanning the list.
-            self.list_box.append(RibbonBanner(g_name))
+        favorites = sorted(
+            (s for s in stations if s.get("favorite")),
+            key=lambda s: (s.get("name") or "").lower(),
+        )
+        if favorites:
+            self._append_group_rows(FAVORITES_GROUP, favorites, gold=True)
 
-            for s in sorted(groups[g_name], key=lambda x: _parse_freq(x.get("frequency"))):
-                row, live_lbl, mini_eq = self._build_station_row(s)
-                self.list_box.append(row)
-                self._rows_map[s["id"]] = (row, live_lbl, mini_eq)
+        for g_name in sorted(groups.keys()):
+            self._append_group_rows(
+                g_name,
+                sorted(groups[g_name], key=lambda x: _parse_freq(x.get("frequency"))),
+            )
 
         # Re-apply any already-probed live lines to the rebuilt rows
-        for s_id, (row, live_lbl, mini_eq) in self._rows_map.items():
+        for s_id, entries in self._rows_map.items():
             text = self._probe_titles.get(s_id, "")
-            if text and s_id != self._active_id:
-                live_lbl.set_text(text)
-                live_lbl.set_visible(True)
-            if s_id == self._active_id:
-                row.add_css_class("active")
-                mini_eq.set_visible(True)
-                mini_eq.set_active(True)
+            for row, live_lbl, mini_eq in entries:
+                if text and s_id != self._active_id:
+                    live_lbl.set_text(text)
+                    live_lbl.set_visible(True)
+                if s_id == self._active_id:
+                    row.add_css_class("active")
+                    mini_eq.set_visible(True)
+                    mini_eq.set_active(True)
+
+    def _append_group_rows(self, group_name: str, stations: list[dict], gold: bool = False):
+        # Category header: a hairline section rule spanning the list.
+        self.list_box.append(RibbonBanner(group_name, gold=gold))
+        for s in stations:
+            row, live_lbl, mini_eq = self._build_station_row(s)
+            self.list_box.append(row)
+            self._rows_map.setdefault(s["id"], []).append((row, live_lbl, mini_eq))
 
     def _build_station_row(self, s: dict) -> tuple[Gtk.Box, Gtk.Label, EqStrip]:
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -270,19 +284,20 @@ class StationListPanel(Gtk.Box):
 
     def set_active(self, active_id: str | None, icy_artist: str | None = None, icy_title: str | None = None):
         self._active_id = active_id
-        for s_id, (row, live_lbl, mini_eq) in self._rows_map.items():
-            if s_id == active_id:
-                row.add_css_class("active")
-                mini_eq.set_visible(True)
-                mini_eq.set_active(True)
-                text = format_live_text(icy_artist, icy_title) or self._probe_titles.get(s_id, "")
-            else:
-                row.remove_css_class("active")
-                mini_eq.set_active(False)
-                mini_eq.set_visible(False)
-                text = self._probe_titles.get(s_id, "")
-            live_lbl.set_text(text)
-            live_lbl.set_visible(bool(text))
+        for s_id, entries in self._rows_map.items():
+            for row, live_lbl, mini_eq in entries:
+                if s_id == active_id:
+                    row.add_css_class("active")
+                    mini_eq.set_visible(True)
+                    mini_eq.set_active(True)
+                    text = format_live_text(icy_artist, icy_title) or self._probe_titles.get(s_id, "")
+                else:
+                    row.remove_css_class("active")
+                    mini_eq.set_active(False)
+                    mini_eq.set_visible(False)
+                    text = self._probe_titles.get(s_id, "")
+                live_lbl.set_text(text)
+                live_lbl.set_visible(bool(text))
 
     # --- Live track probing for non-playing stations ---
 
@@ -344,9 +359,8 @@ class StationListPanel(Gtk.Box):
             self._probe_titles[s_id] = text
         else:
             self._probe_titles.pop(s_id, None)
-        entry = self._rows_map.get(s_id)
-        if entry and s_id != self._active_id:
-            _row, live_lbl, _mini_eq = entry
-            live_lbl.set_text(text)
-            live_lbl.set_visible(bool(text))
+        for row, live_lbl, mini_eq in self._rows_map.get(s_id, []):
+            if s_id != self._active_id:
+                live_lbl.set_text(text)
+                live_lbl.set_visible(bool(text))
         return False
