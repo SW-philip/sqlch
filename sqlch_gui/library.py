@@ -136,6 +136,8 @@ def get_station_list() -> list[dict]:
             s["bitrate"] = None
         if "channels" not in s:
             s["channels"] = None
+        if "favorite" not in s:
+            s["favorite"] = False
     return stations
 
 
@@ -207,6 +209,17 @@ def set_group(station_id: str, group: str) -> bool:
     for s in lib["stations"]:
         if s["id"] == station_id:
             s["group"] = group.strip() if group.strip() else "Unsorted"
+            _save_library(lib)
+            return True
+    return False
+
+
+def set_favorite(station_id: str, is_favorite: bool) -> bool:
+    """Mark or unmark a station as a favorite."""
+    lib = _load_library()
+    for s in lib["stations"]:
+        if s["id"] == station_id:
+            s["favorite"] = bool(is_favorite)
             _save_library(lib)
             return True
     return False
