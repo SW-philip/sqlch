@@ -4,7 +4,7 @@ import threading
 import time
 
 from gi.repository import Gtk, Gdk, GLib
-from .. import library, daemon, icyprobe, metadata, palette
+from .. import library, daemon, icyprobe, metadata
 from .banner import RibbonBanner, PennantTag
 from .eq_strip import EqStrip
 
@@ -91,6 +91,13 @@ class StationListPanel(Gtk.Box):
 
         # Section-rule headers never participate in filtering.
         if isinstance(child, RibbonBanner):
+            return False
+        # A favorited station gets two row widgets (one pinned under Favorites,
+        # one under its real category); with headers hidden during search,
+        # showing both would look like an unexplained duplicate. Hide the
+        # Favorites-section copy so the station surfaces once, from its
+        # category section.
+        if getattr(child, "_group_name", None) == FAVORITES_GROUP:
             return False
         # Let explicit structural heading text rows through without suppression
         if not isinstance(child, Gtk.Box):

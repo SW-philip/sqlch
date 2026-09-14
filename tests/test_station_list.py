@@ -174,5 +174,56 @@ class TestCollapsibleCategories(_LibraryBackedTestCase):
         self.assertTrue(panel.filter_station_rows(station_row))
 
 
+class TestFavoriteDualRows(_LibraryBackedTestCase):
+    def _add(self, name, url, group=None):
+        library.add_url(name, url)
+        sid = library.get_station_list()[-1]["id"]
+        if group:
+            library.set_group(sid, group)
+        return sid
+
+    def test_search_shows_favorited_station_only_once(self):
+        from sqlch_gui.ui.station_list import FAVORITES_GROUP
+
+        sid = self._add("Zeta", "http://z", group="Rock")
+        library.set_favorite(sid, True)
+        panel = _make_panel()
+        panel.filter_entry.set_text("zeta")
+
+        rows = panel._rows_map[sid]
+        self.assertEqual(len(rows), 2)
+        results = {}
+        for row, _live_lbl, _mini_eq in rows:
+            results[row._group_name] = panel.filter_station_rows(row.get_parent())
+
+        self.assertFalse(results[FAVORITES_GROUP])
+        self.assertTrue(results["Rock"])
+
+    def test_set_active_marks_both_rows_of_a_favorite(self):
+        sid = self._add("Zeta", "http://z", group="Rock")
+        library.set_favorite(sid, True)
+        panel = _make_panel()
+        self.assertEqual(len(panel._rows_map[sid]), 2)
+
+        panel.set_active(sid)
+
+        for row, _live_lbl, mini_eq in panel._rows_map[sid]:
+            self.assertTrue(row.has_css_class("active"))
+            self.assertTrue(mini_eq.get_visible())
+
+    def test_apply_probe_updates_both_rows_of_a_favorite(self):
+        sid = self._add("Zeta", "http://z", group="Rock")
+        library.set_favorite(sid, True)
+        panel = _make_panel()
+        self.assertEqual(len(panel._rows_map[sid]), 2)
+
+        text = "♫ Some Artist — Some Track"
+        panel._apply_probe(sid, text)
+
+        for _row, live_lbl, _mini_eq in panel._rows_map[sid]:
+            self.assertEqual(live_lbl.get_text(), text)
+            self.assertTrue(live_lbl.get_visible())
+
+
 if __name__ == "__main__":
     unittest.main()
