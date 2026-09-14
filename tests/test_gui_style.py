@@ -76,6 +76,50 @@ class TestBannerWidgets(unittest.TestCase):
         g = RibbonBanner("browse categories", gold=True)
         self.assertTrue(g.has_css_class("gold"))
 
+    def test_ribbon_banner_collapsible_starts_expanded_with_chevron(self):
+        import gi
+        gi.require_version("Gtk", "4.0")
+        from sqlch_gui.ui.banner import RibbonBanner
+        b = RibbonBanner("news", collapsible=True)
+        self.assertEqual(b.label.get_text(), "▾ NEWS")
+
+    def test_ribbon_banner_collapsible_can_start_collapsed(self):
+        import gi
+        gi.require_version("Gtk", "4.0")
+        from sqlch_gui.ui.banner import RibbonBanner
+        b = RibbonBanner("news", collapsible=True, collapsed=True)
+        self.assertEqual(b.label.get_text(), "▸ NEWS")
+
+    def test_ribbon_banner_click_toggles_and_calls_on_toggle(self):
+        import gi
+        gi.require_version("Gtk", "4.0")
+        from sqlch_gui.ui.banner import RibbonBanner
+        toggled = []
+        b = RibbonBanner("news", collapsible=True, on_toggle=toggled.append)
+
+        b._on_click(None, 1, 0, 0)
+        self.assertEqual(b.label.get_text(), "▸ NEWS")
+        self.assertEqual(toggled, [True])
+
+        b._on_click(None, 1, 0, 0)
+        self.assertEqual(b.label.get_text(), "▾ NEWS")
+        self.assertEqual(toggled, [True, False])
+
+    def test_ribbon_banner_set_collapsed_updates_chevron(self):
+        import gi
+        gi.require_version("Gtk", "4.0")
+        from sqlch_gui.ui.banner import RibbonBanner
+        b = RibbonBanner("news", collapsible=True)
+        b.set_collapsed(True)
+        self.assertEqual(b.label.get_text(), "▸ NEWS")
+
+    def test_ribbon_banner_non_collapsible_has_no_chevron(self):
+        import gi
+        gi.require_version("Gtk", "4.0")
+        from sqlch_gui.ui.banner import RibbonBanner
+        b = RibbonBanner("news")
+        self.assertEqual(b.label.get_text(), "NEWS")
+
     def test_pennant_tag_is_a_box_exposing_label(self):
         import gi
         gi.require_version("Gtk", "4.0")
