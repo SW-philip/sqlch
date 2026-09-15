@@ -48,5 +48,17 @@ in {
 
   config = lib.mkIf cfg.enable {
     home.packages = [ launcher toggle ];
+
+    xdg.dataFile."icons/hicolor/scalable/apps/sqlch-gui.svg".source =
+      ../sqlch_gui/assets/sqlch-gui-icon.svg;
+
+    xdg.desktopEntries.sqlch-gui = {
+      name = "sqlch";
+      comment = "Radio daemon frontend (Discover, search, library)";
+      exec = "sqlch-gui-toggle";
+      icon = "sqlch-gui";
+      type = "Application";
+      categories = [ "AudioVideo" "Player" ];
+    };
   };
 }
