@@ -192,5 +192,25 @@ class TestEqStrip(unittest.TestCase):
         self.assertNotIn("tail_r", src)
 
 
+class TestDepthPass(unittest.TestCase):
+    def test_drop_shadow_is_stronger_than_original(self):
+        from sqlch_gui.ui import common
+        css = common._build_css(dict(palette._DEFAULTS))
+        self.assertIn("box-shadow: 0 2px 3px", css)
+        self.assertNotIn("box-shadow: 0 1px 1px", css)
+
+    def test_recess_shadow_is_stronger_than_original(self):
+        from sqlch_gui.ui import common
+        css = common._build_css(dict(palette._DEFAULTS))
+        self.assertIn("inset 0 2px 4px", css)
+        self.assertNotIn("inset 0 1px 2px", css)
+
+    def test_cover_art_uses_recess_not_drop(self):
+        from sqlch_gui.ui import common
+        css = common._build_css(dict(palette._DEFAULTS))
+        cover_rule = css.split(".cover-art {")[1].split("}")[0]
+        self.assertIn("inset", cover_rule)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -48,8 +48,8 @@ def _build_css(colors: dict) -> str:
 
     hairline = f"1px solid rgba({score_rgb}, 0.14)"
     rule = f"1px solid rgba({score_rgb}, 0.13)"
-    drop = f"0 1px 1px rgba({staff}, {a_drop})"
-    recess = f"inset 0 1px 2px rgba({staff}, {a_inset})"
+    drop = f"0 2px 3px rgba({staff}, {a_drop})"
+    recess = f"inset 0 2px 4px rgba({staff}, {a_inset})"
     press = f"inset 0 1px 3px rgba({staff}, 0.6)"
     shell_shadow = f"3px 4px 0 0 rgba({staff}, {a_drop})"
 
@@ -130,7 +130,7 @@ def _build_css(colors: dict) -> str:
         border: {hairline};
         min-width: 220px;
         min-height: 220px;
-        box-shadow: {drop};
+        box-shadow: {recess};
     }}
     .cover-glyph {{
         font-size: 38px;
