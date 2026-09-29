@@ -12,6 +12,7 @@ remaining usable as a standalone Python application.
 ## TUI Preview
 
 ![SQLCH Textual TUI](assets/sqlch-tui.png)
+![SQLCH GTK4 GUI](assets/sqlch-gui.png)
 
 ---
 
