@@ -47,6 +47,13 @@ def _build_css(colors: dict) -> str:
     prop = '"Inter", "system-ui", sans-serif'
 
     hairline = f"1px solid rgba({score_rgb}, 0.14)"
+    # Now Playing card only: the plain hairline barely registers between
+    # STAGE/WING fills that sit close in lightness on several palettes.
+    # A louder border (not a fill-color change) separates the player from
+    # the shell without touching text-bearing surfaces -- see
+    # docs/superpowers/specs/2026-09-17-sqlch-gui-depth-pass-design.md for
+    # why the fill-contrast route (a layer-contrast ladder) was rejected.
+    edge = f"2px solid rgba({score_rgb}, 0.32)"
     rule = f"1px solid rgba({score_rgb}, 0.13)"
     drop = f"0 2px 3px rgba({staff}, {a_drop})"
     recess = f"inset 0 2px 4px rgba({staff}, {a_inset})"
@@ -90,7 +97,7 @@ def _build_css(colors: dict) -> str:
         background-color: {stage};
         border-radius: 7px;
         padding: 3px 6px;
-        border: {hairline};
+        border: {edge};
         box-shadow: {drop};
     }}
 
@@ -101,7 +108,7 @@ def _build_css(colors: dict) -> str:
         color: {rest};
         background-color: {wing};
         background-image: none;
-        border: {hairline};
+        border: {edge};
         box-shadow: {drop};
     }}
     .nav-btn:hover {{
@@ -119,7 +126,7 @@ def _build_css(colors: dict) -> str:
         background-color: {stage};
         border-radius: 12px;
         padding: 4px;
-        border: {hairline};
+        border: {edge};
         box-shadow: {drop};
         margin-bottom: 2px;
     }}
@@ -127,7 +134,7 @@ def _build_css(colors: dict) -> str:
     .cover-art {{
         background-color: {wing};
         border-radius: 12px;
-        border: {hairline};
+        border: {edge};
         min-width: 220px;
         min-height: 220px;
         box-shadow: {recess};
@@ -221,7 +228,7 @@ def _build_css(colors: dict) -> str:
         background-color: {wing};
         background-image: none;
         color: {score};
-        border: {hairline};
+        border: {edge};
         box-shadow: {drop};
     }}
     .control-btn:hover {{
@@ -457,7 +464,7 @@ def _build_css(colors: dict) -> str:
     .info-panel {{
         background-color: {stage};
         border-radius: 12px;
-        border: {hairline};
+        border: {edge};
         box-shadow: {recess};
         padding: 8px;
     }}
