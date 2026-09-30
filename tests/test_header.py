@@ -4,7 +4,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gtk
 
-from sqlch_gui.ui.header import SNARK, Header
+from sqlch_gui.ui.header import SNARK, Header, next_connected
 
 
 def _header():
@@ -144,3 +144,15 @@ class TestNowPlayingWiring(unittest.TestCase):
         p = self._panel()
         self.assertIsNotNone(p.lbl_previous)
         self.assertIsNotNone(p.pill_codec)
+
+
+class TestNextConnected(unittest.TestCase):
+    def test_reply_resets_and_connects(self):
+        self.assertEqual(next_connected(5, True), (0, True))
+
+    def test_single_miss_stays_connected(self):
+        self.assertEqual(next_connected(0, False), (1, True))
+
+    def test_second_consecutive_miss_disconnects(self):
+        self.assertEqual(next_connected(1, False), (2, False))
+        self.assertEqual(next_connected(2, False), (3, False))

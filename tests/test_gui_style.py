@@ -38,6 +38,21 @@ class TestFlatStylesheet(unittest.TestCase):
         self.assertIn(".popup-window", css)
         self.assertIn(".section-rule", css)
 
+    def test_station_uses_lyric_and_tab_not_rest(self):
+        from sqlch_gui.ui import common
+        colors = dict(palette._DEFAULTS)
+        colors["LYRIC"] = "#111111"
+        colors["REST"] = "#222222"
+        css = common._build_css(colors)
+
+        def rule(sel):
+            start = css.index("\n    " + sel + " {")
+            return css[start:css.index("}", start)]
+
+        self.assertIn("#111111", rule(".sq-station"))
+        self.assertIn("italic", rule(".sq-station"))
+        self.assertNotIn("#222222", rule(".sq-tab"))
+
     def test_no_paper_cutout_vocabulary(self):
         from sqlch_gui.ui import common
         css = common._build_css(palette.load())

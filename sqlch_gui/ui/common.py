@@ -97,7 +97,7 @@ def _build_css(colors: dict) -> str:
         padding: 4px 0;
         margin: 0;
         border-radius: 7px 7px 0 0;
-        color: {rest};
+        color: {lyric};
         background-color: {wing};
         background-image: none;
         border: {edge};
@@ -359,6 +359,9 @@ def _build_css(colors: dict) -> str:
     .sq-plate.offline .sq-track {{
         opacity: 0.5;
     }}
+    .sq-plate.offline .sq-station {{
+        opacity: 1;
+    }}
     .sq-led {{
         min-width: 9px;
         min-height: 9px;
@@ -380,7 +383,8 @@ def _build_css(colors: dict) -> str:
     .sq-station {{
         font-family: {mono};
         font-size: 0.72em;
-        color: {rest};
+        font-style: italic;
+        color: {lyric};
     }}
     .sq-tabs {{
         border-bottom: 2px solid {root};

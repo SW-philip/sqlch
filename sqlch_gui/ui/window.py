@@ -9,6 +9,7 @@ from gi.repository import Gtk, GLib, Gio, Gtk4LayerShell
 from .. import daemon, palette
 from .banner import TornSeparator
 from .common import load_custom_css
+from .header import next_connected
 from .now_playing import NowPlayingPanel
 from .station_list import StationListPanel
 from .discover import DiscoverPanel
@@ -25,6 +26,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app)
         self.set_title("sqlch-gui")
+        self._missed_polls = 0
         # Now Playing is permanently visible; Library/Discover live in a
         # drawer that slides out to its left through the torn seam. Width
         # is content-driven so the layer-shell surface hugs the card when
@@ -329,7 +331,9 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
     def _apply_daemon_state(self, resp, icy, vol, muted, bitrate, fmt, buffer) -> bool:
         if not self._keep_running:
             return False
-        self.now_playing.set_connected(resp is not None)
+        self._missed_polls, connected = next_connected(
+            self._missed_polls, resp is not None)
+        self.now_playing.set_connected(connected)
         self.now_playing.update(resp, icy=icy)
         playing = bool(resp and resp.get("ok") and resp.get("current"))
         recording = resp.get("recording") if resp else None

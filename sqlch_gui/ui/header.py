@@ -17,6 +17,15 @@ SNARK = (
 )
 
 
+def next_connected(prev_missed: int, got_reply: bool) -> tuple[int, bool]:
+    """Debounce: one slow status reply (daemon.send times out to None) must
+    not flash the offline snark, so disconnect takes two misses in a row."""
+    if got_reply:
+        return 0, True
+    missed = prev_missed + 1
+    return missed, missed < 2
+
+
 def _plate_label(css_class: str) -> Gtk.Label:
     # width_chars/max_width_chars=1 + hexpand: the label takes whatever width
     # the pinned header gives it instead of dragging the popup wider with a
