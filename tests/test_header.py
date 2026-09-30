@@ -156,3 +156,33 @@ class TestNextConnected(unittest.TestCase):
     def test_second_consecutive_miss_disconnects(self):
         self.assertEqual(next_connected(1, False), (2, False))
         self.assertEqual(next_connected(2, False), (3, False))
+
+
+class TestPreviousTracksReserveSpace(unittest.TestCase):
+    def _panel(self):
+        from sqlch_gui.ui.now_playing import NowPlayingPanel
+        return NowPlayingPanel(None)
+
+    def test_previous_block_is_always_visible_with_three_slots(self):
+        p = self._panel()
+        self.assertTrue(p.lbl_previous.get_visible())
+        self.assertEqual(len(p._prev_rows), 3)
+
+    def test_height_does_not_change_as_history_fills(self):
+        p = self._panel()
+        empty = p.lbl_previous.measure(Gtk.Orientation.VERTICAL, 300)[1]
+        p._history.appendleft(("Artist", "A very long title " * 20))
+        p._history.appendleft(("B", "T"))
+        p._history.appendleft(("C", "T"))
+        p._update_previous_line()
+        full = p.lbl_previous.measure(Gtk.Orientation.VERTICAL, 300)[1]
+        self.assertEqual(empty, full)
+
+    def test_rows_render_history_and_clear_on_reset(self):
+        p = self._panel()
+        p._history.appendleft(("A", "T"))
+        p._update_previous_line()
+        self.assertEqual(p._prev_rows[0].get_text(), "1. A — T")
+        self.assertEqual(p._prev_rows[1].get_text().strip(), "")
+        p.reset_ui()
+        self.assertEqual(p._prev_rows[0].get_text().strip(), "")

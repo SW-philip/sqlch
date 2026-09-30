@@ -4,13 +4,14 @@ import html
 import threading
 from collections import deque
 from pathlib import Path
-from gi.repository import Gtk, GLib, GdkPixbuf, GObject
+from gi.repository import Gtk, GLib, GdkPixbuf, GObject, Pango
 
 from .. import daemon, metadata
 from .controls import VolumeMeter, RecordBubble, NavColumn
 from .header import Header
 
 _COVER_SIZE = 220     # keep in sync with .cover-art's min-width/min-height in common.py
+_PREVIOUS_SLOTS = 3  # matches the history deque's maxlen
 _INFO_PANEL_WIDTH = 300  # fixed width for the info panel; wider than _COVER_SIZE so
                          # the Codec/Bitrate/Buffer pills fit on one line without
                          # wrapping -- the album art centers with padding to match.
@@ -74,11 +75,24 @@ class NowPlayingPanel(Gtk.Box):
         # fixed-size album art governs the card's width.
         info_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
 
-        self.lbl_previous = Gtk.Label(xalign=0.0)
-        self.lbl_previous.add_css_class("info-line")
-        self.lbl_previous.set_wrap(True)
-        self.lbl_previous.set_max_width_chars(30)
-        self.lbl_previous.set_visible(False)
+        # Always present with a fixed row count (3 single-line, ellipsized
+        # slots) so the card's height never changes as history fills in.
+        self.lbl_previous = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        heading = Gtk.Label(xalign=0.0)
+        heading.set_markup("<b>PREVIOUS</b>")
+        heading.add_css_class("info-line")
+        self.lbl_previous.append(heading)
+        self._prev_rows = []
+        for _ in range(_PREVIOUS_SLOTS):
+            row = Gtk.Label(xalign=0.0, hexpand=True)
+            row.set_ellipsize(Pango.EllipsizeMode.END)
+            row.set_single_line_mode(True)
+            row.set_width_chars(1)
+            row.set_max_width_chars(1)
+            row.set_text(" ")
+            row.add_css_class("info-line")
+            self.lbl_previous.append(row)
+            self._prev_rows.append(row)
         info_panel.append(self.lbl_previous)
 
         # FlowBox (not a plain Box) so pills that don't fit on one line at
@@ -155,7 +169,7 @@ class NowPlayingPanel(Gtk.Box):
         self._cur_artist = None
         self._cur_title = None
         self._live_station_name = None
-        self._history: deque[tuple[str, str]] = deque(maxlen=3)
+        self._history: deque[tuple[str, str]] = deque(maxlen=_PREVIOUS_SLOTS)
         self._loaded = False
         self.reset_ui()
 
@@ -190,7 +204,8 @@ class NowPlayingPanel(Gtk.Box):
         last-known station/track."""
         self.header.set_station("<b>STATION</b>  —")
         self.header.set_track("<i>Not Playing</i>")
-        self.lbl_previous.set_visible(False)
+        self._history.clear()
+        self._render_previous()
         self.btn_toggle.set_icon_name("media-playback-start-symbolic")
         self.lbl_live_tag.set_visible(False)
         self._set_pills_placeholder()
@@ -222,15 +237,15 @@ class NowPlayingPanel(Gtk.Box):
         self.header.set_station(f"<b>STATION</b>  {freq_txt}{name}{suffix}")
 
     def _update_previous_line(self):
-        if not self._history:
-            self.lbl_previous.set_visible(False)
-            return
-        lines = [
-            f"{i}. {html.escape(a)} — {html.escape(t)}"
-            for i, (a, t) in enumerate(self._history, start=1)
-        ]
-        self.lbl_previous.set_markup("<b>PREVIOUS</b>\n" + "\n".join(lines))
-        self.lbl_previous.set_visible(True)
+        self._render_previous()
+
+    def _render_previous(self):
+        for i, row in enumerate(self._prev_rows):
+            if i < len(self._history):
+                a, t = self._history[i]
+                row.set_text(f"{i + 1}. {a} — {t}")
+            else:
+                row.set_text(" ")  # empty text collapses the row; a space keeps its height
 
     def update(self, resp: dict | None, icy: tuple[str | None, str | None]):
         if not resp or not resp.get("ok") or not resp.get("current"):
