@@ -8,6 +8,7 @@ from gi.repository import Gtk, GLib, GdkPixbuf, GObject
 
 from .. import daemon, metadata
 from .controls import VolumeMeter, RecordBubble, NavColumn
+from .header import Header
 
 _COVER_SIZE = 220     # keep in sync with .cover-art's min-width/min-height in common.py
 _INFO_PANEL_WIDTH = 300  # fixed width for the info panel; wider than _COVER_SIZE so
@@ -32,18 +33,11 @@ class NowPlayingPanel(Gtk.Box):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         card.add_css_class("card")
 
-        # --- Row 1: nav row (Mini/Library/Discover view buttons, centered
-        # in a full-width bar rather than left-hugging with dead space) ---
-        nav_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        nav_row.add_css_class("nav-row")
-
+        # --- Row 1: header (nameplate, live plate, folder tabs) ---
         self.nav_column = NavColumn()
         self.nav_column.connect("nav-selected", lambda nav, name: self.emit("nav-selected", name))
-        self.nav_column.set_hexpand(True)
-        self.nav_column.set_halign(Gtk.Align.CENTER)
-        nav_row.append(self.nav_column)
-
-        card.append(nav_row)
+        self.header = Header(self.nav_column, _INFO_PANEL_WIDTH)
+        card.append(self.header)
 
         # --- Row 2: album art, full card width, corner tags overlaid ---
         self.cover_img = Gtk.Image()
@@ -71,8 +65,7 @@ class NowPlayingPanel(Gtk.Box):
 
         card.append(self.cover_overlay)
 
-        # --- Row 3: radio-context info panel (Station / Now Playing /
-        # Previous tracks) plus stream diagnostic pills ---
+        # --- Row 3: info panel (Previous tracks) plus stream diagnostic pills ---
         # Wrapped in a non-propagating ScrolledWindow pinned to the cover
         # art's own measured width (same clip-content-not-window idiom the
         # drawer/tracklist panels already use elsewhere in this codebase),
@@ -80,18 +73,6 @@ class NowPlayingPanel(Gtk.Box):
         # as station/track text or pill visibility changes -- only the
         # fixed-size album art governs the card's width.
         info_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
-
-        self.lbl_station = Gtk.Label(xalign=0.0)
-        self.lbl_station.add_css_class("info-line")
-        self.lbl_station.set_wrap(True)
-        self.lbl_station.set_max_width_chars(30)
-        info_panel.append(self.lbl_station)
-
-        self.lbl_now_playing = Gtk.Label(xalign=0.0)
-        self.lbl_now_playing.add_css_class("meta-title")
-        self.lbl_now_playing.set_wrap(True)
-        self.lbl_now_playing.set_max_width_chars(30)
-        info_panel.append(self.lbl_now_playing)
 
         self.lbl_previous = Gtk.Label(xalign=0.0)
         self.lbl_previous.add_css_class("info-line")
@@ -167,20 +148,7 @@ class NowPlayingPanel(Gtk.Box):
 
         card.append(control_row)
 
-        card_overlay = Gtk.Overlay()
-        card_overlay.set_child(card)
-        lbl_brand = Gtk.Label(label="sqlch")
-        lbl_brand.add_css_class("brand-tag")
-        lbl_brand.set_halign(Gtk.Align.END)
-        lbl_brand.set_valign(Gtk.Align.START)
-        # Purely decorative: a bare Gtk.Label added via Gtk.Overlay.add_overlay()
-        # does NOT click-through by default (Gtk.Widget.pick() resolves to the
-        # topmost can_target widget at a point, regardless of whether it has any
-        # click handling), so explicitly opt this label out of hit-testing to
-        # guarantee toggle/meter clicks below always reach their real targets.
-        lbl_brand.set_can_target(False)
-        card_overlay.add_overlay(lbl_brand)
-        self.append(card_overlay)
+        self.append(card)
 
         self._cur_station_id = None
         self._cur_frequency = None
@@ -203,6 +171,10 @@ class NowPlayingPanel(Gtk.Box):
                 widget.add_css_class("stale")
             else:
                 widget.remove_css_class("stale")
+        self.header.set_stale(stale)
+
+    def set_connected(self, connected: bool):
+        self.header.set_connected(connected)
 
     def _set_pills_placeholder(self):
         self.pill_codec.set_text("Codec: --")
@@ -216,8 +188,8 @@ class NowPlayingPanel(Gtk.Box):
         """Initial, never-played state -- same dimmed/idle look as stopping
         after a station has played, just with placeholder text instead of
         last-known station/track."""
-        self.lbl_station.set_markup("<b>STATION</b>  —")
-        self.lbl_now_playing.set_markup("<i>Not Playing</i>")
+        self.header.set_station("<b>STATION</b>  —")
+        self.header.set_track("<i>Not Playing</i>")
         self.lbl_previous.set_visible(False)
         self.btn_toggle.set_icon_name("media-playback-start-symbolic")
         self.lbl_live_tag.set_visible(False)
@@ -247,7 +219,7 @@ class NowPlayingPanel(Gtk.Box):
                 genre = meta["genres"][0]
         suffix = f" · {html.escape(genre)}" if genre else ""
         name = html.escape(self._live_station_name or "Unknown Station")
-        self.lbl_station.set_markup(f"<b>STATION</b>  {freq_txt}{name}{suffix}")
+        self.header.set_station(f"<b>STATION</b>  {freq_txt}{name}{suffix}")
 
     def _update_previous_line(self):
         if not self._history:
@@ -293,13 +265,13 @@ class NowPlayingPanel(Gtk.Box):
         if not artist and not title:
             self.clear_cover()
             self.lbl_live_tag.set_visible(True)
-            self.lbl_now_playing.set_markup("<i>Live Stream</i>")
+            self.header.set_track("<i>Live Stream</i>")
             self._cur_artist, self._cur_title = None, None
         else:
             self.lbl_live_tag.set_visible(False)
             display_artist = artist or "Unknown Artist"
             display_title = title or "Unknown Track"
-            self.lbl_now_playing.set_markup(
+            self.header.set_track(
                 f"<b>{html.escape(display_artist)} — {html.escape(display_title)}</b>"
             )
 

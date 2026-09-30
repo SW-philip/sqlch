@@ -109,3 +109,38 @@ class TestNavTabs(unittest.TestCase):
         self.assertTrue(nav._buttons["discover"].has_css_class("active"))
         self.assertFalse(nav._buttons["mini"].has_css_class("active"))
         self.assertEqual(seen, [])
+
+
+class TestNowPlayingWiring(unittest.TestCase):
+    def _panel(self):
+        from sqlch_gui.ui.now_playing import NowPlayingPanel
+        return NowPlayingPanel(None)
+
+    def test_idle_state_lands_in_the_header(self):
+        p = self._panel()
+        self.assertEqual(p.header.track.get_text(), "Not Playing")
+        self.assertTrue(p.header.station.get_text().startswith("STATION"))
+        self.assertFalse(hasattr(p, "lbl_station"))
+        self.assertFalse(hasattr(p, "lbl_now_playing"))
+
+    def test_set_connected_reaches_the_header(self):
+        from sqlch_gui.ui.header import SNARK
+        p = self._panel()
+        p.set_connected(False)
+        self.assertIn(p.header.station.get_text(), SNARK)
+        p.set_connected(True)
+        self.assertTrue(p.header.station.get_text().startswith("STATION"))
+
+    def test_stale_dims_the_plate(self):
+        p = self._panel()  # reset_ui() at construction marks the panel stale
+        plate = p.header.station.get_parent().get_parent()
+        self.assertTrue(plate.has_css_class("stale"))
+
+    def test_nav_column_is_inside_the_header(self):
+        p = self._panel()
+        self.assertIs(p.nav_column.get_parent(), p.header)
+
+    def test_previous_track_line_and_pills_stay_in_the_info_panel(self):
+        p = self._panel()
+        self.assertIsNotNone(p.lbl_previous)
+        self.assertIsNotNone(p.pill_codec)

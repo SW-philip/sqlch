@@ -329,6 +329,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
     def _apply_daemon_state(self, resp, icy, vol, muted, bitrate, fmt, buffer) -> bool:
         if not self._keep_running:
             return False
+        self.now_playing.set_connected(resp is not None)
         self.now_playing.update(resp, icy=icy)
         playing = bool(resp and resp.get("ok") and resp.get("current"))
         recording = resp.get("recording") if resp else None

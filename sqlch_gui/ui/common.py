@@ -340,14 +340,6 @@ def _build_css(colors: dict) -> str:
         letter-spacing: 0.05em;
     }}
 
-    .brand-tag {{
-        font-family: {mono};
-        font-weight: 700;
-        font-size: 0.56em;
-        letter-spacing: 0.08em;
-        color: rgba({score_rgb}, 0.35);
-        margin: 6px 8px;
-    }}
     .sq-header {{
         padding: 2px 2px 0 2px;
     }}
