@@ -1,7 +1,6 @@
 """Custom GTK 4 tactile controls: pop-it bubble, VU-meter volume, spool nav rail."""
 
 import math
-import cairo
 import gi
 gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, Gdk, GObject, GLib
@@ -270,55 +269,36 @@ class RecordBubble(Gtk.DrawingArea):
 
 
 class NavColumn(Gtk.Box):
-    """Horizontal nav-icon row: Mini (collapse, labeled Now Playing), Library,
-    Discover.
+    """Folder-tab row: NOW (collapse, Now Playing), LIBRARY, DISCOVER.
 
     Not three independent toggle buttons -- clicking Library or Discover
     opens that section (auto-collapsing whichever was open), re-clicking
-    the already-open one is a no-op, and only Mini collapses back down to
-    nothing selected. Mini's icon is a hand-drawn display/monitor glyph
-    rather than a stock symbolic icon, matching the hand-drawn vocabulary
-    already established by VolumeMeter and RecordBubble.
+    the already-open one is a no-op, and only NOW collapses back down to
+    nothing selected. Hosted by Header, which styles the row as `.sq-tabs`.
     """
 
     __gsignals__ = {
         'nav-selected': (GObject.SignalFlags.RUN_LAST, None, (str,)),
     }
 
-    def __init__(self):
-        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        self.set_valign(Gtk.Align.CENTER)
+    _TABS = (
+        ("mini", "NOW", "Now Playing"),
+        ("library", "LIBRARY", "Station Library"),
+        ("discover", "DISCOVER", "Discover Stations"),
+    )
 
+    def __init__(self):
+        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=4,
+                         homogeneous=True)
         self.active = "mini"
         self._buttons = {}
-
-        self._display = Gtk.DrawingArea()
-        self._display.set_content_width(14)
-        self._display.set_content_height(14)
-        self._display.set_draw_func(self._draw_display)
-
-        btn_mini = Gtk.Button()
-        btn_mini.set_child(self._display)
-        btn_mini.add_css_class("nav-btn")
-        btn_mini.set_tooltip_text("Now Playing")
-        btn_mini.connect("clicked", lambda b: self._select("mini"))
-        self.append(btn_mini)
-        self._buttons["mini"] = btn_mini
-
-        btn_library = Gtk.Button(icon_name="view-list-symbolic")
-        btn_library.add_css_class("nav-btn")
-        btn_library.set_tooltip_text("Station Library")
-        btn_library.connect("clicked", lambda b: self._select("library"))
-        self.append(btn_library)
-        self._buttons["library"] = btn_library
-
-        btn_discover = Gtk.Button(icon_name="folder-saved-search-symbolic")
-        btn_discover.add_css_class("nav-btn")
-        btn_discover.set_tooltip_text("Discover Stations")
-        btn_discover.connect("clicked", lambda b: self._select("discover"))
-        self.append(btn_discover)
-        self._buttons["discover"] = btn_discover
-
+        for name, label, tip in self._TABS:
+            button = Gtk.Button(label=label)
+            button.add_css_class("sq-tab")
+            button.set_tooltip_text(tip)
+            button.connect("clicked", lambda _b, n=name: self._select(n))
+            self.append(button)
+            self._buttons[name] = button
         self._buttons["mini"].add_css_class("active")
 
     def set_active(self, name: str):
@@ -329,46 +309,9 @@ class NavColumn(Gtk.Box):
         self._buttons[self.active].remove_css_class("active")
         self.active = name
         self._buttons[name].add_css_class("active")
-        self._display.queue_draw()
 
     def _select(self, name: str):
         if name == self.active:
-            return  # re-clicking the already-open one (or idle Mini) is a no-op
+            return  # re-clicking the already-open one (or idle NOW) is a no-op
         self.set_active(name)
         self.emit("nav-selected", name)
-
-    def _draw_display(self, area, cr, width, height, user_data=None):
-        colors = palette.load()
-        mini_active = self.active == "mini"
-        # Matches the new .nav-btn foreground: SCORE when Now Playing is the
-        # active view, plain REST otherwise. Cairo draws don't pick up GTK
-        # CSS `color`, so it's read from the palette explicitly.
-        rgb = _hex_to_rgb_floats(colors.get('SCORE' if mini_active else 'REST', '#e0def4'))
-        cr.set_source_rgba(*rgb, 1.0)
-        cr.set_line_width(1.4)
-        cr.set_line_join(cairo.LINE_JOIN_ROUND)
-
-        # Screen: rounded rect
-        screen_w, screen_h = width * 0.72, height * 0.58
-        x0, y0 = (width - screen_w) / 2.0, height * 0.08
-        r = 1.6
-        cr.new_sub_path()
-        cr.arc(x0 + screen_w - r, y0 + r, r, -math.pi / 2, 0)
-        cr.arc(x0 + screen_w - r, y0 + screen_h - r, r, 0, math.pi / 2)
-        cr.arc(x0 + r, y0 + screen_h - r, r, math.pi / 2, math.pi)
-        cr.arc(x0 + r, y0 + r, r, math.pi, 3 * math.pi / 2)
-        cr.close_path()
-        cr.stroke()
-
-        # Stand: short neck below the screen, plus a small base foot.
-        cx = width / 2.0
-        neck_top = y0 + screen_h
-        neck_bottom = neck_top + height * 0.14
-        cr.move_to(cx, neck_top)
-        cr.line_to(cx, neck_bottom)
-        cr.stroke()
-
-        foot_half = width * 0.16
-        cr.move_to(cx - foot_half, neck_bottom)
-        cr.line_to(cx + foot_half, neck_bottom)
-        cr.stroke()

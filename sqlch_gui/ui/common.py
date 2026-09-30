@@ -93,33 +93,29 @@ def _build_css(colors: dict) -> str:
         padding: 2px;
     }}
 
-    .nav-row {{
-        background-color: {stage};
-        border-radius: 7px;
-        padding: 3px 6px;
-        border: {edge};
-        box-shadow: {drop};
-    }}
-
-    .nav-btn {{
-        padding: 4px;
-        margin: 2px 0;
-        border-radius: 7px;
+    .sq-tab {{
+        padding: 4px 0;
+        margin: 0;
+        border-radius: 7px 7px 0 0;
         color: {rest};
         background-color: {wing};
         background-image: none;
         border: {edge};
-        box-shadow: {drop};
+        border-bottom-width: 0;
+        box-shadow: none;
+        font-family: {mono};
+        font-size: 0.68em;
+        font-weight: 700;
+        letter-spacing: 0.12em;
     }}
-    .nav-btn:hover {{
+    .sq-tab:hover {{
         background-color: {stage};
         color: {score};
     }}
-    .nav-btn.active {{
+    .sq-tab.active {{
         background-color: {root};
+        border-color: {root};
         color: {outline};
-        font-weight: 700;
-        box-shadow: {drop};
     }}
 
     .card {{

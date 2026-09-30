@@ -216,7 +216,7 @@ class TestPlayerEdgeBorder(unittest.TestCase):
     """The Now Playing card and its own children get a louder border than
     the app-wide hairline, so the player visibly separates from the shell
     even on palettes where STAGE/WING sit close in lightness. Scoped to
-    classes now_playing.py owns outright (.card, .nav-row, .nav-btn,
+    classes now_playing.py owns outright (.card, .sq-tab,
     .cover-art, .info-panel, .control-btn) -- station list / discover /
     context-menu chrome keeps the original hairline."""
 
@@ -226,7 +226,7 @@ class TestPlayerEdgeBorder(unittest.TestCase):
     def test_player_classes_use_a_stronger_border_than_hairline(self):
         from sqlch_gui.ui import common
         css = common._build_css(dict(palette._DEFAULTS))
-        for selector in (".card", ".nav-row", ".nav-btn", ".cover-art",
+        for selector in (".card", ".sq-tab", ".cover-art",
                          ".info-panel", ".control-btn"):
             border = self._rule(css, selector).split("border:")[1].split(";")[0]
             self.assertIn("2px solid", border, f"{selector} border: {border!r}")

@@ -74,3 +74,38 @@ class TestHeader(unittest.TestCase):
         h = Header(tabs, 300)
         self.assertTrue(tabs.has_css_class("sq-tabs"))
         self.assertIs(tabs.get_parent(), h)
+
+
+class TestNavTabs(unittest.TestCase):
+    def _nav(self):
+        from sqlch_gui.ui.controls import NavColumn
+        return NavColumn()
+
+    def test_three_text_tabs_mini_active(self):
+        nav = self._nav()
+        self.assertEqual(nav.active, "mini")
+        labels = {name: b.get_label() for name, b in nav._buttons.items()}
+        self.assertEqual(labels, {"mini": "NOW", "library": "LIBRARY", "discover": "DISCOVER"})
+        for name, b in nav._buttons.items():
+            self.assertTrue(b.has_css_class("sq-tab"))
+            self.assertEqual(b.has_css_class("active"), name == "mini")
+
+    def test_click_selects_and_emits(self):
+        nav = self._nav()
+        seen = []
+        nav.connect("nav-selected", lambda _n, name: seen.append(name))
+        nav._buttons["library"].emit("clicked")
+        self.assertEqual(nav.active, "library")
+        self.assertEqual(seen, ["library"])
+        nav._buttons["library"].emit("clicked")  # re-click is a no-op
+        self.assertEqual(seen, ["library"])
+
+    def test_set_active_syncs_highlight_without_emitting(self):
+        nav = self._nav()
+        seen = []
+        nav.connect("nav-selected", lambda _n, name: seen.append(name))
+        nav.set_active("discover")
+        self.assertEqual(nav.active, "discover")
+        self.assertTrue(nav._buttons["discover"].has_css_class("active"))
+        self.assertFalse(nav._buttons["mini"].has_css_class("active"))
+        self.assertEqual(seen, [])
