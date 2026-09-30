@@ -292,10 +292,10 @@ class NowPlayingPanel(Gtk.Box):
             )
 
             if artist != self._cur_artist or title != self._cur_title:
-                if self._cur_artist or self._cur_title:
-                    self._history.appendleft(
-                        (self._cur_artist or "Unknown Artist", self._cur_title or "Unknown Track")
-                    )
+                # Half-filled metadata (title only, e.g. a raw stream id) is
+                # pre-tag junk from the player, not a track worth remembering.
+                if self._cur_artist and self._cur_title:
+                    self._history.appendleft((self._cur_artist, self._cur_title))
                 self._cur_artist = artist
                 self._cur_title = title
                 metadata.run_enrich(artist, title)
