@@ -240,6 +240,13 @@ class TestPlayerEdgeBorder(unittest.TestCase):
             border = self._rule(css, selector).split("border:")[1].split(";")[0]
             self.assertIn("1px solid", border, f"{selector} border: {border!r}")
 
+    def test_header_classes_are_styled(self):
+        from sqlch_gui.ui import common
+        css = common._build_css(dict(palette._DEFAULTS))
+        for selector in (".sq-header", ".sq-nameplate", ".sq-plate", ".sq-led",
+                         ".sq-track", ".sq-station", ".sq-tabs"):
+            self.assertIn(selector + " {", css, f"{selector} missing")
+
 
 if __name__ == "__main__":
     unittest.main()

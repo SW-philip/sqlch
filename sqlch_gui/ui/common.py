@@ -352,6 +352,51 @@ def _build_css(colors: dict) -> str:
         color: rgba({score_rgb}, 0.35);
         margin: 6px 8px;
     }}
+    .sq-header {{
+        padding: 2px 2px 0 2px;
+    }}
+    .sq-nameplate {{
+        font-family: {mono};
+        font-size: 0.6em;
+        font-weight: 700;
+        letter-spacing: 0.24em;
+        color: {rest};
+        margin: 4px 4px 0 4px;
+    }}
+    .sq-plate {{
+        padding: 6px 4px 8px 4px;
+    }}
+    .sq-plate.stale .sq-track,
+    .sq-plate.stale .sq-station,
+    .sq-plate.offline .sq-track {{
+        opacity: 0.5;
+    }}
+    .sq-led {{
+        min-width: 9px;
+        min-height: 9px;
+        border-radius: 9999px;
+        background-color: {score};
+        box-shadow: 0 0 6px rgba({score_rgb}, 0.6);
+    }}
+    .sq-plate.offline .sq-led {{
+        background-color: transparent;
+        border: 1px solid {rest};
+        box-shadow: none;
+    }}
+    .sq-track {{
+        font-family: {prop};
+        font-size: 1.1em;
+        font-weight: 700;
+        color: {score};
+    }}
+    .sq-station {{
+        font-family: {mono};
+        font-size: 0.72em;
+        color: {rest};
+    }}
+    .sq-tabs {{
+        border-bottom: 2px solid {root};
+    }}
 
     popover.context-menu > contents {{
         background-color: {stage};
