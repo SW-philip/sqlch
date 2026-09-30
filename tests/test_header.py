@@ -186,3 +186,15 @@ class TestPreviousTracksReserveSpace(unittest.TestCase):
         self.assertEqual(p._prev_rows[1].get_text().strip(), "")
         p.reset_ui()
         self.assertEqual(p._prev_rows[0].get_text().strip(), "")
+
+    def test_empty_history_while_playing_says_playing_now(self):
+        p = self._panel()
+        self.assertEqual(p._prev_rows[0].get_text().strip(), "")  # idle: blank
+        p._cur_station_id = "wxpn"
+        p._update_previous_line()
+        self.assertEqual(p._prev_rows[0].get_text(), "It's playing now")
+        p._history.appendleft(("A", "T"))
+        p._update_previous_line()
+        self.assertEqual(p._prev_rows[0].get_text(), "1. A — T")
+        p.reset_ui()
+        self.assertEqual(p._prev_rows[0].get_text().strip(), "")

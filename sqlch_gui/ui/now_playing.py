@@ -204,8 +204,6 @@ class NowPlayingPanel(Gtk.Box):
         last-known station/track."""
         self.header.set_station("<b>STATION</b>  —")
         self.header.set_track("<i>Not Playing</i>")
-        self._history.clear()
-        self._render_previous()
         self.btn_toggle.set_icon_name("media-playback-start-symbolic")
         self.lbl_live_tag.set_visible(False)
         self._set_pills_placeholder()
@@ -218,6 +216,7 @@ class NowPlayingPanel(Gtk.Box):
         self._cur_title = None
         self._live_station_name = None
         self._history.clear()
+        self._render_previous()
 
     def get_current_id(self) -> str | None:
         return self._cur_station_id
@@ -244,6 +243,8 @@ class NowPlayingPanel(Gtk.Box):
             if i < len(self._history):
                 a, t = self._history[i]
                 row.set_text(f"{i + 1}. {a} — {t}")
+            elif i == 0 and self._cur_station_id is not None:
+                row.set_text("It's playing now")
             else:
                 row.set_text(" ")  # empty text collapses the row; a space keeps its height
 
