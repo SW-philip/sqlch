@@ -1,17 +1,21 @@
 """Now Playing layout, stream management controls, and metadata rendering."""
 
 import html
+import json
 import threading
+import time
 from collections import deque
 from pathlib import Path
 from gi.repository import Gtk, GLib, GdkPixbuf, GObject, Pango
 
-from .. import daemon, metadata
+from .. import XDG_CACHE, daemon, metadata
 from .controls import VolumeMeter, RecordBubble, NavColumn
 from .header import Header
 
 _COVER_SIZE = 220     # keep in sync with .cover-art's min-width/min-height in common.py
 _PREVIOUS_SLOTS = 3  # matches the history deque's maxlen
+_HISTORY_TTL = 16 * 60  # seconds a previous track stays listed (~3 songs with talk)
+_HISTORY_JSON = XDG_CACHE / "sqlch" / "previous-tracks.json"
 _INFO_PANEL_WIDTH = 300  # fixed width for the info panel; wider than _COVER_SIZE so
                          # the Codec/Bitrate/Buffer pills fit on one line without
                          # wrapping -- the album art centers with padding to match.
@@ -169,9 +173,12 @@ class NowPlayingPanel(Gtk.Box):
         self._cur_artist = None
         self._cur_title = None
         self._live_station_name = None
-        self._history: deque[tuple[str, str]] = deque(maxlen=_PREVIOUS_SLOTS)
+        # (artist, title, time it stopped playing), newest first
+        self._history: deque[tuple[str, str, float]] = deque(maxlen=_PREVIOUS_SLOTS)
+        self._hist_station_id = None  # station the history belongs to
         self._loaded = False
         self.reset_ui()
+        self._load_history()
 
     def clear_cover(self):
         self.cover_stack.set_visible_child_name("placeholder")
@@ -216,7 +223,44 @@ class NowPlayingPanel(Gtk.Box):
         self._cur_title = None
         self._live_station_name = None
         self._history.clear()
+        self._hist_station_id = None
         self._render_previous()
+
+    def _load_history(self):
+        """Restore the previous-tracks list saved by an earlier run, so
+        closing and reopening the window doesn't wipe it."""
+        try:
+            data = json.loads(_HISTORY_JSON.read_text())
+            entries = [(a, t, float(ts)) for a, t, ts in data["history"]]
+            cur = data.get("current")
+            saved_at = float(data["saved_at"])
+        except (OSError, ValueError, KeyError, TypeError):
+            return
+        self._hist_station_id = data.get("station")
+        self._history.extend(entries[:_PREVIOUS_SLOTS])
+        # Resume the track that was playing at close, so it is pushed into
+        # history if a new one has started since.
+        if cur and time.time() - saved_at < _HISTORY_TTL:
+            self._cur_artist, self._cur_title = cur
+        self._prune_history()
+        self._render_previous()
+
+    def _save_history(self):
+        try:
+            _HISTORY_JSON.parent.mkdir(parents=True, exist_ok=True)
+            _HISTORY_JSON.write_text(json.dumps({
+                "station": self._hist_station_id,
+                "saved_at": time.time(),
+                "current": [self._cur_artist, self._cur_title] if self._cur_artist and self._cur_title else None,
+                "history": [list(e) for e in self._history],
+            }))
+        except OSError:
+            pass
+
+    def _prune_history(self):
+        cutoff = time.time() - _HISTORY_TTL
+        while self._history and self._history[-1][2] < cutoff:
+            self._history.pop()
 
     def get_current_id(self) -> str | None:
         return self._cur_station_id
@@ -239,9 +283,10 @@ class NowPlayingPanel(Gtk.Box):
         self._render_previous()
 
     def _render_previous(self):
+        self._prune_history()
         for i, row in enumerate(self._prev_rows):
             if i < len(self._history):
-                a, t = self._history[i]
+                a, t, _ = self._history[i]
                 row.set_text(f"{i + 1}. {a} — {t}")
             elif i == 0 and self._cur_station_id is not None:
                 row.set_text("It's playing now")
@@ -266,9 +311,10 @@ class NowPlayingPanel(Gtk.Box):
         station_name = item.get("name") or "Unknown Station"
         frequency = item.get("frequency")
 
-        if station_id != self._cur_station_id:
+        if station_id != self._hist_station_id:
             self._history.clear()
             self._cur_artist, self._cur_title = None, None
+            self._hist_station_id = station_id
 
         self._cur_station_id = station_id
         self._cur_frequency = frequency
@@ -295,9 +341,10 @@ class NowPlayingPanel(Gtk.Box):
                 # Half-filled metadata (title only, e.g. a raw stream id) is
                 # pre-tag junk from the player, not a track worth remembering.
                 if self._cur_artist and self._cur_title:
-                    self._history.appendleft((self._cur_artist, self._cur_title))
+                    self._history.appendleft((self._cur_artist, self._cur_title, time.time()))
                 self._cur_artist = artist
                 self._cur_title = title
+                self._save_history()
                 metadata.run_enrich(artist, title)
                 threading.Thread(target=self._async_fetch_cover, args=(artist, title), daemon=True).start()
 
