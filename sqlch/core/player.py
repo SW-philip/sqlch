@@ -251,13 +251,15 @@ def _spawn_mpv(url: str, *, video: bool = False, preview: bool = False) -> None:
         args.append("--volume=60")
     args.append(url)
 
-    subprocess.Popen(
+    proc = subprocess.Popen(
         args,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
+    # killed via its socket/pid elsewhere; without a wait() the daemon leaves a zombie
+    threading.Thread(target=proc.wait, daemon=True).start()
 
 
 # ------------------------------------------------------------
