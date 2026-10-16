@@ -351,6 +351,28 @@ def _build_css(colors: dict) -> str:
         color: {rest};
         margin: 4px 4px 0 4px;
     }}
+    .dock-handle {{
+        padding: 6px 8px 4px 10px;
+    }}
+    .dock-title {{
+        font-family: {mono};
+        font-size: 0.6em;
+        font-weight: 700;
+        letter-spacing: 0.24em;
+        color: {rest};
+    }}
+    .dock-close {{
+        min-width: 20px;
+        min-height: 20px;
+        padding: 0;
+        color: {rest};
+        background: transparent;
+        border: none;
+        box-shadow: none;
+    }}
+    .dock-close:hover {{
+        color: {score};
+    }}
     .sq-plate {{
         padding: 6px 4px 8px 4px;
     }}

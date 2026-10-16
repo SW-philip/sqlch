@@ -262,6 +262,12 @@ class TestPlayerEdgeBorder(unittest.TestCase):
                          ".sq-track", ".sq-station", ".sq-tabs"):
             self.assertIn(selector + " {", css, f"{selector} missing")
 
+    def test_dock_handle_rules_present(self):
+        from sqlch_gui.ui import common
+        css = common._build_css(dict(palette._DEFAULTS))
+        for sel in (".dock-handle", ".dock-title", ".dock-close"):
+            self.assertIn(sel, css)
+
 
 if __name__ == "__main__":
     unittest.main()
