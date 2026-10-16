@@ -2,8 +2,9 @@
 import unittest
 
 from sqlch_gui.ui.dock import (
-    BREAK_OUT, DOCK_GAP, SNAP_IN, Magnet, Rect, clamp, default_dock,
-    group_left_room, held_at, magnet, pack, screen_edge_rects, snap, touches,
+    BREAK_OUT, DOCK_GAP, SNAP_IN, Magnet, Rect, attached_to, clamp,
+    default_dock, group_left_room, held_at, magnet, pack, screen_edge_rects,
+    snap, touches,
 )
 
 NP = Rect(1000, 48, 290, 500)
@@ -204,6 +205,34 @@ class TestGroupLeftRoom(unittest.TestCase):
     def test_windows_right_of_np_need_no_left_room(self):
         right = Rect(NP.right + DOCK_GAP, NP.y, 320, NP.h)
         self.assertEqual(group_left_room(NP, [right]), 0)
+
+
+class TestAttachedTo(unittest.TestCase):
+    A = Rect(FLUSH_X, NP.y, 320, NP.h)
+    B = Rect(FLUSH_X - DOCK_GAP - 320, NP.y, 320, NP.h)
+
+    def test_chain_is_all_attached(self):
+        self.assertEqual(attached_to(NP, {"a": self.A, "b": self.B}), {"a", "b"})
+
+    def test_moving_the_middle_window_cuts_off_both(self):
+        far = Rect(100, 600, 320, NP.h)
+        self.assertEqual(attached_to(NP, {"a": far, "b": self.B}), set())
+
+    def test_far_outer_window_is_detached(self):
+        far = Rect(0, 900, 320, NP.h)
+        self.assertEqual(attached_to(NP, {"a": self.A, "b": far}), {"a"})
+
+    def test_reaching_np_only_through_a_neighbour_counts(self):
+        below_a = Rect(self.A.x - 100, self.A.bottom + DOCK_GAP, 320, 200)
+        self.assertFalse(touches(below_a, NP))
+        self.assertEqual(attached_to(NP, {"a": self.A, "c": below_a}), {"a", "c"})
+
+    def test_stacked_on_np_counts(self):
+        above = Rect(NP.x, NP.y - DOCK_GAP - 200, 290, 200)
+        self.assertEqual(attached_to(NP, {"above": above}), {"above"})
+
+    def test_no_windows(self):
+        self.assertEqual(attached_to(NP, {}), set())
 
 
 if __name__ == "__main__":

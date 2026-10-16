@@ -232,13 +232,19 @@ class DockManager:
         if np is None:
             return
         snapped = self.clamp(rect, self.windows[name])
-        docked_to = [np] + [self.windows[n].rect for n in self._open_names()
-                            if n != name and self._is_np_group(n)]
-        if any(dock.touches(snapped, o) for o in docked_to):
+        rects = {n: self.windows[n].rect for n in self._open_names()}
+        rects[name] = snapped
+        attached = dock.attached_to(np, rects)
+        if name in attached:
             self.state[name]["placed"] = {
                 "mode": "np", "dx": snapped.x - np.x, "dy": snapped.y - np.y}
         else:
             self.state[name]["placed"] = {"mode": "free", "x": snapped.x, "y": snapped.y}
+        # Windows the drop cut off from NP stay exactly where they are
+        # instead of following NP or re-packing into the gap.
+        for n, r in rects.items():
+            if n != name and n not in attached and self._is_np_group(n):
+                self.state[n]["placed"] = {"mode": "free", "x": r.x, "y": r.y}
         self.windows[name].place(snapped)
         dock_state.save(self.state)
         self.relayout()

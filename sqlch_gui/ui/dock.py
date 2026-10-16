@@ -163,6 +163,20 @@ def screen_edge_rects(area_w: int, area_h: int, margin: int = 12,
     ]
 
 
+def attached_to(np: Rect, rects: dict[str, Rect], gap: int = DOCK_GAP,
+                tol: int = 2) -> set[str]:
+    """Names connected to NP through a chain of touching neighbours."""
+    found: set[str] = set()
+    frontier = [np]
+    while frontier:
+        cur = frontier.pop()
+        for name, r in rects.items():
+            if name not in found and touches(r, cur, gap, tol):
+                found.add(name)
+                frontier.append(r)
+    return found
+
+
 def group_left_room(np: Rect, attached: list[Rect]) -> int:
     """How far left of NP its attached windows reach: NP's x must stay at
     least this, or the leftmost one gets clamped on top of NP."""
