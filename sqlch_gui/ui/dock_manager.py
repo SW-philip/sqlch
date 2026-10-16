@@ -53,8 +53,11 @@ class DockManager:
         top = Gtk4LayerShell.get_margin(self.np, Gtk4LayerShell.Edge.TOP)
         return dock.Rect(size[0] - right - w, top, w, h)
 
-    def clamp(self, rect):
-        size = self.monitor_size()
+    def clamp(self, rect, win=None):
+        size = None
+        if win is not None and win.get_width() > 0 and win.get_height() > 0:
+            size = (win.get_width(), win.get_height())
+        size = size or self.monitor_size()
         return dock.clamp(rect, *size) if size else rect
 
     def _open_names(self):
@@ -71,7 +74,7 @@ class DockManager:
                 r = dock.Rect(np.x + p["dx"], np.y + p["dy"], PANEL_WIDTH, np.h)
             else:
                 r = dock.Rect(p["x"], p["y"], PANEL_WIDTH, np.h)
-            rects[n] = self.clamp(r)
+            rects[n] = self.clamp(r, self.windows[n])
         unplaced = [(n, PANEL_WIDTH) for n in self._open_names()
                     if self.state[n]["placed"] is None]
         rects.update(dock.pack(np, unplaced, list(rects.values())))
@@ -192,7 +195,7 @@ class DockManager:
         if np is None:
             return
         others = [np] + [self.windows[n].rect for n in self._open_names() if n != name]
-        snapped = self.clamp(dock.snap(rect, others))
+        snapped = self.clamp(dock.snap(rect, others), self.windows[name])
         docked_to = [np] + [self.windows[n].rect for n in self._open_names()
                             if n != name and self._is_np_group(n)]
         if any(dock.touches(snapped, o) for o in docked_to):

@@ -249,7 +249,7 @@ class TestPlayerEdgeBorder(unittest.TestCase):
     def test_dock_handle_rules_present(self):
         from sqlch_gui.ui import common
         css = common._build_css(dict(palette._DEFAULTS))
-        for sel in (".dock-handle", ".dock-title", ".dock-close"):
+        for sel in (".dock-handle", ".dock-title", ".dock-close", ".dock-overlay"):
             self.assertIn(sel, css)
 
 

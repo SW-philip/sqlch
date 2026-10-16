@@ -351,6 +351,9 @@ def _build_css(colors: dict) -> str:
         color: {rest};
         margin: 4px 4px 0 4px;
     }}
+    window.dock-overlay, .dock-overlay {{
+        background: transparent;
+    }}
     .dock-handle {{
         padding: 6px 8px 4px 10px;
     }}
