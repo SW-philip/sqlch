@@ -45,6 +45,10 @@ class OverlayCard:
         # False: the card keeps its natural size; place() only moves it.
         self._sized = sized
         self._drag_start = self.rect
+        # drag-update/end can reach us for a press we DENIED, with
+        # _drag_start left over from the last drag; only an accepted drag
+        # may move the card.
+        self._dragging = False
         self._flash_id = 0
         self._name = window.get_title()
 
@@ -58,7 +62,7 @@ class OverlayCard:
             drag.connect("drag-begin", self._drag_begin)
             drag.connect("drag-update", self._drag_update)
             drag.connect("drag-end", self._drag_end)
-            drag.connect("cancel", lambda _g, _seq: trace("%s gesture cancel", self._name))
+            drag.connect("cancel", self._drag_cancel)
             self.fixed.add_controller(drag)
             handle.set_cursor_from_name("grab")
 
@@ -112,17 +116,27 @@ class OverlayCard:
     def _drag_begin(self, gesture, x, y):
         if not self._in_widget(self.handle, x, y):
             trace("%s drag-begin %.1f,%.1f DENIED-not-in-handle", self._name, x, y)
+            self._dragging = False
             gesture.set_state(Gtk.EventSequenceState.DENIED)
             return
         if any(self._in_widget(w, x, y) for w in self._exclude):
             trace("%s drag-begin %.1f,%.1f DENIED-excluded", self._name, x, y)
+            self._dragging = False
             gesture.set_state(Gtk.EventSequenceState.DENIED)
             return
         trace("%s drag-begin %.1f,%.1f CLAIMED", self._name, x, y)
         gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+        self._accept_drag()
+
+    def _accept_drag(self):
         self._drag_start = self.rect
+        self._dragging = True
         if self._on_drag_start:
             self._on_drag_start()
+
+    def _drag_cancel(self, _g, _seq):
+        trace("%s gesture cancel dragging=%s rect %s", self._name, self._dragging, self.rect)
+        self._dragging = False
 
     def _drag_to(self, ox, oy):
         candidate = self._drag_start.moved(round(ox), round(oy))
@@ -130,10 +144,17 @@ class OverlayCard:
         self.place(candidate if shown is None else shown)
 
     def _drag_update(self, _g, ox, oy):
+        if not self._dragging:
+            trace("%s drag-update IGNORED (no accepted drag)", self._name)
+            return
         trace("%s drag-update %.1f,%.1f", self._name, ox, oy)
         self._drag_to(ox, oy)
 
     def _drag_end(self, _g, ox, oy):
+        if not self._dragging:
+            trace("%s drag-end IGNORED (no accepted drag)", self._name)
+            return
+        self._dragging = False
         before = self.rect
         self._drag_to(ox, oy)
         drop = self.rect != self._drag_start and self._on_drop is not None
