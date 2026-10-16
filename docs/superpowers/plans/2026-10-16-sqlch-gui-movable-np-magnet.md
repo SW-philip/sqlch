@@ -22,7 +22,7 @@
 
 ---
 
-### Task A: Magnet logic (pure)
+### Task 1: Magnet logic (pure)
 
 **Files:**
 - Modify: `sqlch_gui/ui/dock.py`
@@ -42,7 +42,7 @@
 
 ---
 
-### Task B: OverlayCard extraction, live magnet in docked windows, grip affordance, flash
+### Task 2: OverlayCard extraction, live magnet in docked windows, grip affordance, flash
 
 **Files:**
 - Create: `sqlch_gui/ui/overlay_card.py`
@@ -64,13 +64,13 @@
 
 ---
 
-### Task C: Movable Now Playing
+### Task 3: Movable Now Playing
 
 **Files:**
 - Modify: `sqlch_gui/ui/window.py`, `sqlch_gui/ui/dock_manager.py`, `sqlch_gui/ui/dock_state.py`, `sqlch_gui/ui/header.py` (grip on the nameplate strip), `tests/test_dock_state.py`
 
 **Interfaces:**
-- Consumes: `OverlayCard` (Task B), `dock.magnet`, `dock.screen_edge_rects`.
+- Consumes: `OverlayCard` (Task 2), `dock.magnet`, `dock.screen_edge_rects`.
 - Produces in `dock_state`: the state dict gains a key `"np"`: `None` (default = top-right: x = area_w − 12 − w, y = 48, computed at runtime) or `{"x": int, "y": int}` (overlay-surface coordinates of the card). `default_state()`, `load()` (sanitize: ints only, else `None`), `save()` handle it; update `tests/test_dock_state.py` (round-trip, corrupt → `None`, non-int → `None`). The `NAMES` tuple stays windows-only.
 - `SqlchPopupWindow` becomes an overlay like the docked windows: anchors on all four edges, exclusive zone 0, no margins (replace the current TOP/RIGHT anchors, `set_margin` calls and `set_default_size(290, -1)`), transparent `dock-overlay` class, its existing `main_box` (with `popup-window`) is the card inside an `OverlayCard`; handle = the Header's nameplate strip (add the grip next to the SQLCH nameplate in `header.py`, keep header tests passing). On map it positions itself from `state["np"]` or the top-right default (clamped to the usable area). Dragging it uses `dock.magnet` against the screen-edge rects (and NOT against docked windows), moves the card live, and **moves all open docked windows with it** (call `manager.relayout()` each update — docked windows use NP-relative offsets so they follow; free windows stay), flashes on a click, and on drop saves `state["np"]` (+ relayout/save).
 - `DockManager.np_rect()` now returns the NP card's rect from the `OverlayCard` (position + its natural/allocated size) instead of deriving it from layer-shell margins; keep the same return type/semantics (`Rect | None`) and keep the bounded retry logic working (NP changes now arrive via `OverlayCard.place`/size changes and the existing surface-size signals).
