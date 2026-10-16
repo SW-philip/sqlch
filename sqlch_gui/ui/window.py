@@ -15,6 +15,7 @@ from .station_list import StationListPanel
 from .discover import DiscoverPanel
 from .dock_manager import DockManager
 from .overlay_card import OverlayCard
+from .trace import trace
 
 
 class _SizeWatch(Gtk.Widget):
@@ -96,6 +97,8 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         )
         self.now_playing.connect("nav-toggled", lambda _p, name: self.docks.toggle(name))
         self.connect("map", lambda _w: GLib.idle_add(self.docks.show_saved))
+        self.connect("notify::is-active",
+                     lambda w, _p: trace("NP is-active %s", w.is_active()))
 
         # Runtime environment loops initialization parameters
         self._keep_running = True

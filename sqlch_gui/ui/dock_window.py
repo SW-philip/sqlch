@@ -8,6 +8,7 @@ from gi.repository import Gtk, Gtk4LayerShell
 
 from .dock import Rect
 from .overlay_card import OverlayCard, grip
+from .trace import trace
 
 PANEL_WIDTH = 320
 FADE_MS = 160
@@ -43,7 +44,7 @@ class DockedWindow(Gtk.Window):
         lbl.add_css_class("dock-title")
         self.close_btn = Gtk.Button(icon_name="window-close-symbolic")
         self.close_btn.add_css_class("dock-close")
-        self.close_btn.connect("clicked", lambda _b: manager.toggle(name))
+        self.close_btn.connect("clicked", self._close_clicked)
         self.handle.append(lbl)
         self.handle.append(grip())
         self.handle.append(self.close_btn)
@@ -62,6 +63,14 @@ class DockedWindow(Gtk.Window):
             on_drag_start=lambda: manager.drag_started(name),
             exclude=(self.close_btn,))
         self.overlay.rect = Rect(0, 0, PANEL_WIDTH, 0)
+        self.connect("map", lambda _w: trace("%s map", name))
+        self.connect("unmap", lambda _w: trace("%s unmap", name))
+        self.connect("notify::is-active",
+                     lambda w, _p: trace("%s is-active %s", name, w.is_active()))
+
+    def _close_clicked(self, _b):
+        trace("%s close clicked", self.name)
+        self.manager.toggle(self.name)
 
     @property
     def rect(self) -> Rect:
@@ -103,12 +112,14 @@ class DockedWindow(Gtk.Window):
         self._fade_id = self.add_tick_callback(tick)
 
     def fade_in(self):
+        trace("%s fade_in visible=%s", self.name, self.get_visible(), caller=True)
         if not self.get_visible():
             self.set_opacity(0.0)
         self.set_visible(True)
         self._fade(1.0)
 
     def fade_out(self, on_done=None):
+        trace("%s fade_out", self.name, caller=True)
         def done():
             self.set_visible(False)
             if on_done:
