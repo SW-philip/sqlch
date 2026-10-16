@@ -38,3 +38,36 @@ class TestDockState(unittest.TestCase):
         self.assertEqual(s["library"], {"open": True, "placed": None})
         self.assertEqual(s["discover"]["placed"], {"mode": "free", "x": 5, "y": 6})
         self.assertNotIn("bogus", s)
+
+
+class TestNowPlayingPosition(unittest.TestCase):
+    def setUp(self):
+        self.path = pathlib.Path(tempfile.mkdtemp()) / "windows.json"
+
+    def _load_raw(self, raw):
+        self.path.write_text(json.dumps(raw))
+        return dock_state.load(self.path)
+
+    def test_default_is_none(self):
+        self.assertIsNone(dock_state.default_state()["np"])
+        self.assertNotIn("np", dock_state.NAMES)
+
+    def test_round_trip(self):
+        s = dock_state.default_state()
+        s["np"] = {"x": 900, "y": 48}
+        dock_state.save(s, self.path)
+        self.assertEqual(dock_state.load(self.path)["np"], {"x": 900, "y": 48})
+
+    def test_missing_or_corrupt_np_is_none(self):
+        self.assertIsNone(self._load_raw({"library": {"open": True}})["np"])
+        self.assertIsNone(self._load_raw({"np": "top-right"})["np"])
+        self.assertIsNone(self._load_raw({"np": {"x": 5}})["np"])
+
+    def test_non_int_coordinates_are_none(self):
+        self.assertIsNone(self._load_raw({"np": {"x": 1.5, "y": 2}})["np"])
+        self.assertIsNone(self._load_raw({"np": {"x": "1", "y": 2}})["np"])
+        self.assertIsNone(self._load_raw({"np": {"x": True, "y": 2}})["np"])
+
+    def test_extra_keys_are_dropped(self):
+        self.assertEqual(self._load_raw({"np": {"x": 1, "y": 2, "z": 3}})["np"],
+                         {"x": 1, "y": 2})

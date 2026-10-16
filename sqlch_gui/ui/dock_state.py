@@ -1,4 +1,6 @@
-"""Persisted open/placement state for the docked Library/Discover windows."""
+"""Persisted open/placement state for the docked Library/Discover windows,
+plus Now Playing's position ("np": None = default top-right, else {"x","y"}
+in overlay coordinates)."""
 
 import json
 from pathlib import Path
@@ -10,7 +12,9 @@ NAMES = ("library", "discover")
 
 
 def default_state() -> dict:
-    return {n: {"open": False, "placed": None} for n in NAMES}
+    state = {n: {"open": False, "placed": None} for n in NAMES}
+    state["np"] = None
+    return state
 
 
 def _int(v) -> bool:
@@ -27,6 +31,12 @@ def _placed(p):
     return None
 
 
+def _np(p):
+    if isinstance(p, dict) and _int(p.get("x")) and _int(p.get("y")):
+        return {"x": p["x"], "y": p["y"]}
+    return None
+
+
 def load(path: Path = STATE_PATH) -> dict:
     state = default_state()
     try:
@@ -40,6 +50,7 @@ def load(path: Path = STATE_PATH) -> dict:
         if isinstance(entry, dict):
             state[name] = {"open": entry.get("open") is True,
                            "placed": _placed(entry.get("placed"))}
+    state["np"] = _np(raw.get("np"))
     return state
 
 
