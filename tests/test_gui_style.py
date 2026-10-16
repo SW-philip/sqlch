@@ -146,22 +146,6 @@ class TestBannerWidgets(unittest.TestCase):
         self.assertTrue(p.has_css_class("country"))
         self.assertEqual(p.label.get_text(), "US")
 
-    def test_torn_separator_draw_does_not_raise(self):
-        import cairo
-        import gi
-        gi.require_version("Gtk", "4.0")
-        from gi.repository import Gtk
-        from sqlch_gui.ui.banner import TornSeparator
-        for orient in (Gtk.Orientation.VERTICAL, Gtk.Orientation.HORIZONTAL):
-            sep = TornSeparator(orient)
-            if orient == Gtk.Orientation.HORIZONTAL:
-                w, h = 200, 18
-            else:
-                w, h = 18, 200
-            surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
-            cr = cairo.Context(surf)
-            sep._on_draw(sep, cr, w, h)
-
 
 class TestControlWidgetsFlat(unittest.TestCase):
     def _ctx(self, w, h):

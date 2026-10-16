@@ -334,7 +334,7 @@ class StationListPanel(Gtk.Box):
             self._probe_all()
 
     def abort_probes(self):
-        """Drop the queued remainder of a sweep (drawer closed). In-flight
+        """Drop the queued remainder of a sweep (window hidden). In-flight
         socket reads finish on their own 4s timeout; only not-yet-started
         probes are skipped, and the sweep stays marked stale so the next
         open re-probes."""

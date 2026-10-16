@@ -73,7 +73,7 @@ class NowPlayingPanel(Gtk.Box):
         # --- Row 3: info panel (Previous tracks) plus stream diagnostic pills ---
         # Wrapped in a non-propagating ScrolledWindow pinned to the cover
         # art's own measured width (same clip-content-not-window idiom the
-        # drawer/tracklist panels already use elsewhere in this codebase),
+        # tracklist panels already use elsewhere in this codebase),
         # so this row's width can never drive the window wider or narrower
         # as station/track text or pill visibility changes -- only the
         # fixed-size album art governs the card's width.
