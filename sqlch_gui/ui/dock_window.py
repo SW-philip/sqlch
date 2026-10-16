@@ -21,6 +21,7 @@ class DockedWindow(Gtk.Window):
         self._fade_id = None
         self._drag_off = (0.0, 0.0)
         self._drag_tick = None
+        self._drag_start = self.rect
 
         self.set_title(f"sqlch-gui {name}")
         self.set_decorated(False)
@@ -90,7 +91,8 @@ class DockedWindow(Gtk.Window):
         self._fade_id = self.add_tick_callback(tick)
 
     def fade_in(self):
-        self.set_opacity(0.0)
+        if not self.get_visible():
+            self.set_opacity(0.0)
         self.set_visible(True)
         self._fade(1.0)
 
@@ -109,20 +111,27 @@ class DockedWindow(Gtk.Window):
 
     def _drag_begin(self, _g, _x, _y):
         self._drag_off = (0.0, 0.0)
+        self._drag_start = self.rect
         self._drag_tick = self.add_tick_callback(self._drag_frame)
 
     def _drag_update(self, _g, ox, oy):
         self._drag_off = (ox, oy)
 
-    def _drag_frame(self, _w, _clock):
+    def _apply_drag_offset(self):
         ox, oy = self._drag_off
         if ox or oy:
             self._drag_off = (0.0, 0.0)
             self.place(self.manager.clamp(self.rect.moved(round(ox), round(oy))))
+
+    def _drag_frame(self, _w, _clock):
+        self._apply_drag_offset()
         return True
 
     def _drag_end(self, _g, _ox, _oy):
         if self._drag_tick:
             self.remove_tick_callback(self._drag_tick)
             self._drag_tick = None
+        self._apply_drag_offset()
+        if self.rect == self._drag_start:
+            return
         self.manager.commit_drag(self.name, self.rect)

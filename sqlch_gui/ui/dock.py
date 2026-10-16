@@ -96,3 +96,23 @@ def default_dock(np_rect: Rect, items: list[tuple[str, int]],
         edge = edge - gap - w
         out[name] = Rect(edge, np_rect.y, w, np_rect.h)
     return out
+
+
+def pack(np_rect: Rect, items: list[tuple[str, int]], placed: list[Rect],
+         gap: int = DOCK_GAP) -> dict[str, Rect]:
+    """Like default_dock, but a slot that would collide with an already
+    positioned window is skipped by moving the edge left past it. Slots
+    flush with a neighbour (overlapping by -gap) don't count as a collision."""
+    out: dict[str, Rect] = {}
+    edge = np_rect.x
+    for name, w in items:
+        while True:
+            cand = Rect(edge - gap - w, np_rect.y, w, np_rect.h)
+            hit = next((p for p in placed
+                        if _v_overlap(cand, p) and _h_overlap(cand, p, gap)), None)
+            if hit is None:
+                break
+            edge = hit.x
+        out[name] = cand
+        edge = cand.x
+    return out

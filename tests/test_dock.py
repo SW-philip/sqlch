@@ -2,7 +2,7 @@
 import unittest
 
 from sqlch_gui.ui.dock import (
-    DOCK_GAP, Rect, clamp, default_dock, snap, touches,
+    DOCK_GAP, Rect, clamp, default_dock, pack, snap, touches,
 )
 
 NP = Rect(1000, 48, 290, 500)
