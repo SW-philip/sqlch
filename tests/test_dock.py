@@ -2,7 +2,8 @@
 import unittest
 
 from sqlch_gui.ui.dock import (
-    DOCK_GAP, Rect, clamp, default_dock, pack, snap, touches,
+    BREAK_OUT, DOCK_GAP, SNAP_IN, Magnet, Rect, clamp, default_dock, magnet,
+    pack, screen_edge_rects, snap, touches,
 )
 
 NP = Rect(1000, 48, 290, 500)
@@ -94,6 +95,67 @@ class TestPack(unittest.TestCase):
         d = pack(NP, [("library", 320), ("discover", 320)], [self._slot(1)])
         self.assertEqual(d["library"], self._slot(2))
         self.assertEqual(d["discover"], self._slot(3))
+
+
+class TestMagnet(unittest.TestCase):
+    Y = 148  # no y candidate within SNAP_IN of NP (top 48)
+
+    def _card(self, x, y=None):
+        return Rect(x, self.Y if y is None else y, 320, 500)
+
+    def test_a_far_stays_free(self):
+        raw = self._card(FLUSH_X - 30)
+        self.assertEqual(magnet(raw, [NP], Magnet(None, None)),
+                         (raw, Magnet(None, None), False))
+
+    def test_b_snaps_flush_with_click(self):
+        r, held, clicked = magnet(self._card(FLUSH_X - 20), [NP], Magnet(None, None))
+        self.assertEqual(r, self._card(FLUSH_X))
+        self.assertEqual(held, Magnet(FLUSH_X, None))
+        self.assertTrue(clicked)
+
+    def test_c_held_stays_without_click(self):
+        r, held, clicked = magnet(self._card(FLUSH_X - 30), [NP], Magnet(FLUSH_X, None))
+        self.assertEqual(r, self._card(FLUSH_X))
+        self.assertEqual(held, Magnet(FLUSH_X, None))
+        self.assertFalse(clicked)
+
+    def test_d_breaks_away_past_threshold(self):
+        raw = self._card(FLUSH_X - BREAK_OUT - 1)
+        self.assertEqual(magnet(raw, [NP], Magnet(FLUSH_X, None)),
+                         (raw, Magnet(None, None), False))
+
+    def test_e_reapproach_clicks_again(self):
+        _, held, _ = magnet(self._card(FLUSH_X - 60), [NP], Magnet(FLUSH_X, None))
+        self.assertEqual(held, Magnet(None, None))
+        r, held, clicked = magnet(self._card(FLUSH_X - SNAP_IN), [NP], held)
+        self.assertEqual(r, self._card(FLUSH_X))
+        self.assertTrue(clicked)
+
+    def test_f_axes_independent(self):
+        # x held flush, y free: y follows raw
+        r, held, clicked = magnet(self._card(FLUSH_X - 10, 300), [NP], Magnet(FLUSH_X, None))
+        self.assertEqual(r, self._card(FLUSH_X, 300))
+        self.assertEqual(held, Magnet(FLUSH_X, None))
+        self.assertFalse(clicked)
+        # y then snaps to NP top while x stays held; only the y entry clicks
+        r, held, clicked = magnet(self._card(FLUSH_X - 10, 60), [NP], held)
+        self.assertEqual(r, self._card(FLUSH_X, 48))
+        self.assertEqual(held, Magnet(FLUSH_X, 48))
+        self.assertTrue(clicked)
+
+    def test_g_screen_edges_leave_margin(self):
+        edges = screen_edge_rects(1920, 1080)
+        cases = [
+            (Rect(5, 300, 290, 500), Rect(12, 300, 290, 500)),
+            (Rect(1920 - 290 - 5, 300, 290, 500), Rect(1920 - 290 - 12, 300, 290, 500)),
+            (Rect(700, 4, 290, 500), Rect(700, 12, 290, 500)),
+            (Rect(700, 1080 - 500 - 4, 290, 500), Rect(700, 1080 - 500 - 12, 290, 500)),
+        ]
+        for raw, want in cases:
+            r, _, clicked = magnet(raw, edges, Magnet(None, None))
+            self.assertEqual(r, want)
+            self.assertTrue(clicked)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,8 @@ from typing import NamedTuple
 # adjacent cards; overlapping the surfaces by 8px leaves a ~4px visual gap.
 DOCK_GAP = -8
 SNAP_DIST = 20
+SNAP_IN = 24     # magnet pulls a dragged card in from this far
+BREAK_OUT = 40   # and releases it only past this, so a held snap doesn't flutter
 
 
 class Rect(NamedTuple):
@@ -55,12 +57,7 @@ def _pick(best, d, dist):
     return best
 
 
-def snap(rect: Rect, others: list[Rect], dist: int = SNAP_DIST,
-         gap: int = DOCK_GAP) -> Rect:
-    """Snap each axis independently to the nearest candidate edge within
-    `dist`. X first; top/bottom alignment only counts against windows that
-    are side-adjacent after the X move, so a window can't align to something
-    it isn't next to."""
+def _dx(rect: Rect, others: list[Rect], dist: int, gap: int):
     dx = None
     for o in others:
         if _v_overlap(rect, o, dist):
@@ -69,8 +66,10 @@ def snap(rect: Rect, others: list[Rect], dist: int = SNAP_DIST,
         if _h_overlap(rect, o, dist):
             dx = _pick(dx, o.x - rect.x, dist)
             dx = _pick(dx, o.right - rect.right, dist)
-    rect = rect.moved(dx or 0, 0)
+    return dx
 
+
+def _dy(rect: Rect, others: list[Rect], dist: int, gap: int):
     dy = None
     for o in others:
         if _h_overlap(rect, o, dist):
@@ -79,7 +78,71 @@ def snap(rect: Rect, others: list[Rect], dist: int = SNAP_DIST,
         if _side_adjacent(rect, o, gap, dist):
             dy = _pick(dy, o.y - rect.y, dist)
             dy = _pick(dy, o.bottom - rect.bottom, dist)
-    return rect.moved(0, dy or 0)
+    return dy
+
+
+def snap(rect: Rect, others: list[Rect], dist: int = SNAP_DIST,
+         gap: int = DOCK_GAP) -> Rect:
+    """Snap each axis independently to the nearest candidate edge within
+    `dist`. X first; top/bottom alignment only counts against windows that
+    are side-adjacent after the X move, so a window can't align to something
+    it isn't next to."""
+    rect = rect.moved(_dx(rect, others, dist, gap) or 0, 0)
+    return rect.moved(0, _dy(rect, others, dist, gap) or 0)
+
+
+class Magnet(NamedTuple):
+    """Held snapped coordinate per axis; None = free on that axis."""
+    x: int | None
+    y: int | None
+
+
+def magnet(raw: Rect, others: list[Rect], held: Magnet,
+           snap_in: int = SNAP_IN, break_out: int = BREAK_OUT,
+           gap: int = DOCK_GAP) -> tuple[Rect, Magnet, bool]:
+    """Live drag snap with hysteresis. Returns (rect to show, new held state,
+    clicked). An axis already held stays put until raw is more than
+    `break_out` away; otherwise it snaps to the nearest candidate within
+    `snap_in`. `clicked` is True when an axis enters or changes snapped
+    coordinate. The wider break-out keeps a snapped card from jittering."""
+    clicked = False
+    hx = held.x
+    if hx is not None and abs(raw.x - hx) <= break_out:
+        x = hx
+    else:
+        dx = _dx(raw, others, snap_in, gap)
+        x = raw.x if dx is None else raw.x + dx
+        hx = None if dx is None else x
+        clicked = hx is not None and hx != held.x
+    rect = Rect(x, raw.y, raw.w, raw.h)
+
+    hy = held.y
+    if hy is not None and abs(raw.y - hy) <= break_out:
+        y = hy
+    else:
+        dy = _dy(rect, others, snap_in, gap)
+        y = raw.y if dy is None else raw.y + dy
+        hy = None if dy is None else y
+        clicked = clicked or (hy is not None and hy != held.y)
+    return Rect(x, y, raw.w, raw.h), Magnet(hx, hy), clicked
+
+
+def screen_edge_rects(area_w: int, area_h: int, margin: int = 12,
+                      gap: int = DOCK_GAP) -> list[Rect]:
+    """Usable-area edges as ordinary Rects, so magnet needs no edge pass.
+    Each is a slab lying outside the area whose inner face sits at
+    margin - gap, so the flush rule (a.x = b.right + gap, etc.) leaves
+    exactly `margin` px of clearance. Slabs span only margin..area-margin
+    along their edge so alignment candidates also keep the margin, and are
+    thick so their far faces never become alignment candidates."""
+    pad = 4096
+    inner = margin - gap
+    return [
+        Rect(inner - pad, margin, pad, area_h - 2 * margin),            # left
+        Rect(area_w - inner, margin, pad, area_h - 2 * margin),         # right
+        Rect(margin, inner - pad, area_w - 2 * margin, pad),            # top
+        Rect(margin, area_h - inner, area_w - 2 * margin, pad),         # bottom
+    ]
 
 
 def clamp(rect: Rect, mon_w: int, mon_h: int) -> Rect:
