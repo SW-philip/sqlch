@@ -1,18 +1,13 @@
-"""One docked Library/Discover window.
+"""One docked Library/Discover window: a transparent output-sized overlay
+holding an OverlayCard (see overlay_card.py for why the surface never moves)."""
 
-The layer-shell surface is a transparent output-sized overlay that never
-moves; the card is placed inside it with Gtk.Fixed and only the card's rect
-is input-sensitive. Dragging a surface by changing its margins feeds back
-into the gesture's own coordinates and runs away under compositor lag, so
-the drag gesture lives on the stationary Fixed and its offsets are absolute."""
-
-import cairo
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Gtk4LayerShell', '1.0')
-from gi.repository import Gdk, Gtk, Gtk4LayerShell
+from gi.repository import Gtk, Gtk4LayerShell
 
 from .dock import Rect
+from .overlay_card import OverlayCard, grip
 
 PANEL_WIDTH = 320
 FADE_MS = 160
@@ -23,9 +18,7 @@ class DockedWindow(Gtk.Window):
         super().__init__()
         self.manager = manager
         self.name = name
-        self.rect = Rect(0, 0, PANEL_WIDTH, 0)
         self._fade_id = None
-        self._drag_start = self.rect
 
         self.set_title(f"sqlch-gui {name}")
         self.set_decorated(False)
@@ -41,12 +34,8 @@ class DockedWindow(Gtk.Window):
         Gtk4LayerShell.set_exclusive_zone(self, 0)
         Gtk4LayerShell.set_keyboard_mode(self, Gtk4LayerShell.KeyboardMode.ON_DEMAND)
 
-        self.fixed = Gtk.Fixed()
-        self.set_child(self.fixed)
-
         self.card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.card.add_css_class("popup-window")
-        self.fixed.put(self.card, 0, 0)
 
         self.handle = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.handle.add_css_class("dock-handle")
@@ -56,6 +45,7 @@ class DockedWindow(Gtk.Window):
         self.close_btn.add_css_class("dock-close")
         self.close_btn.connect("clicked", lambda _b: manager.toggle(name))
         self.handle.append(lbl)
+        self.handle.append(grip())
         self.handle.append(self.close_btn)
         self.card.append(self.handle)
 
@@ -65,35 +55,23 @@ class DockedWindow(Gtk.Window):
         scroll.set_child(panel)
         self.card.append(scroll)
 
-        drag = Gtk.GestureDrag.new()
-        drag.set_button(Gdk.BUTTON_PRIMARY)
-        drag.connect("drag-begin", self._drag_begin)
-        drag.connect("drag-update", self._drag_update)
-        drag.connect("drag-end", self._drag_end)
-        self.fixed.add_controller(drag)
-        self.handle.set_cursor_from_name("grab")
+        self.overlay = OverlayCard(
+            self, self.card, self.handle,
+            on_drag=lambda r: manager.magnet_for(name, r),
+            on_drop=lambda r: manager.commit_drag(name, r),
+            on_drag_start=lambda: manager.drag_started(name),
+            exclude=(self.close_btn,))
+        self.overlay.rect = Rect(0, 0, PANEL_WIDTH, 0)
 
-        self.connect("map", lambda _w: self._apply_input_region())
-
-    # --- placement ---
+    @property
+    def rect(self) -> Rect:
+        return self.overlay.rect
 
     def place(self, rect: Rect):
-        self.rect = rect
-        self.fixed.move(self.card, rect.x, rect.y)
-        self.card.set_size_request(rect.w, rect.h)
-        self._apply_input_region()
+        self.overlay.place(rect)
 
-    def _apply_input_region(self):
-        surface = self.get_surface()
-        if surface is None:
-            return
-        r = self.rect
-        # An unplaced overlay must stay click-through, never full-output.
-        if r.w <= 0 or r.h <= 0:
-            surface.set_input_region(cairo.Region())
-        else:
-            surface.set_input_region(
-                cairo.Region(cairo.RectangleInt(r.x, r.y, r.w, r.h)))
+    def flash(self):
+        self.overlay.flash()
 
     # --- fade (sequential: a window is fully out before another fades in) ---
 
@@ -136,30 +114,3 @@ class DockedWindow(Gtk.Window):
             if on_done:
                 on_done()
         self._fade(0.0, done)
-
-    # --- drag ---
-
-    def _in_widget(self, widget, x, y):
-        ok, b = widget.compute_bounds(self.fixed)
-        return ok and b.get_x() <= x <= b.get_x() + b.get_width() \
-            and b.get_y() <= y <= b.get_y() + b.get_height()
-
-    def _drag_begin(self, gesture, x, y):
-        if not self._in_widget(self.handle, x, y) or self._in_widget(self.close_btn, x, y):
-            gesture.set_state(Gtk.EventSequenceState.DENIED)
-            return
-        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
-        self._drag_start = self.rect
-
-    def _drag_to(self, ox, oy):
-        self.place(self.manager.clamp(
-            self._drag_start.moved(round(ox), round(oy)), self))
-
-    def _drag_update(self, _g, ox, oy):
-        self._drag_to(ox, oy)
-
-    def _drag_end(self, _g, ox, oy):
-        self._drag_to(ox, oy)
-        if self.rect == self._drag_start:
-            return
-        self.manager.commit_drag(self.name, self.rect)

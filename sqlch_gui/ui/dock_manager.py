@@ -1,5 +1,5 @@
 """Owns the docked windows: layout from persisted state + Now Playing's
-rect, toggle with sequential fades, and snap-on-release."""
+rect, toggle with sequential fades, and the live magnet while dragging."""
 
 import gi
 gi.require_version('Gtk', '4.0')
@@ -27,6 +27,7 @@ class DockManager:
         self._saved_done = False
         self._surface_hooked = False
         self._retry_left = 0
+        self._held = {}
         np_win.connect("map", self._on_np_map)
         for n in dock_state.NAMES:
             nav.set_open(n, self.state[n]["open"])
@@ -188,14 +189,29 @@ class DockManager:
         for n in self._open_names():
             self._fade_in(n)
 
-    # --- drag release ---
+    # --- drag ---
+
+    def drag_started(self, name):
+        self._held[name] = dock.Magnet(None, None)
+
+    def magnet_for(self, name, candidate):
+        """Live-snapped, clamped rect for a window being dragged; flashes the
+        window when an axis newly clicks into place."""
+        np = self.np_rect()
+        others = ([np] if np is not None else []) + [
+            self.windows[n].rect for n in self._open_names() if n != name]
+        rect, self._held[name], clicked = dock.magnet(
+            candidate, others, self._held.get(name, dock.Magnet(None, None)))
+        if clicked:
+            self.windows[name].flash()
+        return self.clamp(rect, self.windows[name])
 
     def commit_drag(self, name, rect):
+        self._held.pop(name, None)
         np = self.np_rect()
         if np is None:
             return
-        others = [np] + [self.windows[n].rect for n in self._open_names() if n != name]
-        snapped = self.clamp(dock.snap(rect, others), self.windows[name])
+        snapped = self.clamp(rect, self.windows[name])
         docked_to = [np] + [self.windows[n].rect for n in self._open_names()
                             if n != name and self._is_np_group(n)]
         if any(dock.touches(snapped, o) for o in docked_to):

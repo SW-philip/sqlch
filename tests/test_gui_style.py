@@ -252,6 +252,17 @@ class TestPlayerEdgeBorder(unittest.TestCase):
         for sel in (".dock-handle", ".dock-title", ".dock-close", ".dock-overlay"):
             self.assertIn(sel, css)
 
+    def test_dock_grip_and_flash_rules_present(self):
+        from sqlch_gui.ui import common
+        css = common._build_css(dict(palette._DEFAULTS))
+        for sel in (".dock-grip {", ".dock-handle:hover .dock-grip {",
+                    ".popup-window.dock-flash {"):
+            self.assertIn(sel, css)
+        grip = css.split(".dock-grip {")[1].split("}")[0]
+        self.assertIn("opacity", grip)
+        flash = css.split(".popup-window.dock-flash {")[1].split("}")[0]
+        self.assertIn("box-shadow", flash)
+
 
 if __name__ == "__main__":
     unittest.main()
