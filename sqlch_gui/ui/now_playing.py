@@ -23,7 +23,7 @@ _INFO_PANEL_WIDTH = 300  # fixed width for the info panel; wider than _COVER_SIZ
 
 class NowPlayingPanel(Gtk.Box):
     __gsignals__ = {
-        'nav-selected': (GObject.SignalFlags.RUN_LAST, None, (str,)),
+        'nav-toggled': (GObject.SignalFlags.RUN_LAST, None, (str,)),
     }
 
     def __init__(self, parent_window):
@@ -40,7 +40,7 @@ class NowPlayingPanel(Gtk.Box):
 
         # --- Row 1: header (nameplate, live plate, folder tabs) ---
         self.nav_column = NavColumn()
-        self.nav_column.connect("nav-selected", lambda nav, name: self.emit("nav-selected", name))
+        self.nav_column.connect("nav-toggled", lambda nav, name: self.emit("nav-toggled", name))
         self.header = Header(self.nav_column, _INFO_PANEL_WIDTH)
         card.append(self.header)
 

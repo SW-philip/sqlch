@@ -269,20 +269,17 @@ class RecordBubble(Gtk.DrawingArea):
 
 
 class NavColumn(Gtk.Box):
-    """Folder-tab row: NOW (collapse, Now Playing), LIBRARY, DISCOVER.
-
-    Not three independent toggle buttons -- clicking Library or Discover
-    opens that section (auto-collapsing whichever was open), re-clicking
-    the already-open one is a no-op, and only NOW collapses back down to
-    nothing selected. Hosted by Header, which styles the row as `.sq-tabs`.
-    """
+    """Folder-tab row: LIBRARY and DISCOVER toggle their docked windows
+    independently. A click only emits `nav-toggled`; the DockManager decides
+    what to open or close and syncs the highlight back with `set_open`, so
+    the tab can never disagree with the window. Hosted by Header, which
+    styles the row as `.sq-tabs`."""
 
     __gsignals__ = {
-        'nav-selected': (GObject.SignalFlags.RUN_LAST, None, (str,)),
+        'nav-toggled': (GObject.SignalFlags.RUN_LAST, None, (str,)),
     }
 
     _TABS = (
-        ("mini", "NOW", "Now Playing"),
         ("library", "LIBRARY", "Station Library"),
         ("discover", "DISCOVER", "Discover Stations"),
     )
@@ -290,28 +287,17 @@ class NavColumn(Gtk.Box):
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=4,
                          homogeneous=True)
-        self.active = "mini"
         self._buttons = {}
         for name, label, tip in self._TABS:
             button = Gtk.Button(label=label)
             button.add_css_class("sq-tab")
             button.set_tooltip_text(tip)
-            button.connect("clicked", lambda _b, n=name: self._select(n))
+            button.connect("clicked", lambda _b, n=name: self.emit("nav-toggled", n))
             self.append(button)
             self._buttons[name] = button
-        self._buttons["mini"].add_css_class("active")
 
-    def set_active(self, name: str):
-        """Sync the highlight to drawer state driven from outside (seam
-        drags) without re-emitting nav-selected."""
-        if name == self.active:
-            return
-        self._buttons[self.active].remove_css_class("active")
-        self.active = name
-        self._buttons[name].add_css_class("active")
-
-    def _select(self, name: str):
-        if name == self.active:
-            return  # re-clicking the already-open one (or idle NOW) is a no-op
-        self.set_active(name)
-        self.emit("nav-selected", name)
+    def set_open(self, name: str, is_open: bool):
+        if is_open:
+            self._buttons[name].add_css_class("active")
+        else:
+            self._buttons[name].remove_css_class("active")
