@@ -8,7 +8,6 @@ from gi.repository import Gtk4LayerShell
 
 from . import dock, dock_state
 from .dock_window import DockedWindow, PANEL_WIDTH
-from .trace import trace
 
 _TITLES = {"library": "LIBRARY", "discover": "DISCOVER"}
 NP_EDGE = 12   # default right clearance, and the screen-edge magnet margin
@@ -97,14 +96,11 @@ class DockManager:
         return rects
 
     def relayout(self):
-        trace("relayout", caller=True)
         np = self.np_rect()
         if np is None:
-            trace("relayout: np_rect None")
             return
         self._last_np = np
         for n, r in self._slot_rects(np).items():
-            trace("relayout place %s %s (np %s)", n, r, np)
             self.windows[n].place(r)
 
     def _on_np_map(self, _w):
@@ -131,8 +127,6 @@ class DockManager:
         if not self._hook_surface():
             return False
         np = self.np_rect()
-        trace("_service np %s last %s pending_show %s changed %s",
-              np, self._last_np, self._pending_show, np != self._last_np)
         if np is None:
             return False
         if self._pending_show:
@@ -147,11 +141,9 @@ class DockManager:
         return True
 
     def np_changed(self):
-        trace("np_changed (card resized)")
         self._on_np_changed()
 
     def _on_np_changed(self, *_args):
-        trace("_on_np_changed args %s", _args, caller=True)
         # Surface signals can fire before the widget allocation updates, so
         # an unchanged or missing rect gets a short bounded retry.
         if not self._service() or self._pending_show:
@@ -177,7 +169,6 @@ class DockManager:
     # --- toggle ---
 
     def toggle(self, name):
-        trace("toggle %s open=%s", name, self.state[name]["open"], caller=True)
         opening = not self.state[name]["open"]
         self.state[name]["open"] = opening
         self.nav.set_open(name, opening)
@@ -225,7 +216,6 @@ class DockManager:
 
     def drag_started(self, name):
         self._held[name] = dock.held_at(self.windows[name].rect, self._others(name))
-        trace("drag_started %s rect %s held %s", name, self.windows[name].rect, self._held[name])
 
     def magnet_for(self, name, candidate):
         """Live-snapped, clamped rect for a window being dragged; flashes the
@@ -233,7 +223,6 @@ class DockManager:
         rect, self._held[name], clicked = dock.magnet(
             candidate, self._others(name), self._held.get(name, dock.Magnet(None, None)))
         if clicked:
-            trace("magnet_for %s clicked -> %s held %s", name, rect, self._held[name])
             self.windows[name].flash()
         return self.clamp(rect, self.windows[name])
 
@@ -250,8 +239,6 @@ class DockManager:
                 "mode": "np", "dx": snapped.x - np.x, "dy": snapped.y - np.y}
         else:
             self.state[name]["placed"] = {"mode": "free", "x": snapped.x, "y": snapped.y}
-        trace("commit_drag %s rect %s snapped %s -> %s", name, rect, snapped,
-              self.state[name]["placed"])
         self.windows[name].place(snapped)
         dock_state.save(self.state)
         self.relayout()
@@ -267,8 +254,6 @@ class DockManager:
         area = self.np.area_size()
         self._np_held = (dock.held_at(self._np_start, dock.screen_edge_rects(*area, NP_EDGE))
                          if area else dock.Magnet(None, None))
-        trace("np_drag_started start %s state %s room %s held %s",
-              self._np_start, self._np_before, self._np_room, self._np_held)
 
     def np_drag(self, candidate):
         """Live NP position; docked windows follow because relayout places
@@ -286,13 +271,10 @@ class DockManager:
         # Back at the start (e.g. a plain click) keeps a default None position.
         self.state["np"] = (self._np_before if rect == self._np_start
                             else {"x": rect.x, "y": rect.y})
-        trace("np_drag candidate %s -> %s clicked %s state %s",
-              candidate, rect, clicked, self.state["np"])
         self.relayout()
         return rect
 
     def np_drop(self, _rect):
-        trace("np_drop %s state %s", _rect, self.state["np"])
         self._np_held = dock.Magnet(None, None)
         dock_state.save(self.state)
         self.relayout()

@@ -14,7 +14,6 @@ gi.require_version('Gtk', '4.0')
 from gi.repository import Gdk, GLib, Gtk
 
 from .dock import Rect
-from .trace import trace
 
 FLASH_MS = 180
 
@@ -50,7 +49,6 @@ class OverlayCard:
         # may move the card.
         self._dragging = False
         self._flash_id = 0
-        self._name = window.get_title()
 
         self.fixed = Gtk.Fixed()
         window.set_child(self.fixed)
@@ -71,7 +69,6 @@ class OverlayCard:
     # --- placement ---
 
     def place(self, rect: Rect):
-        trace("%s place %s -> %s", self._name, self.rect, rect, caller=2)
         self.rect = rect
         self.fixed.move(self.card, rect.x, rect.y)
         if self._sized:
@@ -85,17 +82,14 @@ class OverlayCard:
         r = self.rect
         # An unplaced overlay must stay click-through, never full-output.
         if r.w <= 0 or r.h <= 0:
-            trace("%s input region EMPTY", self._name)
             surface.set_input_region(cairo.Region())
         else:
-            trace("%s input region %s", self._name, r)
             surface.set_input_region(
                 cairo.Region(cairo.RectangleInt(r.x, r.y, r.w, r.h)))
 
     # --- flash ---
 
     def flash(self):
-        trace("%s flash", self._name)
         if self._flash_id:
             GLib.source_remove(self._flash_id)
         self.card.add_css_class("dock-flash")
@@ -114,17 +108,11 @@ class OverlayCard:
             and b.get_y() <= y <= b.get_y() + b.get_height()
 
     def _drag_begin(self, gesture, x, y):
-        if not self._in_widget(self.handle, x, y):
-            trace("%s drag-begin %.1f,%.1f DENIED-not-in-handle", self._name, x, y)
+        if not self._in_widget(self.handle, x, y) \
+                or any(self._in_widget(w, x, y) for w in self._exclude):
             self._dragging = False
             gesture.set_state(Gtk.EventSequenceState.DENIED)
             return
-        if any(self._in_widget(w, x, y) for w in self._exclude):
-            trace("%s drag-begin %.1f,%.1f DENIED-excluded", self._name, x, y)
-            self._dragging = False
-            gesture.set_state(Gtk.EventSequenceState.DENIED)
-            return
-        trace("%s drag-begin %.1f,%.1f CLAIMED", self._name, x, y)
         gesture.set_state(Gtk.EventSequenceState.CLAIMED)
         self._accept_drag()
 
@@ -135,7 +123,6 @@ class OverlayCard:
             self._on_drag_start()
 
     def _drag_cancel(self, _g, _seq):
-        trace("%s gesture cancel dragging=%s rect %s", self._name, self._dragging, self.rect)
         self._dragging = False
 
     def _drag_to(self, ox, oy):
@@ -145,21 +132,14 @@ class OverlayCard:
 
     def _drag_update(self, _g, ox, oy):
         if not self._dragging:
-            trace("%s drag-update IGNORED (no accepted drag)", self._name)
             return
-        trace("%s drag-update %.1f,%.1f", self._name, ox, oy)
         self._drag_to(ox, oy)
 
     def _drag_end(self, _g, ox, oy):
         if not self._dragging:
-            trace("%s drag-end IGNORED (no accepted drag)", self._name)
             return
         self._dragging = False
-        before = self.rect
         self._drag_to(ox, oy)
-        drop = self.rect != self._drag_start and self._on_drop is not None
-        trace("%s drag-end %.1f,%.1f rect %s -> %s drag_start %s on_drop=%s",
-              self._name, ox, oy, before, self.rect, self._drag_start, drop)
         if self.rect == self._drag_start:
             return
         if self._on_drop:
