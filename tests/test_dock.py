@@ -2,8 +2,8 @@
 import unittest
 
 from sqlch_gui.ui.dock import (
-    BREAK_OUT, DOCK_GAP, SNAP_IN, Magnet, Rect, clamp, default_dock, held_at, magnet,
-    pack, screen_edge_rects, snap, touches,
+    BREAK_OUT, DOCK_GAP, SNAP_IN, Magnet, Rect, clamp, default_dock,
+    group_left_room, held_at, magnet, pack, screen_edge_rects, snap, touches,
 )
 
 NP = Rect(1000, 48, 290, 500)
@@ -158,10 +158,6 @@ class TestMagnet(unittest.TestCase):
             self.assertTrue(clicked)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestHeldAt(unittest.TestCase):
     def test_free_window_holds_nothing(self):
         self.assertEqual(held_at(Rect(100, 300, 320, 500), [NP]), Magnet(None, None))
@@ -189,3 +185,26 @@ class TestHeldAt(unittest.TestCase):
     def test_default_np_is_held_against_right_screen_edge(self):
         np = Rect(1920 - 12 - 290, 48, 290, 500)
         self.assertEqual(held_at(np, screen_edge_rects(1920, 1080)), Magnet(np.x, None))
+
+
+class TestGroupLeftRoom(unittest.TestCase):
+    def test_no_attached_windows_needs_no_room(self):
+        self.assertEqual(group_left_room(NP, []), 0)
+
+    def test_one_window_flush_left_needs_its_width_plus_gap(self):
+        lib = Rect(FLUSH_X, NP.y, 320, NP.h)
+        self.assertEqual(group_left_room(NP, [lib]), 320 + DOCK_GAP)
+
+    def test_chain_uses_the_leftmost_window(self):
+        lib = Rect(FLUSH_X, NP.y, 320, NP.h)
+        disc = Rect(lib.x + DOCK_GAP - 320, NP.y, 320, NP.h)
+        below = Rect(NP.x, NP.bottom + DOCK_GAP, 320, 200)
+        self.assertEqual(group_left_room(NP, [below, disc, lib]), NP.x - disc.x)
+
+    def test_windows_right_of_np_need_no_left_room(self):
+        right = Rect(NP.right + DOCK_GAP, NP.y, 320, NP.h)
+        self.assertEqual(group_left_room(NP, [right]), 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

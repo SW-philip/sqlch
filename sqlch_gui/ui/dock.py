@@ -163,6 +163,12 @@ def screen_edge_rects(area_w: int, area_h: int, margin: int = 12,
     ]
 
 
+def group_left_room(np: Rect, attached: list[Rect]) -> int:
+    """How far left of NP its attached windows reach: NP's x must stay at
+    least this, or the leftmost one gets clamped on top of NP."""
+    return max([0] + [np.x - r.x for r in attached])
+
+
 def clamp(rect: Rect, mon_w: int, mon_h: int) -> Rect:
     x = max(0, min(rect.x, mon_w - rect.w))
     y = max(0, min(rect.y, mon_h - rect.h))

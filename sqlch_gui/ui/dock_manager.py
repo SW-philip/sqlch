@@ -33,6 +33,7 @@ class DockManager:
         self._np_held = dock.Magnet(None, None)
         self._np_start = None
         self._np_before = None
+        self._np_room = 0
         np_win.connect("map", self._on_np_map)
         for n in dock_state.NAMES:
             nav.set_open(n, self.state[n]["open"])
@@ -90,7 +91,8 @@ class DockManager:
             rects[n] = self.clamp(r, self.windows[n])
         unplaced = [(n, PANEL_WIDTH) for n in self._open_names()
                     if self.state[n]["placed"] is None]
-        rects.update(dock.pack(np, unplaced, list(rects.values())))
+        for n, r in dock.pack(np, unplaced, list(rects.values())).items():
+            rects[n] = self.clamp(r, self.windows[n])
         return rects
 
     def relayout(self):
@@ -246,6 +248,9 @@ class DockManager:
     def np_drag_started(self):
         self._np_start = self.np.overlay.rect
         self._np_before = self.state["np"]
+        slots = self._slot_rects(self._np_start)
+        self._np_room = dock.group_left_room(
+            self._np_start, [r for n, r in slots.items() if self._is_np_group(n)])
         area = self.np.area_size()
         self._np_held = (dock.held_at(self._np_start, dock.screen_edge_rects(*area, NP_EDGE))
                          if area else dock.Magnet(None, None))
@@ -259,7 +264,8 @@ class DockManager:
         candidate = dock.Rect(candidate.x, candidate.y, *size)
         rect, self._np_held, clicked = dock.magnet(
             candidate, dock.screen_edge_rects(*area, NP_EDGE), self._np_held)
-        rect = dock.clamp(rect, *area)
+        # After the magnet, so the left-edge target can't pull NP into its group.
+        rect = dock.clamp(rect._replace(x=max(rect.x, self._np_room)), *area)
         if clicked:
             self.np.overlay.flash()
         # Back at the start (e.g. a plain click) keeps a default None position.
