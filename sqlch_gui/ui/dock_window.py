@@ -10,7 +10,7 @@ import cairo
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Gtk4LayerShell', '1.0')
-from gi.repository import Gtk, Gtk4LayerShell
+from gi.repository import Gdk, Gtk, Gtk4LayerShell
 
 from .dock import Rect
 
@@ -66,6 +66,7 @@ class DockedWindow(Gtk.Window):
         self.card.append(scroll)
 
         drag = Gtk.GestureDrag.new()
+        drag.set_button(Gdk.BUTTON_PRIMARY)
         drag.connect("drag-begin", self._drag_begin)
         drag.connect("drag-update", self._drag_update)
         drag.connect("drag-end", self._drag_end)
@@ -84,17 +85,28 @@ class DockedWindow(Gtk.Window):
 
     def _apply_input_region(self):
         surface = self.get_surface()
-        if surface is None or self.rect.w <= 0 or self.rect.h <= 0:
+        if surface is None:
             return
         r = self.rect
-        surface.set_input_region(
-            cairo.Region(cairo.RectangleInt(r.x, r.y, r.w, r.h)))
+        # An unplaced overlay must stay click-through, never full-output.
+        if r.w <= 0 or r.h <= 0:
+            surface.set_input_region(cairo.Region())
+        else:
+            surface.set_input_region(
+                cairo.Region(cairo.RectangleInt(r.x, r.y, r.w, r.h)))
 
     # --- fade (sequential: a window is fully out before another fades in) ---
 
     def _fade(self, target: float, on_done=None):
         if self._fade_id:
             self.remove_tick_callback(self._fade_id)
+        if target == 0.0 and not self.get_mapped():
+            # No frame clock ticks before first map, so on_done would never run.
+            self._fade_id = None
+            self.set_opacity(target)
+            if on_done:
+                on_done()
+            return
         start, t0 = self.get_opacity(), None
 
         def tick(_w, clock):
@@ -136,6 +148,7 @@ class DockedWindow(Gtk.Window):
         if not self._in_widget(self.handle, x, y) or self._in_widget(self.close_btn, x, y):
             gesture.set_state(Gtk.EventSequenceState.DENIED)
             return
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
         self._drag_start = self.rect
 
     def _drag_to(self, ox, oy):
