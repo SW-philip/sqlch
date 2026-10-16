@@ -8,6 +8,8 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk, Pango
 
+from .overlay_card import grip
+
 SNARK = (
     "Daemon's gone quiet.",
     "Nobody's spinning records.",
@@ -47,9 +49,14 @@ class Header(Gtk.Box):
         self._connected = True
         self._station_markup = ""
 
-        nameplate = Gtk.Label(label="SQLCH", xalign=0.0)
+        # The nameplate strip is Now Playing's drag handle (OverlayCard).
+        nameplate = Gtk.Label(label="SQLCH", xalign=0.0, hexpand=True)
         nameplate.add_css_class("sq-nameplate")
-        self.append(nameplate)
+        self.nameplate_row = Gtk.Box()
+        self.nameplate_row.add_css_class("sq-nameplate-row")
+        self.nameplate_row.append(nameplate)
+        self.nameplate_row.append(grip())
+        self.append(self.nameplate_row)
 
         led = Gtk.Box(valign=Gtk.Align.CENTER)
         led.add_css_class("sq-led")

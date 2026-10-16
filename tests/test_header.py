@@ -18,6 +18,15 @@ class TestHeader(unittest.TestCase):
         self.assertTrue(h.track.has_css_class("sq-track"))
         self.assertTrue(h.station.has_css_class("sq-station"))
 
+    def test_nameplate_strip_carries_the_grip(self):
+        h = _header()
+        row = h.nameplate_row
+        self.assertIs(row.get_parent(), h)
+        self.assertIs(h.get_first_child(), row)
+        first = row.get_first_child()
+        self.assertTrue(first.has_css_class("sq-nameplate"))
+        self.assertTrue(first.get_next_sibling().has_css_class("dock-grip"))
+
     def test_text_labels_cannot_widen_the_popup(self):
         h = _header()
         for label in (h.track, h.station):

@@ -1,5 +1,5 @@
 """Pure rectangle math for docking the Library/Discover windows to Now
-Playing. No GTK: positions are layer-shell margins in monitor pixels."""
+Playing. No GTK: positions are pixels in the shared output-sized overlay."""
 
 from typing import NamedTuple
 
@@ -125,6 +125,24 @@ def magnet(raw: Rect, others: list[Rect], held: Magnet,
         hy = None if dy is None else y
         clicked = clicked or (hy is not None and hy != held.y)
     return Rect(x, y, raw.w, raw.h), Magnet(hx, hy), clicked
+
+
+def held_at(rect: Rect, others: list[Rect], gap: int = DOCK_GAP,
+            tol: int = 2) -> Magnet:
+    """Axes on which a resting rect already sits snapped, to seed a drag
+    that starts there: a nudge then neither clicks nor escapes before
+    BREAK_OUT."""
+    hx = hy = None
+    for o in others:
+        if _side_adjacent(rect, o, gap, tol):
+            hx = rect.x
+            if abs(rect.y - o.y) <= tol or abs(rect.bottom - o.bottom) <= tol:
+                hy = rect.y
+        if _stacked(rect, o, gap, tol):
+            hy = rect.y
+            if abs(rect.x - o.x) <= tol or abs(rect.right - o.right) <= tol:
+                hx = rect.x
+    return Magnet(hx, hy)
 
 
 def screen_edge_rects(area_w: int, area_h: int, margin: int = 12,

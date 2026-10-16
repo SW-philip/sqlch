@@ -2,7 +2,7 @@
 import unittest
 
 from sqlch_gui.ui.dock import (
-    BREAK_OUT, DOCK_GAP, SNAP_IN, Magnet, Rect, clamp, default_dock, magnet,
+    BREAK_OUT, DOCK_GAP, SNAP_IN, Magnet, Rect, clamp, default_dock, held_at, magnet,
     pack, screen_edge_rects, snap, touches,
 )
 
@@ -160,3 +160,32 @@ class TestMagnet(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestHeldAt(unittest.TestCase):
+    def test_free_window_holds_nothing(self):
+        self.assertEqual(held_at(Rect(100, 300, 320, 500), [NP]), Magnet(None, None))
+
+    def test_side_docked_and_top_aligned_holds_both_axes(self):
+        r = Rect(FLUSH_X, NP.y, 320, NP.h)
+        self.assertEqual(held_at(r, [NP]), Magnet(FLUSH_X, NP.y))
+
+    def test_side_docked_but_not_aligned_holds_only_x(self):
+        r = Rect(FLUSH_X, NP.y + 100, 320, NP.h)
+        self.assertEqual(held_at(r, [NP]), Magnet(FLUSH_X, None))
+
+    def test_stacked_below_and_left_aligned_holds_both_axes(self):
+        r = Rect(NP.x, NP.bottom + DOCK_GAP, 290, 200)
+        self.assertEqual(held_at(r, [NP]), Magnet(NP.x, r.y))
+
+    def test_seeded_nudge_does_not_click_and_breaks_at_break_out(self):
+        r = Rect(FLUSH_X, NP.y, 320, NP.h)
+        held = held_at(r, [NP])
+        shown, held, clicked = magnet(r.moved(-30, 0), [NP], held)
+        self.assertEqual((shown.x, clicked), (FLUSH_X, False))
+        shown, held, _ = magnet(r.moved(-(BREAK_OUT + 1), 0), [NP], held)
+        self.assertEqual(shown.x, FLUSH_X - BREAK_OUT - 1)
+
+    def test_default_np_is_held_against_right_screen_edge(self):
+        np = Rect(1920 - 12 - 290, 48, 290, 500)
+        self.assertEqual(held_at(np, screen_edge_rects(1920, 1080)), Magnet(np.x, None))

@@ -383,6 +383,10 @@ def _build_css(colors: dict) -> str:
         color: {rest};
         opacity: 0.5;
     }}
+    .sq-nameplate-row .dock-grip {{
+        margin: 4px 6px 0 0;
+    }}
+    .sq-nameplate-row:hover .dock-grip,
     .dock-handle:hover .dock-grip {{
         color: {score};
         opacity: 1;

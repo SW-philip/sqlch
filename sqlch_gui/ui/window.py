@@ -1,4 +1,5 @@
-"""Core structural surface frame container initialized via Wayland Layer Shell bindings."""
+"""Now Playing: a transparent output-sized layer-shell overlay whose card is
+dragged by the nameplate strip (see overlay_card.py)."""
 
 import threading
 import gi
@@ -13,38 +14,78 @@ from .now_playing import NowPlayingPanel
 from .station_list import StationListPanel
 from .discover import DiscoverPanel
 from .dock_manager import DockManager
+from .overlay_card import OverlayCard
+
+
+class _SizeWatch(Gtk.Widget):
+    """Single-child passthrough that reports allocation changes. Gtk.Fixed
+    sizes the card from its content and nothing else signals that, and a
+    Gtk.Box's size_allocate vfunc is bypassed by its layout manager."""
+
+    def __init__(self, child: Gtk.Widget, on_resize):
+        super().__init__()
+        self._child = child
+        self._on_resize = on_resize
+        self._size = (0, 0)
+        child.set_parent(self)
+
+    def do_measure(self, orientation, for_size):
+        return self._child.measure(orientation, for_size)
+
+    def do_size_allocate(self, width, height, baseline):
+        self._child.allocate(width, height, baseline, None)
+        if (width, height) != self._size:
+            self._size = (width, height)
+            # Never re-place the card from inside an allocation.
+            GLib.idle_add(self._on_resize)
+
+    def do_dispose(self):
+        if self._child is not None:
+            self._child.unparent()
+            self._child = None
+        Gtk.Widget.do_dispose(self)
 
 
 class SqlchPopupWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app)
         self.set_title("sqlch-gui")
+        self.set_decorated(False)
+        self.add_css_class("dock-overlay")
         self._missed_polls = 0
-        # Now Playing is the permanent surface; Library/Discover are docked
-        # windows owned by DockManager.
-        self.set_default_size(290, -1)
 
         # Inject theme constants
         load_custom_css()
 
-        # Initialize layer-shell layer
         Gtk4LayerShell.init_for_window(self)
         Gtk4LayerShell.set_layer(self, Gtk4LayerShell.Layer.TOP)
         Gtk4LayerShell.set_namespace(self, "sqlch-gui")
-        Gtk4LayerShell.set_anchor(self, Gtk4LayerShell.Edge.TOP, True)
-        Gtk4LayerShell.set_anchor(self, Gtk4LayerShell.Edge.RIGHT, True)
-        Gtk4LayerShell.set_margin(self, Gtk4LayerShell.Edge.TOP, 48)
-        Gtk4LayerShell.set_margin(self, Gtk4LayerShell.Edge.RIGHT, 12)
+        for edge in (Gtk4LayerShell.Edge.TOP, Gtk4LayerShell.Edge.LEFT,
+                     Gtk4LayerShell.Edge.RIGHT, Gtk4LayerShell.Edge.BOTTOM):
+            Gtk4LayerShell.set_anchor(self, edge, True)
+        # Same exclusive zone as the docked overlays, so all of them share
+        # one coordinate space.
+        Gtk4LayerShell.set_exclusive_zone(self, 0)
         Gtk4LayerShell.set_keyboard_mode(self, Gtk4LayerShell.KeyboardMode.ON_DEMAND)
-
-        main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        main_box.add_css_class("popup-window")
-        self.set_child(main_box)
 
         self.now_playing = NowPlayingPanel(self)
         self.station_list = StationListPanel(self)
         self.discover = DiscoverPanel(self)
-        main_box.append(self.now_playing)
+
+        self.card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.card.add_css_class("popup-window")
+        self.card.append(_SizeWatch(self.now_playing, self._card_resized))
+        # Hidden until DockManager first places it; the Fixed would
+        # otherwise paint it at the overlay's top-left corner.
+        self.card.set_opacity(0.0)
+
+        self.overlay = OverlayCard(
+            self, self.card, self.now_playing.header.nameplate_row,
+            on_drag=lambda r: self.docks.np_drag(r),
+            on_drop=lambda r: self.docks.np_drop(r),
+            on_drag_start=lambda: self.docks.np_drag_started(),
+            exclude=(self.now_playing.nav_column,),
+            sized=False)
 
         self.docks = DockManager(
             self,
@@ -70,6 +111,27 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
 
         # Connect focus destruction patterns
         self.connect("close-request", self.on_close_request)
+
+    # --- card geometry (positioning policy lives in DockManager) ---
+
+    def area_size(self):
+        w, h = self.get_width(), self.get_height()
+        return (w, h) if w > 0 and h > 0 else None
+
+    def card_size(self):
+        # Gtk.Fixed allocates children at their minimum size.
+        minimum, _natural = self.card.get_preferred_size()
+        if minimum.width <= 0 or minimum.height <= 0:
+            return None
+        return minimum.width, minimum.height
+
+    def place_card(self, rect):
+        self.overlay.place(rect)
+        self.card.set_opacity(1.0)
+
+    def _card_resized(self):
+        self.docks.np_changed()
+        return False
 
     def trigger_library_refresh(self):
         self.station_list.refresh()

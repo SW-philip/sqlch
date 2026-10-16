@@ -10,6 +10,8 @@ from . import dock, dock_state
 from .dock_window import DockedWindow, PANEL_WIDTH
 
 _TITLES = {"library": "LIBRARY", "discover": "DISCOVER"}
+NP_EDGE = 12   # default right clearance, and the screen-edge magnet margin
+NP_TOP = 48
 
 
 class DockManager:
@@ -28,6 +30,9 @@ class DockManager:
         self._surface_hooked = False
         self._retry_left = 0
         self._held = {}
+        self._np_held = dock.Magnet(None, None)
+        self._np_start = None
+        self._np_before = None
         np_win.connect("map", self._on_np_map)
         for n in dock_state.NAMES:
             nav.set_open(n, self.state[n]["open"])
@@ -46,19 +51,26 @@ class DockManager:
         return g.width, g.height
 
     def np_rect(self):
-        size = self.monitor_size()
-        w, h = self.np.get_width(), self.np.get_height()
-        if size is None or w <= 0 or h <= 0:
+        """Now Playing's card rect in overlay coordinates, from state["np"]
+        (None = top-right default) clamped to NP's overlay. Places the card
+        there when it isn't already, so the first valid call (overlay and
+        card both sized) is what makes NP appear. None until then."""
+        area, size = self.np.area_size(), self.np.card_size()
+        if area is None or size is None:
             return None
-        right = Gtk4LayerShell.get_margin(self.np, Gtk4LayerShell.Edge.RIGHT)
-        top = Gtk4LayerShell.get_margin(self.np, Gtk4LayerShell.Edge.TOP)
-        return dock.Rect(size[0] - right - w, top, w, h)
+        w, h = size
+        p = self.state["np"]
+        x, y = (area[0] - NP_EDGE - w, NP_TOP) if p is None else (p["x"], p["y"])
+        rect = dock.clamp(dock.Rect(x, y, w, h), *area)
+        if rect != self.np.overlay.rect:
+            self.np.place_card(rect)
+        return rect
 
     def clamp(self, rect, win=None):
         size = None
         if win is not None and win.get_width() > 0 and win.get_height() > 0:
             size = (win.get_width(), win.get_height())
-        size = size or self.monitor_size()
+        size = size or self.np.area_size() or self.monitor_size()
         return dock.clamp(rect, *size) if size else rect
 
     def _open_names(self):
@@ -85,6 +97,7 @@ class DockManager:
         np = self.np_rect()
         if np is None:
             return
+        self._last_np = np
         for n, r in self._slot_rects(np).items():
             self.windows[n].place(r)
 
@@ -124,6 +137,9 @@ class DockManager:
         self._last_np = np
         self.relayout()
         return True
+
+    def np_changed(self):
+        self._on_np_changed()
 
     def _on_np_changed(self, *_args):
         # Surface signals can fire before the widget allocation updates, so
@@ -191,17 +207,19 @@ class DockManager:
 
     # --- drag ---
 
+    def _others(self, name):
+        np = self.np_rect()
+        return ([np] if np is not None else []) + [
+            self.windows[n].rect for n in self._open_names() if n != name]
+
     def drag_started(self, name):
-        self._held[name] = dock.Magnet(None, None)
+        self._held[name] = dock.held_at(self.windows[name].rect, self._others(name))
 
     def magnet_for(self, name, candidate):
         """Live-snapped, clamped rect for a window being dragged; flashes the
         window when an axis newly clicks into place."""
-        np = self.np_rect()
-        others = ([np] if np is not None else []) + [
-            self.windows[n].rect for n in self._open_names() if n != name]
         rect, self._held[name], clicked = dock.magnet(
-            candidate, others, self._held.get(name, dock.Magnet(None, None)))
+            candidate, self._others(name), self._held.get(name, dock.Magnet(None, None)))
         if clicked:
             self.windows[name].flash()
         return self.clamp(rect, self.windows[name])
@@ -220,6 +238,38 @@ class DockManager:
         else:
             self.state[name]["placed"] = {"mode": "free", "x": snapped.x, "y": snapped.y}
         self.windows[name].place(snapped)
+        dock_state.save(self.state)
+        self.relayout()
+
+    # --- dragging Now Playing (magnets only to the screen edges) ---
+
+    def np_drag_started(self):
+        self._np_start = self.np.overlay.rect
+        self._np_before = self.state["np"]
+        area = self.np.area_size()
+        self._np_held = (dock.held_at(self._np_start, dock.screen_edge_rects(*area, NP_EDGE))
+                         if area else dock.Magnet(None, None))
+
+    def np_drag(self, candidate):
+        """Live NP position; docked windows follow because relayout places
+        them at NP-relative offsets."""
+        area, size = self.np.area_size(), self.np.card_size()
+        if area is None or size is None:
+            return None
+        candidate = dock.Rect(candidate.x, candidate.y, *size)
+        rect, self._np_held, clicked = dock.magnet(
+            candidate, dock.screen_edge_rects(*area, NP_EDGE), self._np_held)
+        rect = dock.clamp(rect, *area)
+        if clicked:
+            self.np.overlay.flash()
+        # Back at the start (e.g. a plain click) keeps a default None position.
+        self.state["np"] = (self._np_before if rect == self._np_start
+                            else {"x": rect.x, "y": rect.y})
+        self.relayout()
+        return rect
+
+    def np_drop(self, _rect):
+        self._np_held = dock.Magnet(None, None)
         dock_state.save(self.state)
         self.relayout()
 

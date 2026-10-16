@@ -31,7 +31,8 @@ class OverlayCard:
                  on_drag: Callable[[Rect], Rect | None] | None = None,
                  on_drop: Callable[[Rect], None] | None = None,
                  on_drag_start: Callable[[], None] | None = None,
-                 exclude: tuple[Gtk.Widget, ...] = ()):
+                 exclude: tuple[Gtk.Widget, ...] = (),
+                 sized: bool = True):
         self.window = window
         self.card = card
         self.handle = handle
@@ -40,6 +41,8 @@ class OverlayCard:
         self._on_drop = on_drop
         self._on_drag_start = on_drag_start
         self._exclude = exclude
+        # False: the card keeps its natural size; place() only moves it.
+        self._sized = sized
         self._drag_start = self.rect
         self._flash_id = 0
 
@@ -63,7 +66,8 @@ class OverlayCard:
     def place(self, rect: Rect):
         self.rect = rect
         self.fixed.move(self.card, rect.x, rect.y)
-        self.card.set_size_request(rect.w, rect.h)
+        if self._sized:
+            self.card.set_size_request(rect.w, rect.h)
         self._apply_input_region()
 
     def _apply_input_region(self):
