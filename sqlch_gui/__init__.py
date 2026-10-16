@@ -8,6 +8,7 @@ VERSION = "1.0.0"
 XDG_RUNTIME = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
 XDG_CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
 XDG_DATA = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+XDG_STATE = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
 
 CONTROL_SOCK = XDG_RUNTIME / "sqlch" / "control.sock"
 MPV_SOCK = XDG_RUNTIME / "sqlch" / "mpv.sock"
