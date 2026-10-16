@@ -26,6 +26,7 @@ class DockManager:
         self._pending_show = False
         self._saved_done = False
         self._surface_hooked = False
+        self._retry_left = 0
         np_win.connect("map", self._on_np_map)
         for n in dock_state.NAMES:
             nav.set_open(n, self.state[n]["open"])
@@ -84,11 +85,14 @@ class DockManager:
             self.windows[n].place(r)
 
     def _on_np_map(self, _w):
+        self._on_np_changed()
+
+    def _hook_surface(self):
         if self._surface_hooked:
-            return
+            return True
         surface = self.np.get_surface()
         if surface is None:
-            return
+            return False
         self._surface_hooked = True
         for sig in ("layout", "enter-monitor", "leave-monitor"):
             try:
@@ -97,18 +101,48 @@ class DockManager:
                 pass
         surface.connect("notify::width", self._on_np_changed)
         surface.connect("notify::height", self._on_np_changed)
-        self._on_np_changed()
+        return True
 
-    def _on_np_changed(self, *_args):
+    def _service(self):
+        """Apply any NP change or pending show; True if something was done."""
+        if not self._hook_surface():
+            return False
         np = self.np_rect()
-        if np is None or np == self._last_np:
-            return
-        self._last_np = np
+        if np is None:
+            return False
         if self._pending_show:
             self._pending_show = False
+            self._last_np = np
             self._present_saved()
-        else:
-            self.relayout()
+            return True
+        if np == self._last_np:
+            return False
+        self._last_np = np
+        self.relayout()
+        return True
+
+    def _on_np_changed(self, *_args):
+        # Surface signals can fire before the widget allocation updates, so
+        # an unchanged or missing rect gets a short bounded retry.
+        if not self._service() or self._pending_show:
+            self._retry(60 if self.np_rect() is None or self._pending_show else 2)
+
+    def _retry(self, frames):
+        if self._retry_left:
+            self._retry_left = max(self._retry_left, frames)
+            return
+        self._retry_left = frames
+
+        def tick(_w, _clock):
+            self._retry_left -= 1
+            if self._service() and not self._pending_show:
+                self._retry_left = 0
+            if self._retry_left <= 0:
+                self._retry_left = 0
+                return False
+            return True
+
+        self.np.add_tick_callback(tick)
 
     # --- toggle ---
 

@@ -61,3 +61,40 @@ class TestClampAndDefault(unittest.TestCase):
         d = default_dock(NP, [("discover", 320)])
         self.assertEqual(d["discover"].x, FLUSH_X)
         self.assertNotIn("library", d)
+
+
+class TestPack(unittest.TestCase):
+    def _slot(self, n):
+        return Rect(NP.x - n * (320 + DOCK_GAP), NP.y, 320, NP.h)
+
+    def test_no_placed_matches_default_dock(self):
+        items = [("library", 320), ("discover", 320)]
+        self.assertEqual(pack(NP, items, []), default_dock(NP, items))
+
+    def test_placed_in_slot1_pushes_unplaced_to_slot2(self):
+        d = pack(NP, [("discover", 320)], [self._slot(1)])
+        self.assertEqual(d["discover"], Rect(FLUSH_X - DOCK_GAP - 320, 48, 320, 500))
+        self.assertEqual(d["discover"], self._slot(2))
+
+    def test_two_placed_chain_pushes_to_slot3(self):
+        d = pack(NP, [("discover", 320)], [self._slot(1), self._slot(2)])
+        self.assertEqual(d["discover"], self._slot(3))
+
+    def test_placed_without_vertical_overlap_ignored(self):
+        items = [("library", 320)]
+        far = [Rect(FLUSH_X, 2000, 320, 500)]
+        self.assertEqual(pack(NP, items, far), default_dock(NP, items))
+
+    def test_placed_right_of_np_ignored(self):
+        items = [("library", 320)]
+        right = [Rect(NP.right + 50, 48, 320, 500)]
+        self.assertEqual(pack(NP, items, right), default_dock(NP, items))
+
+    def test_two_unplaced_chain_after_placed(self):
+        d = pack(NP, [("library", 320), ("discover", 320)], [self._slot(1)])
+        self.assertEqual(d["library"], self._slot(2))
+        self.assertEqual(d["discover"], self._slot(3))
+
+
+if __name__ == "__main__":
+    unittest.main()
