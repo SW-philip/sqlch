@@ -35,6 +35,7 @@ class SourcePane(Gtk.Box):
         self._searching = False
         self._gen = 0
         self._loaded = False
+        self._pending = None
 
         search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         self.entry = Gtk.Entry(placeholder_text=f"Search {source.NAME}...")
@@ -79,10 +80,16 @@ class SourcePane(Gtk.Box):
 
     @staticmethod
     def _daemon_play(item):
-        daemon.send({"cmd": "play_item", "item": item})
+        resp = daemon.send({"cmd": "play_item", "item": item})
+        if resp is None:
+            raise RuntimeError("daemon not running")
+        if not resp.get("ok", True):
+            raise RuntimeError(resp.get("error") or "daemon refused")
 
     def on_shown(self):
         if self._loaded:
+            if self._pending is not None:
+                self._load(self._pending)
             return
         self._loaded = True
         if not self.source.available():
@@ -106,12 +113,14 @@ class SourcePane(Gtk.Box):
     def _load(self, work):
         self._gen += 1
         gen = self._gen
+        self._pending = work
         self._update_nav()
         self._run(work, lambda result, err: self._show(gen, result, err))
 
     def _show(self, gen, result, err):
         if gen != self._gen:
             return False
+        self._pending = None
         while child := self.list.get_first_child():
             self.list.remove(child)
         if err is not None:
@@ -163,7 +172,12 @@ class SourcePane(Gtk.Box):
             self._searching = False
             self._reload()
         else:
-            self._run(lambda: self._play(item), lambda r, e: False)
+            self._run(lambda: self._play(item), self._played)
+
+    def _played(self, result, err):
+        if err is not None:
+            self._set_status(f"Couldn't play: {err}")
+        return False
 
     def back(self):
         if self._searching:

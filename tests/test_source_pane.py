@@ -151,6 +151,84 @@ class TestPane(unittest.TestCase):
         done(work(), None)
         self.assertEqual(p._items, [])
 
+    def test_reopen_after_hidden_first_load(self):
+        p, held = self._held()
+        p.on_shown()
+        p.on_hidden()
+        work, done = held.pop(0)
+        done(work(), None)
+        self.assertEqual(p._items, [])
+        p.on_shown()
+        work, done = held.pop(0)
+        done(work(), None)
+        self.assertEqual(p._items, [FOLDER])
+
+    def test_reopen_after_hidden_folder_and_search(self):
+        s = Fake()
+        held = []
+        p = make(s, run=lambda w, d: held.append((w, d)))
+
+        def flush():
+            while held:
+                w, d = held.pop(0)
+                d(w(), None)
+
+        p.on_shown()
+        flush()
+        p._activate(FOLDER)
+        p.on_hidden()
+        flush()
+        self.assertEqual(p._items, [FOLDER])
+        p.on_shown()
+        flush()
+        self.assertEqual(p._items, [TRACK])
+        p._search("q")
+        p.on_hidden()
+        flush()
+        p.on_shown()
+        flush()
+        self.assertEqual(s.searched, ["q", "q"])
+        self.assertEqual(p._items, [TRACK])
+
+    def test_rendered_not_reloaded(self):
+        s = Fake()
+        p = make(s)
+        p.on_shown()
+        p.on_hidden()
+        p.on_shown()
+        self.assertEqual(s.browsed, [None])
+
+
+class TestPlayErrors(unittest.TestCase):
+    def _play_with(self, resp):
+        from unittest import mock
+        p = make(Fake(), play=None)
+        p._play = p._daemon_play
+        p.on_shown()
+        with mock.patch("sqlch_gui.ui.source_pane.daemon.send", return_value=resp):
+            p._activate(TRACK)
+        return p
+
+    def test_failures(self):
+        for resp, text in ((None, "daemon not running"), ({"ok": False, "error": "x"}, "x")):
+            p = self._play_with(resp)
+            self.assertEqual(p.status.get_text(), f"Couldn't play: {text}")
+            self.assertTrue(p.status.get_visible())
+
+    def test_exception(self):
+        def boom(item):
+            raise OSError("bad")
+        p = make(Fake(), play=boom)
+        p.on_shown()
+        p._activate(TRACK)
+        self.assertEqual(p.status.get_text(), "Couldn't play: bad")
+        self.assertTrue(p.status.get_visible())
+
+    def test_success_leaves_status(self):
+        p = self._play_with({"ok": True})
+        self.assertFalse(p.status.get_visible())
+        self.assertEqual(p._items, [FOLDER])
+
 
 if __name__ == "__main__":
     unittest.main()
