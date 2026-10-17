@@ -122,6 +122,8 @@ def resolve(item: dict) -> Target:
     f = _safe(root, item["id"])
     if not f.is_file():
         raise FileNotFoundError(str(f))
+    if not _is_audio(f):
+        raise ValueError("not an audio file")
     it = _track(root, f, {})
     meta = {k: it[k] for k in ("title", "artist", "album", "art")}
     return Target(str(f), False, meta)

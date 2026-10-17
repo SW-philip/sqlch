@@ -114,3 +114,28 @@ class TestMalformedConfig(unittest.TestCase):
 
     def test_non_dict_entry_falls_back_to_default(self):
         self._check("x")
+
+
+class TestResolveExtension(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        _touch(self.root, "notes.txt")
+        _touch(self.root, "a/Song.MP3")
+        p = mock.patch.object(local, "source_config",
+                              lambda n: {"library_root": str(self.root)})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_non_audio_file_refused(self):
+        with self.assertRaises(ValueError):
+            local.resolve({"id": "notes.txt"})
+
+    def test_audio_file_resolves(self):
+        self.assertEqual(local.resolve({"id": "a/Song.MP3"}).url,
+                         str(self.root / "a/Song.MP3"))
+
+    def test_missing_file_still_not_found(self):
+        with self.assertRaises(FileNotFoundError):
+            local.resolve({"id": "nope.txt"})
