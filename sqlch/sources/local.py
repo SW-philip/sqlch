@@ -85,8 +85,24 @@ def search(query: str) -> list[dict]:
     root = _root()
     covers: dict = {}
     hits: list[dict] = []
+    seen: set = set()
+    try:
+        st = os.stat(root)
+        seen.add((st.st_dev, st.st_ino))
+    except OSError:
+        return hits
     for dirpath, dirs, files in os.walk(root, followlinks=True):
-        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+        keep = []
+        for d in sorted(d for d in dirs if not d.startswith(".")):
+            try:
+                st = os.stat(os.path.join(dirpath, d))
+            except OSError:
+                continue
+            ident = (st.st_dev, st.st_ino)
+            if ident not in seen:
+                seen.add(ident)
+                keep.append(d)
+        dirs[:] = keep
         for name in sorted(files):
             f = Path(dirpath) / name
             if name.startswith(".") or not _is_audio(f):

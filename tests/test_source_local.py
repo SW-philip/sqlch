@@ -63,6 +63,23 @@ class TestLocalSource(unittest.TestCase):
             _touch(self.root, f"Many/{i:03}.mp3")
         self.assertEqual(len(local.search("many")), 200)
 
+    def test_search_symlink_cycle(self):
+        try:
+            (self.root / "Artist" / "loop").symlink_to(self.root)
+        except OSError:
+            self.skipTest("symlinks unavailable")
+        self.assertEqual(len(local.search("second")), 1)
+
+    def test_search_follows_symlinked_album(self):
+        with tempfile.TemporaryDirectory() as outside:
+            _touch(Path(outside), "Elsewhere/03 - Linked Tune.mp3")
+            try:
+                (self.root / "Solo" / "Linked").symlink_to(
+                    Path(outside) / "Elsewhere")
+            except OSError:
+                self.skipTest("symlinks unavailable")
+            self.assertEqual(len(local.search("linked tune")), 1)
+
     def test_resolve(self):
         t = local.resolve({"id": "Artist/Album/02 - Second.flac"})
         self.assertEqual(t.url, str(self.root / "Artist/Album/02 - Second.flac"))
