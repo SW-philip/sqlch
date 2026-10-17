@@ -18,7 +18,9 @@ SEARCH_LIMIT = 200
 
 
 def _root() -> Path:
-    return Path(source_config(NAME).get("library_root") or "~/Music").expanduser()
+    cfg = source_config(NAME)
+    root = cfg.get("library_root") if isinstance(cfg, dict) else None
+    return Path(root if isinstance(root, str) and root else "~/Music").expanduser()
 
 
 # No resolve(): symlinked album folders must keep working.

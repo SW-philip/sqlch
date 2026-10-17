@@ -98,3 +98,19 @@ class TestLocalSource(unittest.TestCase):
         from sqlch.sources import REGISTRY
         self.assertIn("local", REGISTRY)
         self.assertIs(REGISTRY["local"], local)
+
+
+class TestMalformedConfig(unittest.TestCase):
+    def _check(self, cfg):
+        with tempfile.TemporaryDirectory() as home, \
+             mock.patch.dict("os.environ", {"HOME": home}), \
+             mock.patch.object(local, "source_config", lambda n: cfg):
+            self.assertFalse(local.available())
+            (Path(home) / "Music").mkdir()
+            self.assertTrue(local.available())
+
+    def test_non_string_root_falls_back_to_default(self):
+        self._check({"library_root": 123})
+
+    def test_non_dict_entry_falls_back_to_default(self):
+        self._check("x")

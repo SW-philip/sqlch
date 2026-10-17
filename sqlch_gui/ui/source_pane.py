@@ -4,6 +4,8 @@ import threading
 
 from gi.repository import Gtk, GLib
 
+from sqlch.sources import safe_available
+
 from .. import daemon
 from .timefmt import format_duration
 
@@ -92,7 +94,7 @@ class SourcePane(Gtk.Box):
                 self._load(self._pending)
             return
         self._loaded = True
-        if not self.source.available():
+        if not safe_available(self.source):
             self._set_status(self.source.HINT)
             return
         self._reload()

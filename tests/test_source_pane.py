@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 import gi
 gi.require_version("Gtk", "4.0")
@@ -232,3 +233,14 @@ class TestPlayErrors(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAvailableRaises(unittest.TestCase):
+    def test_raising_available_shows_hint(self):
+        src = Fake()
+        src.available = mock.Mock(side_effect=TypeError("bad config"))
+        pane = make(src)
+        with self.assertLogs("sqlch.sources", "ERROR"):
+            pane.on_shown()
+        self.assertEqual(pane.status.get_text(), src.HINT)
+        self.assertTrue(pane.status.get_visible())

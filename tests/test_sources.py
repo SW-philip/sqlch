@@ -57,3 +57,15 @@ class TestRegistry(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSafeAvailable(unittest.TestCase):
+    def test_raising_source_is_unavailable(self):
+        src = mock.Mock(NAME="bad")
+        src.available.side_effect = TypeError("boom")
+        with self.assertLogs("sqlch.sources", "ERROR"):
+            self.assertFalse(sources.safe_available(src))
+
+    def test_normal_value_passes_through(self):
+        self.assertTrue(sources.safe_available(mock.Mock(available=lambda: True)))
+        self.assertFalse(sources.safe_available(mock.Mock(available=lambda: False)))

@@ -16,6 +16,15 @@ def source_config(name: str) -> dict:
     return (config.load().get("sources") or {}).get(name) or {}
 
 
+def safe_available(source) -> bool:
+    """A source whose available() raises counts as unavailable."""
+    try:
+        return bool(source.available())
+    except Exception:
+        log.exception("source %s: available() failed", getattr(source, "NAME", source))
+        return False
+
+
 def _load(names=_MODULES, package=__name__) -> dict:
     registry = {}
     for n in names:
