@@ -310,6 +310,8 @@ class NavColumn(Gtk.Box):
         self.append(self._sources_btn)
 
     def set_sources(self, entries):
+        self._rows = {}
+        self._open_sources &= {e["name"] for e in entries}
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         for e in entries:
             dot = Gtk.Label(label="\u25cb")
@@ -326,8 +328,14 @@ class NavColumn(Gtk.Box):
                 btn.set_tooltip_text(e["hint"])
             btn.connect("clicked", lambda _b, n=e["name"]: self._pick(n))
             box.append(btn)
+            if e["name"] in self._open_sources:
+                dot.set_text("\u25cf")
             self._rows[e["name"]] = (btn, dot)
         self._pop.set_child(box)
+        if self._open_sources:
+            self._sources_btn.add_css_class("active")
+        else:
+            self._sources_btn.remove_css_class("active")
         self._sources_btn.set_visible(bool(entries))
 
     def _pick(self, name):

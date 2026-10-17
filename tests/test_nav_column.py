@@ -76,3 +76,30 @@ class TestNavSources(unittest.TestCase):
         nav.set_open("library", True)
         self.assertTrue(nav._buttons["library"].has_css_class("active"))
         self.assertFalse(nav._sources_btn.has_css_class("active"))
+
+
+class TestNavSourcesReload(unittest.TestCase):
+    def test_removed_name_is_dropped(self):
+        nav = NavColumn()
+        nav.set_sources(ENTRIES)
+        nav.set_sources([ENTRIES[0]])
+        self.assertNotIn("jelly", nav._rows)
+        nav.set_open("jelly", True)
+        self.assertFalse(nav._sources_btn.has_css_class("active"))
+
+    def test_open_state_survives_reload_only_for_existing(self):
+        nav = NavColumn()
+        nav.set_sources(ENTRIES)
+        nav.set_open("local", True)
+        nav.set_sources(ENTRIES)
+        self.assertEqual(nav._rows["local"][1].get_text(), "\u25cf")
+        self.assertTrue(nav._sources_btn.has_css_class("active"))
+        nav.set_sources([ENTRIES[1]])
+        self.assertFalse(nav._sources_btn.has_css_class("active"))
+
+    def test_unknown_name_is_a_noop(self):
+        nav = NavColumn()
+        nav.set_sources(ENTRIES)
+        nav.set_open("nope", True)
+        self.assertFalse(nav._sources_btn.has_css_class("active"))
+        self.assertEqual(nav._open_sources, set())
