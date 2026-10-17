@@ -385,6 +385,14 @@ def now_playing_info() -> dict:
     if not mpv_socket().exists():
         return {"status": "stopped"}
 
+    if _current and _current.get("type") == "item":
+        it = _current["item"]
+        info = {"status": "playing", "station": str(it.get("source") or "").upper()}
+        if it.get("artist"):
+            info["artist"] = it["artist"]
+        info["track"] = it.get("title")
+        return info
+
     station_name = None
     if _current:
         station_name = _current.get("item", {}).get("name")

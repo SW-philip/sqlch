@@ -103,3 +103,41 @@ class TestDaemonItems(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestNowPlayingInfo(unittest.TestCase):
+    def setUp(self):
+        old = player._current
+        self.addCleanup(setattr, player, "_current", old)
+        sock = mock.Mock()
+        sock.exists.return_value = True
+        p = mock.patch.object(player, "mpv_socket", return_value=sock)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_item_describes_the_source_not_the_last_station(self):
+        player._current = {"type": "item", "item": {
+            "source": "local", "id": "a.mp3", "title": "Song", "artist": "Band"}}
+        with mock.patch.object(player.library, "last_played_station",
+                               side_effect=AssertionError("fallback used")), \
+             mock.patch.object(player, "mpv_get",
+                               side_effect=AssertionError("icy used")):
+            info = player.now_playing_info()
+            text = player.status_string()
+        self.assertEqual(info, {"status": "playing", "station": "LOCAL",
+                                "artist": "Band", "track": "Song"})
+        self.assertIn("LOCAL", text)
+        self.assertIn("Band — Song", text)
+
+    def test_item_without_artist_omits_it(self):
+        player._current = {"type": "item", "item": {"source": "local", "title": "S"}}
+        self.assertEqual(player.now_playing_info(),
+                         {"status": "playing", "station": "LOCAL", "track": "S"})
+
+    def test_station_still_uses_icy(self):
+        player._current = {"type": "station", "item": {"name": "KEXP"}}
+        with mock.patch.object(player, "mpv_get",
+                               return_value={"icy-title": "Artist - Track"}):
+            info = player.now_playing_info()
+        self.assertEqual(info["station"], "KEXP")
+        self.assertEqual(info["track"], "Track")
