@@ -229,27 +229,32 @@ def _kill_existing() -> None:
     _metadata_thread = None
 
 
-def _spawn_mpv(url: str, *, video: bool = False, preview: bool = False) -> None:
-    sock = mpv_socket()
-    sock.parent.mkdir(parents=True, exist_ok=True)
-
+def _mpv_args(url: str, *, video: bool = False, preview: bool = False) -> list[str]:
     args: list[str] = [
         mpv_bin(),
-        f"--input-ipc-server={sock}",
+        f"--input-ipc-server={mpv_socket()}",
         "--idle=yes",
         "--keep-open=yes",
-        "--force-window=no",
+        "--force-window=yes" if video else "--force-window=no",
         "--no-terminal",
         "--cache=yes",
     ]
     mpris = mpris_plugin()
     if mpris:
         args.insert(2, f"--script={mpris}")
-    if not video:
+    if video:
+        args.append("--wayland-app-id=sqlch-video")
+    else:
         args.append("--no-video")
     if preview:
         args.append("--volume=60")
     args.append(url)
+    return args
+
+
+def _spawn_mpv(url: str, *, video: bool = False, preview: bool = False) -> None:
+    mpv_socket().parent.mkdir(parents=True, exist_ok=True)
+    args = _mpv_args(url, video=video, preview=preview)
 
     proc = subprocess.Popen(
         args,
@@ -309,6 +314,23 @@ def play_station(station: dict[str, Any]) -> None:
             daemon=True,
         )
         _metadata_thread.start()
+
+
+def play_target(target, item: dict[str, Any]) -> None:
+    global _current
+    stop(notify_user=False)
+    meta = target.meta or {}
+    notify.notify("sqlch", f"NOW PLAYING\n{meta.get('title') or item.get('title', '')}")
+    _spawn_mpv(target.url, video=target.video)
+    _current = {"type": "item", "item": item}
+
+
+def seek(pos: float) -> None:
+    mpv_command("seek", float(pos), "absolute")
+
+
+def item_progress() -> tuple[float | None, float | None]:
+    return mpv_get("time-pos"), mpv_get("duration")
 
 
 def preview(url: str, duration: int = 10) -> None:

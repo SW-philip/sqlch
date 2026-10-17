@@ -5,6 +5,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from sqlch import sources
 from sqlch.core import library, notify, player, discover
 from sqlch.core.paths import runtime_dir
 
@@ -24,12 +25,12 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
         return {'ok': True, 'msg': 'pong'}
     if cmd == 'status':
         from sqlch.core import recorder
-        return {
-            'ok': True,
-            'status': player.status_string(),
-            'current': player.current(),
-            'recording': recorder.status(),
-        }
+        cur = player.current()
+        resp = {'ok': True, 'status': player.status_string(), 'current': cur,
+                'recording': recorder.status()}
+        if cur and cur.get('type') == 'item':
+            resp['position'], resp['duration'] = player.item_progress()
+        return resp
     if cmd == 'stop':
         player.stop()
         return {'ok': True}
@@ -63,6 +64,26 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
                 }
         player.play_station(st)
         return {'ok': True, 'station': {'id': st.get('id'), 'name': st.get('name')}}
+    if cmd == 'play_item':
+        item = msg.get('item')
+        if not isinstance(item, dict):
+            return {'ok': False, 'error': 'missing item'}
+        src = sources.REGISTRY.get(item.get('source'))
+        if src is None:
+            return {'ok': False, 'error': f"unknown source: {item.get('source')}"}
+        try:
+            target = src.resolve(item)
+        except Exception as e:
+            return {'ok': False, 'error': f'resolve failed: {e}'}
+        player.play_target(target, item)
+        return {'ok': True}
+    if cmd == 'seek':
+        try:
+            pos = float(msg['pos'])
+        except (KeyError, TypeError, ValueError):
+            return {'ok': False, 'error': 'missing pos'}
+        player.seek(pos)
+        return {'ok': True}
     if cmd == 'preview':
         url = (msg.get('url') or '').strip()
         if not url:
