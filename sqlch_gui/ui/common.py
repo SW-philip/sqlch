@@ -569,6 +569,24 @@ def _build_css(colors: dict) -> str:
         font-weight: 700;
         color: {lyric};
     }}
+    .seek-bar scale trough {{
+        background-color: {wing};
+        border-radius: 2px;
+        min-height: 4px;
+    }}
+    .seek-bar scale highlight {{
+        background-color: {score};
+    }}
+    .seek-bar scale slider {{
+        background-color: {score};
+        min-width: 10px;
+        min-height: 10px;
+    }}
+    .seek-time {{
+        font-family: {mono};
+        font-size: 0.65em;
+        color: {rest};
+    }}
     """
 
 

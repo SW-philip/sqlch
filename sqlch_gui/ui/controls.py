@@ -1,10 +1,12 @@
 """Custom GTK 4 tactile controls: pop-it bubble, VU-meter volume, spool nav rail."""
 
 import math
+import time
 import gi
 gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, Gdk, GObject, GLib
 from .. import palette
+from .timefmt import format_duration
 
 
 def _hex_to_rgb_floats(hex_val: str) -> tuple[float, float, float]:
@@ -358,3 +360,44 @@ class NavColumn(Gtk.Box):
                 self._sources_btn.add_css_class("active")
             else:
                 self._sources_btn.remove_css_class("active")
+
+
+class SeekBar(Gtk.Box):
+    """Position scale for items with a known duration. The user's own moves
+    are not overwritten by the 1 Hz status poll for HOLD seconds."""
+
+    __gsignals__ = {
+        'seek-requested': (GObject.SignalFlags.RUN_LAST, None, (float,)),
+    }
+    HOLD = 1.5
+
+    def __init__(self):
+        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.add_css_class("seek-bar")
+        self._hold_until = 0.0
+        self._scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 1, 1)
+        self._scale.set_draw_value(False)
+        self._scale.set_hexpand(True)
+        self._scale.connect("change-value", self._on_change_value)
+        self._time = Gtk.Label(label="")
+        self._time.add_css_class("seek-time")
+        self.append(self._scale)
+        self.append(self._time)
+        self.set_visible(False)
+
+    def _on_change_value(self, _scale, _scroll, value):
+        self._hold_until = time.monotonic() + self.HOLD
+        self.emit("seek-requested", float(value))
+        return False
+
+    def set_state(self, position, duration):
+        if not duration or duration <= 0 or position is None:
+            self.set_visible(False)
+            return
+        self.set_visible(True)
+        self._time.set_text(
+            f"{format_duration(position) or '0:00'} / {format_duration(duration)}")
+        if time.monotonic() < self._hold_until:
+            return
+        self._scale.set_range(0, duration)
+        self._scale.set_value(min(position, duration))

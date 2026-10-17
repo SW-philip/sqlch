@@ -9,7 +9,7 @@ from pathlib import Path
 from gi.repository import Gtk, GLib, GdkPixbuf, GObject, Pango
 
 from .. import XDG_CACHE, daemon, metadata
-from .controls import VolumeMeter, RecordBubble, NavColumn
+from .controls import VolumeMeter, RecordBubble, NavColumn, SeekBar
 from .header import Header
 
 _COVER_SIZE = 220     # keep in sync with .cover-art's min-width/min-height in common.py
@@ -136,6 +136,10 @@ class NowPlayingPanel(Gtk.Box):
         # than the gap up top.
         self.info_scroll.set_margin_top(4)
         card.append(self.info_scroll)
+
+        self.seek_bar = SeekBar()
+        self.seek_bar.connect("seek-requested", self._on_seek_requested)
+        card.append(self.seek_bar)
 
         # --- Row 4: RecordBubble / stop-play toggle | speaker + volume meter ---
         control_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -300,10 +304,15 @@ class NowPlayingPanel(Gtk.Box):
             # only the LIVE tag is no longer accurate and gets hidden.
             self._set_stale(True)
             self.lbl_live_tag.set_visible(False)
+            self.seek_bar.set_state(None, None)
             return
 
         self._set_stale(False)
         curr = resp["current"]
+        if curr.get("type") == "item":
+            self._update_item(curr.get("item") or {}, resp)
+            return
+        self.seek_bar.set_state(None, None)
         # resp["current"] is {"type": "station", "item": station}, not a
         # flat station dict -- id/name/frequency live under "item".
         item = curr.get("item") or {}
@@ -350,6 +359,39 @@ class NowPlayingPanel(Gtk.Box):
 
         self._update_station_line()
         self._update_previous_line()
+
+    def _update_item(self, item: dict, resp: dict):
+        self.lbl_live_tag.set_visible(False)
+        self._cur_station_id = None
+        self._cur_frequency = None
+        artist = item.get("artist") or ""
+        title = item.get("title") or ""
+        track = f"{artist} — {title}" if artist else title
+        self.header.set_track(f"<b>{html.escape(track)}</b>")
+        album = item.get("album") or ""
+        source = html.escape((item.get("source") or "").upper())
+        line = f"<b>{source}</b>"
+        if album:
+            line += f"  {html.escape(album)}"
+        self.header.set_station(line)
+
+        ident = f"{item.get('source')}:{item.get('id')}"
+        if ident != self._hist_station_id:
+            self._hist_station_id = ident
+            self._history.clear()
+            self._cur_artist, self._cur_title = artist, title
+            self._render_previous()
+            art = item.get("art")
+            if art and Path(art).is_file():
+                GLib.idle_add(self._apply_cover_path, art, artist, title)
+            else:
+                self.clear_cover()
+
+        self.seek_bar.set_state(resp.get("position"), resp.get("duration"))
+
+    def _on_seek_requested(self, _bar, pos: float):
+        threading.Thread(target=daemon.send, args=({"cmd": "seek", "pos": pos},),
+                         daemon=True).start()
 
     def _async_fetch_cover(self, artist: str, title: str):
         import time

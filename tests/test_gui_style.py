@@ -37,6 +37,8 @@ class TestFlatStylesheet(unittest.TestCase):
         self.assertIsInstance(css, str)
         self.assertIn(".popup-window", css)
         self.assertIn(".section-rule", css)
+        self.assertIn(".seek-bar", css)
+        self.assertIn(".seek-time", css)
 
     def test_station_uses_lyric_and_tab_not_rest(self):
         from sqlch_gui.ui import common
