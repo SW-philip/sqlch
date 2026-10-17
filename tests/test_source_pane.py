@@ -244,3 +244,28 @@ class TestAvailableRaises(unittest.TestCase):
             pane.on_shown()
         self.assertEqual(pane.status.get_text(), src.HINT)
         self.assertTrue(pane.status.get_visible())
+
+
+class TestPlayErrorClears(unittest.TestCase):
+    def _pane(self, src, outcomes):
+        def play(item):
+            r = outcomes.pop(0)
+            if r:
+                raise RuntimeError(r)
+        return make(src, play=play)
+
+    def test_success_clears_play_error(self):
+        pane = self._pane(Fake(), ["nope", None])
+        pane.on_shown()
+        pane._activate(TRACK)
+        self.assertEqual(pane.status.get_text(), "Couldn't play: nope")
+        self.assertTrue(pane.status.get_visible())
+        pane._activate(TRACK)
+        self.assertFalse(pane.status.get_visible())
+
+    def test_success_keeps_hint(self):
+        pane = self._pane(Fake(ok=False), [None])
+        pane.on_shown()
+        pane._activate(TRACK)
+        self.assertEqual(pane.status.get_text(), "set it up")
+        self.assertTrue(pane.status.get_visible())

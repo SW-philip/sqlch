@@ -38,6 +38,7 @@ class SourcePane(Gtk.Box):
         self._gen = 0
         self._loaded = False
         self._pending = None
+        self._play_error = False
 
         search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         self.entry = Gtk.Entry(placeholder_text=f"Search {source.NAME}...")
@@ -102,7 +103,8 @@ class SourcePane(Gtk.Box):
     def on_hidden(self):
         self._gen += 1
 
-    def _set_status(self, text):
+    def _set_status(self, text, play_error=False):
+        self._play_error = play_error and bool(text)
         self.status.set_text(text)
         self.status.set_visible(bool(text))
 
@@ -178,7 +180,9 @@ class SourcePane(Gtk.Box):
 
     def _played(self, result, err):
         if err is not None:
-            self._set_status(f"Couldn't play: {err}")
+            self._set_status(f"Couldn't play: {err}", play_error=True)
+        elif self._play_error:
+            self._set_status("")
         return False
 
     def back(self):
