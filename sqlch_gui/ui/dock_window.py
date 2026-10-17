@@ -14,11 +14,12 @@ FADE_MS = 160
 
 
 class DockedWindow(Gtk.Window):
-    def __init__(self, manager, name: str, title: str, panel: Gtk.Widget):
+    def __init__(self, manager, name: str, title: str, panel: Gtk.Widget = None):
         super().__init__()
         self.manager = manager
         self.name = name
         self._fade_id = None
+        self.panel = None
 
         self.set_title(f"sqlch-gui {name}")
         self.set_decorated(False)
@@ -49,11 +50,12 @@ class DockedWindow(Gtk.Window):
         self.handle.append(self.close_btn)
         self.card.append(self.handle)
 
-        scroll = Gtk.ScrolledWindow()
-        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_vexpand(True)
-        scroll.set_child(panel)
-        self.card.append(scroll)
+        self._scroll = Gtk.ScrolledWindow()
+        self._scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self._scroll.set_vexpand(True)
+        if panel is not None:
+            self.set_panel(panel)
+        self.card.append(self._scroll)
 
         self.overlay = OverlayCard(
             self, self.card, self.handle,
@@ -62,6 +64,10 @@ class DockedWindow(Gtk.Window):
             on_drag_start=lambda: manager.drag_started(name),
             exclude=(self.close_btn,))
         self.overlay.rect = Rect(0, 0, PANEL_WIDTH, 0)
+
+    def set_panel(self, panel):
+        self.panel = panel
+        self._scroll.set_child(panel)
 
     @property
     def rect(self) -> Rect:

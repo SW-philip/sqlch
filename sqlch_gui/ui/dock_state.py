@@ -11,8 +11,8 @@ STATE_PATH = XDG_STATE / "sqlch-gui" / "windows.json"
 NAMES = ("library", "discover")
 
 
-def default_state() -> dict:
-    state = {n: {"open": False, "placed": None} for n in NAMES}
+def default_state(names=NAMES) -> dict:
+    state = {n: {"open": False, "placed": None} for n in names}
     state["np"] = None
     return state
 
@@ -37,15 +37,15 @@ def _np(p):
     return None
 
 
-def load(path: Path = STATE_PATH) -> dict:
-    state = default_state()
+def load(path: Path = STATE_PATH, names=NAMES) -> dict:
+    state = default_state(names)
     try:
         raw = json.loads(Path(path).read_text())
     except (OSError, ValueError):
         return state
     if not isinstance(raw, dict):
         return state
-    for name in NAMES:
+    for name in names:
         entry = raw.get(name)
         if isinstance(entry, dict):
             state[name] = {"open": entry.get("open") is True,

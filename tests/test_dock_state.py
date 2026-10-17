@@ -71,3 +71,27 @@ class TestNowPlayingPosition(unittest.TestCase):
     def test_extra_keys_are_dropped(self):
         self.assertEqual(self._load_raw({"np": {"x": 1, "y": 2, "z": 3}})["np"],
                          {"x": 1, "y": 2})
+
+
+class TestExtraNames(unittest.TestCase):
+    def setUp(self):
+        self.path = pathlib.Path(tempfile.mkdtemp()) / "windows.json"
+        self.names = dock_state.NAMES + ("local",)
+
+    def test_extra_name_defaults_closed(self):
+        s = dock_state.load(self.path, names=self.names)
+        self.assertEqual(s["local"], {"open": False, "placed": None})
+
+    def test_extra_name_round_trips(self):
+        s = dock_state.default_state(self.names)
+        s["local"] = {"open": True, "placed": {"mode": "free", "x": 5, "y": 6}}
+        dock_state.save(s, self.path)
+        self.assertEqual(dock_state.load(self.path, names=self.names)["local"], s["local"])
+
+    def test_unknown_saved_name_is_dropped(self):
+        self.path.write_text(json.dumps({"ghost": {"open": True}}))
+        self.assertNotIn("ghost", dock_state.load(self.path, names=self.names))
+
+    def test_default_names_ignore_saved_extra(self):
+        self.path.write_text(json.dumps({"local": {"open": True}}))
+        self.assertNotIn("local", dock_state.load(self.path))

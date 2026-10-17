@@ -15,14 +15,19 @@ NP_TOP = 48
 
 
 class DockManager:
-    def __init__(self, np_win, panels, nav, on_shown, on_hidden):
+    def __init__(self, np_win, panels, nav, on_shown, on_hidden, titles=None):
         self.np = np_win
         self.nav = nav
         self._on_shown = on_shown
         self._on_hidden = on_hidden
-        self.state = dock_state.load()
+        self.names = dock_state.NAMES + tuple(n for n in panels if n not in dock_state.NAMES)
+        self.titles = {**_TITLES, **(titles or {})}
+        self._factories = {n: p for n, p in panels.items() if callable(p)}
+        self.state = dock_state.load(names=self.names)
         self.windows = {
-            n: DockedWindow(self, n, _TITLES[n], panels[n]) for n in dock_state.NAMES
+            n: DockedWindow(self, n, self.titles[n],
+                            None if n in self._factories else panels[n])
+            for n in self.names
         }
         self._last_np = None
         self._pending_show = False
@@ -35,7 +40,7 @@ class DockManager:
         self._np_before = None
         self._np_room = 0
         np_win.connect("map", self._on_np_map)
-        for n in dock_state.NAMES:
+        for n in self.names:
             nav.set_open(n, self.state[n]["open"])
 
     # --- geometry ---
@@ -75,7 +80,7 @@ class DockManager:
         return dock.clamp(rect, *size) if size else rect
 
     def _open_names(self):
-        return [n for n in dock_state.NAMES if self.state[n]["open"]]
+        return [n for n in self.names if self.state[n]["open"]]
 
     def _slot_rects(self, np):
         """Target rect for every open window."""
@@ -178,18 +183,25 @@ class DockManager:
             self._fade_in(name)
         else:
             def closed():
-                self._on_hidden[name]()
+                self._call_hook(self._on_hidden, name, "on_hidden")
                 self.relayout()   # free the dock slot once the fade is done
             win.fade_out(closed)
         dock_state.save(self.state)
 
     def _fade_in(self, name):
         win = self.windows[name]
+        if win.panel is None:
+            win.set_panel(self._factories[name]())
         mon = self._np_monitor()
         if mon is not None:
             Gtk4LayerShell.set_monitor(win, mon)
         win.fade_in()
-        self._on_shown[name]()
+        self._call_hook(self._on_shown, name, "on_shown")
+
+    def _call_hook(self, hooks, name, attr):
+        hook = hooks.get(name) or getattr(self.windows[name].panel, attr, None)
+        if hook:
+            hook()
 
     def show_saved(self):
         """Present windows that were open last session; deferred until Now
