@@ -296,8 +296,57 @@ class NavColumn(Gtk.Box):
             self.append(button)
             self._buttons[name] = button
 
+        self._rows = {}
+        self._open_sources = set()
+        self._sources_btn = Gtk.Button(label="SOURCES")
+        self._sources_btn.add_css_class("sq-tab")
+        self._sources_btn.set_tooltip_text("Media sources")
+        self._sources_btn.set_visible(False)
+        self._pop = Gtk.Popover()
+        self._pop.set_parent(self._sources_btn)
+        self._sources_btn.connect("clicked", lambda _b: self._pop.popup())
+        # A popover parented to a widget must be unparented before it dies.
+        self.connect("destroy", lambda _w: self._pop.unparent())
+        self.append(self._sources_btn)
+
+    def set_sources(self, entries):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        for e in entries:
+            dot = Gtk.Label(label="\u25cb")
+            text = Gtk.Label(label=e["label"], xalign=0.0)
+            inner = Gtk.Box(spacing=8)
+            inner.append(dot)
+            inner.append(text)
+            btn = Gtk.Button()
+            btn.set_child(inner)
+            btn.add_css_class("flat")
+            btn.add_css_class("sq-source-row")
+            if not e["available"]:
+                btn.add_css_class("sq-source-off")
+                btn.set_tooltip_text(e["hint"])
+            btn.connect("clicked", lambda _b, n=e["name"]: self._pick(n))
+            box.append(btn)
+            self._rows[e["name"]] = (btn, dot)
+        self._pop.set_child(box)
+        self._sources_btn.set_visible(bool(entries))
+
+    def _pick(self, name):
+        self._pop.popdown()
+        self.emit("nav-toggled", name)
+
     def set_open(self, name: str, is_open: bool):
-        if is_open:
-            self._buttons[name].add_css_class("active")
-        else:
-            self._buttons[name].remove_css_class("active")
+        if name in self._buttons:
+            if is_open:
+                self._buttons[name].add_css_class("active")
+            else:
+                self._buttons[name].remove_css_class("active")
+        elif name in self._rows:
+            self._rows[name][1].set_text("\u25cf" if is_open else "\u25cb")
+            if is_open:
+                self._open_sources.add(name)
+            else:
+                self._open_sources.discard(name)
+            if self._open_sources:
+                self._sources_btn.add_css_class("active")
+            else:
+                self._sources_btn.remove_css_class("active")

@@ -432,6 +432,18 @@ def _build_css(colors: dict) -> str:
     .sq-tabs {{
         border-bottom: 2px solid {root};
     }}
+    .sq-source-row {{
+        font-family: {mono};
+        font-size: 0.7em;
+        letter-spacing: 0.1em;
+        color: {lyric};
+    }}
+    .sq-source-row:hover {{
+        color: {score};
+    }}
+    .sq-source-off {{
+        opacity: 0.55;
+    }}
 
     popover.context-menu > contents {{
         background-color: {stage};

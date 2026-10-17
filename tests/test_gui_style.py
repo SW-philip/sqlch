@@ -252,6 +252,12 @@ class TestPlayerEdgeBorder(unittest.TestCase):
         for sel in (".dock-handle", ".dock-title", ".dock-close", ".dock-overlay"):
             self.assertIn(sel, css)
 
+    def test_source_row_rules_present(self):
+        from sqlch_gui.ui import common
+        css = common._build_css(dict(palette._DEFAULTS))
+        for sel in (".sq-source-row", ".sq-source-off"):
+            self.assertIn(sel, css)
+
     def test_dock_grip_and_flash_rules_present(self):
         from sqlch_gui.ui import common
         css = common._build_css(dict(palette._DEFAULTS))
