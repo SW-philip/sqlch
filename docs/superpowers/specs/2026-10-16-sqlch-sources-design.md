@@ -129,8 +129,10 @@ returns false and the pane shows the hint when any required value is missing.
 ## 7. Per-source notes
 
 - **Local:** root from config (`library_root`), `browse` walks directories,
-  `search` filters an on-disk index cached under `cache_dir()`. Tags via
-  `mutagen`; art from `cover.*` or embedded. `available()` = root exists.
+  `search` walks the tree (capped at 200 hits) and matches every query word
+  against the relative path. Artist/album/title come from the
+  `Artist/Album/NN - Title.ext` path layout; tag reading is deferred so the GUI
+  needs no new dependency. Art from `cover.*`. `available()` = root exists.
 - **Jellyfin:** REST with API token; `browse` = libraries/albums, `search` =
   `/Items?searchTerm`, `resolve` = direct stream URL with the token.
   Music is audio; movies/shows are `kind=video`.
