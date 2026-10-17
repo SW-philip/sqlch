@@ -15,6 +15,8 @@ from .station_list import StationListPanel
 from .discover import DiscoverPanel
 from .dock_manager import DockManager
 from .overlay_card import OverlayCard
+from .source_pane import SourcePane
+from sqlch.sources import REGISTRY as SOURCES
 
 
 class _SizeWatch(Gtk.Widget):
@@ -87,9 +89,17 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
             exclude=(self.now_playing.nav_column,),
             sized=False)
 
+        panels = {"library": self.station_list, "discover": self.discover}
+        titles = {}
+        for name, src in SOURCES.items():
+            panels[name] = lambda s=src: SourcePane(self, s)
+            titles[name] = src.TITLE
+        self.now_playing.nav_column.set_sources([
+            {"name": n, "label": s.LABEL, "available": s.available(), "hint": s.HINT}
+            for n, s in SOURCES.items()])
+
         self.docks = DockManager(
-            self,
-            panels={"library": self.station_list, "discover": self.discover},
+            self, panels=panels, titles=titles,
             nav=self.now_playing.nav_column,
             on_shown={"library": self.station_list.on_shown, "discover": lambda: None},
             on_hidden={"library": self.station_list.abort_probes, "discover": lambda: None},
