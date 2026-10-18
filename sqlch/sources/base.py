@@ -8,6 +8,7 @@ class Target(NamedTuple):
     video: bool = False
     meta: dict | None = None
     headers: tuple = ()  # HTTP header lines for mpv, e.g. auth
+    handoff: str | None = None  # play in an external app (see core/handoff.py)
 
 
 def make_item(source, id, title, *, kind="track", artist=None, album=None,

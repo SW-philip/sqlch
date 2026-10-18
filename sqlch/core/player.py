@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from sqlch.core import enrich, library, notify
+from sqlch.core import enrich, handoff, library, notify
 from sqlch.core.paths import runtime_dir
 
 
@@ -333,6 +333,8 @@ def stop(notify_user: bool = True) -> None:
         _preview_timer = None
     from sqlch.core import recorder
     recorder.stop()  # no-op {'ok': False} when idle
+    if _current and _current.get("handoff"):
+        handoff.stop(_current["handoff"])
     _kill_existing()
     _current = None
     if notify_user:
@@ -340,6 +342,9 @@ def stop(notify_user: bool = True) -> None:
 
 
 def pause() -> None:
+    if _current and _current.get("handoff"):
+        handoff.toggle(_current["handoff"])
+        return
     if not mpv_socket().exists():
         return
     mpv_command("cycle", "pause")
@@ -377,10 +382,14 @@ def play_target(target, item: dict[str, Any]) -> None:
     stop(notify_user=False)
     meta = target.meta or {}
     notify.notify("sqlch", f"NOW PLAYING\n{meta.get('title') or item.get('title', '')}")
-    extra = {"headers": target.headers} if target.headers else {}
-    _spawn_mpv(target.url, video=target.video, **extra)
     if meta.get("art") and not item.get("art"):
         item = {**item, "art": meta["art"]}
+    if target.handoff:
+        handoff.play(target.handoff, target.url)
+        _current = {"type": "item", "item": item, "handoff": target.handoff}
+        return
+    extra = {"headers": target.headers} if target.headers else {}
+    _spawn_mpv(target.url, video=target.video, **extra)
     _current = {"type": "item", "item": item}
 
 
@@ -466,7 +475,7 @@ def current() -> dict[str, Any] | None:
 
 def now_playing_info() -> dict:
     """Return structured now-playing info pulled from live MPV ICY metadata."""
-    if not mpv_socket().exists():
+    if not mpv_socket().exists() and not (_current and _current.get("handoff")):
         return {"status": "stopped"}
 
     if _current and _current.get("type") == "item":
