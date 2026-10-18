@@ -145,10 +145,11 @@ def search(query: str) -> list[dict]:
     query = (query or "").strip()
     if not query:
         return []
-    data = _get("/search", {"q": query, "type": "track,album,artist",
+    data = _get("/search", {"q": query, "type": "track,album,artist,playlist",
                             "limit": SEARCH_LIMIT})
     out = _compact(_folder("artist", a) for a in (data.get("artists") or {}).get("items", []))
     out += _compact(_folder("album", a) for a in (data.get("albums") or {}).get("items", []))
+    out += _compact(_folder("playlist", p) for p in (data.get("playlists") or {}).get("items", []))
     out += _compact(_track(t) for t in (data.get("tracks") or {}).get("items", []))
     return out
 

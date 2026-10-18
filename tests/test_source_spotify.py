@@ -84,13 +84,16 @@ class TestSpotify(unittest.TestCase):
         fake = self.api(**{"/search": {
             "artists": {"items": [{"id": "AR", "name": "Band"}]},
             "albums": {"items": [{"id": "AL", "name": "Rec", "artists": [{"name": "Band"}]}]},
+            "playlists": {"items": [None, {"id": "PL", "name": "Mix"}]},
             "tracks": {"items": [TRACK, {"name": "no id"}]}}})
         out = spotify.search("band")
         self.assertEqual([(i["kind"], i["title"]) for i in out],
-                         [("folder", "Band"), ("folder", "Rec"), ("track", "Song")])
+                         [("folder", "Band"), ("folder", "Rec"), ("folder", "Mix"),
+                          ("track", "Song")])
         self.assertEqual(out[1]["path"], "album:AL")
+        self.assertEqual(out[2]["path"], "playlist:PL")
         self.assertEqual(out[1]["artist"], "Band")
-        self.assertEqual((out[2]["artist"], out[2]["album"], out[2]["duration"]),
+        self.assertEqual((out[3]["artist"], out[3]["album"], out[3]["duration"]),
                          ("A, B", "Album", 200.0))
         self.assertEqual(fake.calls[0][1]["q"], "band")
         self.assertEqual(spotify.search("  "), [])
