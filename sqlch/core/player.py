@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 import json
 import os
+import shutil
 import socket
 import subprocess
 import threading
@@ -265,6 +266,12 @@ TIMESHIFT_BYTES = 160 * 1024 * 1024
 LIVE_MARGIN = 1.0  # seeking exactly to the edge stalls on a live stream
 
 
+def _ytdl_path(url: str) -> str | None:
+    if not url.startswith(("https://www.youtube.com/", "https://youtu.be/")):
+        return None
+    return os.environ.get("SQLCH_YTDLP") or shutil.which("yt-dlp")
+
+
 def _mpv_args(url: str, *, video: bool = False, preview: bool = False,
               timeshift: bool = False, headers: tuple = ()) -> list[str]:
     args: list[str] = [
@@ -286,6 +293,10 @@ def _mpv_args(url: str, *, video: bool = False, preview: bool = False,
     if preview:
         args.append("--volume=60")
     args += [f"--http-header-fields-append={h}" for h in headers]
+    ytdl = _ytdl_path(url)
+    if ytdl:
+        # mpv's ytdl hook only searches its own PATH, which the daemon's may lack
+        args.append(f"--script-opts=ytdl_hook-ytdl_path={ytdl}")
     if timeshift:
         args += [f"--cache-secs={TIMESHIFT_SECS}",
                  f"--demuxer-max-bytes={TIMESHIFT_BYTES}",

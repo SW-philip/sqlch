@@ -39,6 +39,17 @@ class TestMpvArgs(unittest.TestCase):
         self.assertEqual(a[-1], "URL")
         self.assertFalse(any("http-header" in x for x in self._args()))
 
+    def test_ytdl_path_only_for_youtube_urls(self):
+        with mock.patch.object(player, "mpv_bin", return_value="mpv"), \
+             mock.patch.object(player, "mpv_socket", return_value=Path("/r/s")), \
+             mock.patch.object(player, "mpris_plugin", return_value=None), \
+             mock.patch.object(player.shutil, "which", return_value="/bin/yt-dlp"):
+            yt = player._mpv_args("https://www.youtube.com/watch?v=x", video=True)
+            other = player._mpv_args("/m/a.mp3")
+        self.assertIn("--script-opts=ytdl_hook-ytdl_path=/bin/yt-dlp", yt)
+        self.assertEqual(yt[-1], "https://www.youtube.com/watch?v=x")
+        self.assertFalse(any("ytdl_hook" in x for x in other))
+
     def test_preview_volume(self):
         self.assertIn("--volume=60", self._args(preview=True))
 
