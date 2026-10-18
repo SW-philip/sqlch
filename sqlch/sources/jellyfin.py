@@ -1,9 +1,9 @@
 """Jellyfin: browse and search the server's libraries, play by direct file URL."""
 
+import json
 from pathlib import Path
-from urllib.parse import quote
-
-import requests
+from urllib.parse import quote, urlencode
+from urllib.request import Request, urlopen
 
 from sqlch.core.paths import cache_dir
 from sqlch.sources import source_config
@@ -48,11 +48,17 @@ def available() -> bool:
     return _token() is not None
 
 
+# stdlib urllib: the gui's python env has no requests, and panes call
+# browse/search in the gui process.
+def _open(path: str, params: dict | None = None) -> bytes:
+    url = _server() + path + (f"?{urlencode(params)}" if params else "")
+    req = Request(url, headers={"X-Emby-Token": _token() or ""})
+    with urlopen(req, timeout=TIMEOUT) as r:
+        return r.read()
+
+
 def _get(path: str, params: dict | None = None):
-    r = requests.get(_server() + path, params=params, timeout=TIMEOUT,
-                     headers={"X-Emby-Token": _token() or ""})
-    r.raise_for_status()
-    return r.json()
+    return json.loads(_open(path, params))
 
 
 def _user_id() -> str:
@@ -137,13 +143,10 @@ def _cover(jf: dict) -> str | None:
     if dest.is_file():
         return str(dest)
     try:
-        r = requests.get(f"{_server()}/Items/{img}/Images/Primary",
-                         params={"maxHeight": 400}, timeout=TIMEOUT,
-                         headers={"X-Emby-Token": _token() or ""})
-        r.raise_for_status()
+        data = _open(f"/Items/{img}/Images/Primary", {"maxHeight": 400})
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(r.content)
-    except (requests.RequestException, OSError):
+        dest.write_bytes(data)
+    except OSError:  # URLError and HTTPError are OSErrors
         return None
     return str(dest)
 

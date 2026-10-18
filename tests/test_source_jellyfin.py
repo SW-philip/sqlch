@@ -19,6 +19,26 @@ class FakeAPI:
         return self.responses[path]
 
 
+class TestOpen(unittest.TestCase):
+    def test_builds_url_and_sends_token(self):
+        seen = {}
+
+        class Resp:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self): return b'{"ok": 1}'
+
+        def fake(req, timeout):
+            seen["url"], seen["tok"] = req.full_url, req.get_header("X-emby-token")
+            return Resp()
+
+        with _cfg(server="http://j:8096/", token_file="/nonexistent"), \
+             mock.patch.object(jellyfin, "_token", return_value="KEY"), \
+             mock.patch.object(jellyfin, "urlopen", fake):
+            self.assertEqual(jellyfin._get("/Items", {"a": "b c"}), {"ok": 1})
+        self.assertEqual(seen, {"url": "http://j:8096/Items?a=b+c", "tok": "KEY"})
+
+
 class TestJellyfin(unittest.TestCase):
     def setUp(self):
         jellyfin._user_ids.clear()
@@ -103,15 +123,14 @@ class TestJellyfin(unittest.TestCase):
         self.api(**{"/Items/T1": {
             "Id": "T1", "Name": "Song", "Type": "Audio", "Artists": ["Band"],
             "Album": "Album", "AlbumId": "A1", "AlbumPrimaryImageTag": "x"}})
-        resp = mock.Mock(content=b"jpg")
-        with mock.patch.object(jellyfin.requests, "get", return_value=resp) as get:
+        with mock.patch.object(jellyfin, "_open", return_value=b"jpg") as op:
             t = jellyfin.resolve({"id": "T1"})
         self.assertEqual(t.url, "http://j:8096/Items/T1/Download?api_key=KEY")
         self.assertFalse(t.video)
         self.assertEqual(t.meta["title"], "Song")
         self.assertTrue(t.meta["art"].endswith("jellyfin/A1.jpg"))
         self.assertEqual(Path(t.meta["art"]).read_bytes(), b"jpg")
-        self.assertIn("/Items/A1/Images/Primary", get.call_args[0][0])
+        self.assertEqual(op.call_args[0][0], "/Items/A1/Images/Primary")
 
     def test_resolve_video_without_art_and_folder_rejected(self):
         self.api(**{"/Items/M1": {"Id": "M1", "Name": "Film", "Type": "Movie"},
@@ -125,8 +144,7 @@ class TestJellyfin(unittest.TestCase):
     def test_cover_failure_is_not_fatal(self):
         self.api(**{"/Items/T1": {"Id": "T1", "Name": "S", "Type": "Audio",
                                   "ImageTags": {"Primary": "x"}}})
-        with mock.patch.object(jellyfin.requests, "get",
-                               side_effect=jellyfin.requests.ConnectionError):
+        with mock.patch.object(jellyfin, "_open", side_effect=OSError):
             t = jellyfin.resolve({"id": "T1"})
         self.assertIsNone(t.meta["art"])
 
