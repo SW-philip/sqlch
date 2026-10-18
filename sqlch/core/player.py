@@ -394,6 +394,9 @@ def play_target(target, item: dict[str, Any]) -> None:
 
 
 def seek(pos: float) -> None:
+    if _current and _current.get("handoff"):
+        handoff.seek(_current["handoff"], float(pos))
+        return
     mpv_command("seek", float(pos), "absolute")
 
 
@@ -423,6 +426,8 @@ def go_live() -> None:
 
 
 def item_progress() -> tuple[float | None, float | None]:
+    if _current and _current.get("handoff"):
+        return handoff.progress(_current["handoff"])
     return mpv_get("time-pos"), mpv_get("duration")
 
 
