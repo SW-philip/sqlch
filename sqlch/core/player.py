@@ -365,6 +365,8 @@ def play_target(target, item: dict[str, Any]) -> None:
     meta = target.meta or {}
     notify.notify("sqlch", f"NOW PLAYING\n{meta.get('title') or item.get('title', '')}")
     _spawn_mpv(target.url, video=target.video)
+    if meta.get("art") and not item.get("art"):
+        item = {**item, "art": meta["art"]}
     _current = {"type": "item", "item": item}
 
 

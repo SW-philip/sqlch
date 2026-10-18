@@ -141,3 +141,14 @@ class TestNowPlayingInfo(unittest.TestCase):
             info = player.now_playing_info()
         self.assertEqual(info["station"], "KEXP")
         self.assertEqual(info["track"], "Track")
+
+
+class TestPlayTargetArt(unittest.TestCase):
+    def test_target_art_fills_missing_item_art(self):
+        item = {"source": "jellyfin", "id": "T1", "title": "S", "art": None}
+        with mock.patch.object(player, "stop"), \
+             mock.patch.object(player.notify, "notify"), \
+             mock.patch.object(player, "_spawn_mpv"):
+            player.play_target(Target("u", False, {"title": "S", "art": "/c/a.jpg"}), item)
+            self.assertEqual(player.current()["item"]["art"], "/c/a.jpg")
+            self.assertIsNone(item["art"])
