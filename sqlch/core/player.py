@@ -266,7 +266,7 @@ LIVE_MARGIN = 1.0  # seeking exactly to the edge stalls on a live stream
 
 
 def _mpv_args(url: str, *, video: bool = False, preview: bool = False,
-              timeshift: bool = False) -> list[str]:
+              timeshift: bool = False, headers: tuple = ()) -> list[str]:
     args: list[str] = [
         mpv_bin(),
         f"--input-ipc-server={mpv_socket()}",
@@ -285,6 +285,7 @@ def _mpv_args(url: str, *, video: bool = False, preview: bool = False,
         args.append("--no-video")
     if preview:
         args.append("--volume=60")
+    args += [f"--http-header-fields-append={h}" for h in headers]
     if timeshift:
         args += [f"--cache-secs={TIMESHIFT_SECS}",
                  f"--demuxer-max-bytes={TIMESHIFT_BYTES}",
@@ -294,9 +295,10 @@ def _mpv_args(url: str, *, video: bool = False, preview: bool = False,
 
 
 def _spawn_mpv(url: str, *, video: bool = False, preview: bool = False,
-               timeshift: bool = False) -> None:
+               timeshift: bool = False, headers: tuple = ()) -> None:
     mpv_socket().parent.mkdir(parents=True, exist_ok=True)
-    args = _mpv_args(url, video=video, preview=preview, timeshift=timeshift)
+    args = _mpv_args(url, video=video, preview=preview, timeshift=timeshift,
+                     headers=headers)
 
     proc = subprocess.Popen(
         args,
@@ -364,7 +366,8 @@ def play_target(target, item: dict[str, Any]) -> None:
     stop(notify_user=False)
     meta = target.meta or {}
     notify.notify("sqlch", f"NOW PLAYING\n{meta.get('title') or item.get('title', '')}")
-    _spawn_mpv(target.url, video=target.video)
+    extra = {"headers": target.headers} if target.headers else {}
+    _spawn_mpv(target.url, video=target.video, **extra)
     if meta.get("art") and not item.get("art"):
         item = {**item, "art": meta["art"]}
     _current = {"type": "item", "item": item}

@@ -32,6 +32,13 @@ class TestMpvArgs(unittest.TestCase):
         self.assertIn("--wayland-app-id=sqlch-video", a)
         self.assertNotIn("--no-video", a)
 
+    def test_http_headers_are_passed_to_mpv(self):
+        a = self._args(headers=("Authorization: X", "K: v"))
+        self.assertIn("--http-header-fields-append=Authorization: X", a)
+        self.assertIn("--http-header-fields-append=K: v", a)
+        self.assertEqual(a[-1], "URL")
+        self.assertFalse(any("http-header" in x for x in self._args()))
+
     def test_preview_volume(self):
         self.assertIn("--volume=60", self._args(preview=True))
 
@@ -141,6 +148,16 @@ class TestNowPlayingInfo(unittest.TestCase):
             info = player.now_playing_info()
         self.assertEqual(info["station"], "KEXP")
         self.assertEqual(info["track"], "Track")
+
+
+class TestPlayTargetHeaders(unittest.TestCase):
+    def test_headers_only_passed_when_present(self):
+        item = {"source": "jellyfin", "id": "T1", "title": "S"}
+        with mock.patch.object(player, "stop"), \
+             mock.patch.object(player.notify, "notify"), \
+             mock.patch.object(player, "_spawn_mpv") as spawn:
+            player.play_target(Target("u", True, {"title": "S"}, ("H: v",)), item)
+        spawn.assert_called_once_with("u", video=True, headers=("H: v",))
 
 
 class TestPlayTargetArt(unittest.TestCase):

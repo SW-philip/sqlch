@@ -7,6 +7,7 @@ class Target(NamedTuple):
     url: str
     video: bool = False
     meta: dict | None = None
+    headers: tuple = ()  # HTTP header lines for mpv, e.g. auth
 
 
 def make_item(source, id, title, *, kind="track", artist=None, album=None,

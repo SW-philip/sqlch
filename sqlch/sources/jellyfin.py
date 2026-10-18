@@ -44,6 +44,10 @@ def _token() -> str | None:
         return None
 
 
+def _auth() -> str:
+    return f'MediaBrowser Token="{_token() or ""}"'
+
+
 def available() -> bool:
     return _token() is not None
 
@@ -52,7 +56,7 @@ def available() -> bool:
 # browse/search in the gui process.
 def _open(path: str, params: dict | None = None) -> bytes:
     url = _server() + path + (f"?{urlencode(params)}" if params else "")
-    req = Request(url, headers={"X-Emby-Token": _token() or ""})
+    req = Request(url, headers={"Authorization": _auth()})
     with urlopen(req, timeout=TIMEOUT) as r:
         return r.read()
 
@@ -160,6 +164,5 @@ def resolve(item: dict) -> Target:
     it = _to_item(jf)
     meta = {k: it[k] for k in ("title", "artist", "album")}
     meta["art"] = _cover(jf)
-    url = (f"{_server()}/Items/{quote(jid, safe='')}/Download"
-           f"?api_key={quote(_token() or '', safe='')}")
-    return Target(url, kind == "video", meta)
+    url = f"{_server()}/Items/{quote(jid, safe='')}/Download"
+    return Target(url, kind == "video", meta, (f"Authorization: {_auth()}",))

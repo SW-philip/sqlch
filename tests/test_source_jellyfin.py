@@ -29,14 +29,14 @@ class TestOpen(unittest.TestCase):
             def read(self): return b'{"ok": 1}'
 
         def fake(req, timeout):
-            seen["url"], seen["tok"] = req.full_url, req.get_header("X-emby-token")
+            seen["url"], seen["tok"] = req.full_url, req.get_header("Authorization")
             return Resp()
 
         with _cfg(server="http://j:8096/", token_file="/nonexistent"), \
              mock.patch.object(jellyfin, "_token", return_value="KEY"), \
              mock.patch.object(jellyfin, "urlopen", fake):
             self.assertEqual(jellyfin._get("/Items", {"a": "b c"}), {"ok": 1})
-        self.assertEqual(seen, {"url": "http://j:8096/Items?a=b+c", "tok": "KEY"})
+        self.assertEqual(seen, {"url": "http://j:8096/Items?a=b+c", "tok": 'MediaBrowser Token="KEY"'})
 
 
 class TestJellyfin(unittest.TestCase):
@@ -125,7 +125,8 @@ class TestJellyfin(unittest.TestCase):
             "Album": "Album", "AlbumId": "A1", "AlbumPrimaryImageTag": "x"}})
         with mock.patch.object(jellyfin, "_open", return_value=b"jpg") as op:
             t = jellyfin.resolve({"id": "T1"})
-        self.assertEqual(t.url, "http://j:8096/Items/T1/Download?api_key=KEY")
+        self.assertEqual(t.url, "http://j:8096/Items/T1/Download")
+        self.assertEqual(t.headers, ('Authorization: MediaBrowser Token="KEY"',))
         self.assertFalse(t.video)
         self.assertEqual(t.meta["title"], "Song")
         self.assertTrue(t.meta["art"].endswith("jellyfin/A1.jpg"))
