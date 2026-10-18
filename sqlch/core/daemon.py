@@ -32,6 +32,9 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
             resp['position'], resp['duration'] = player.item_progress()
         elif cur:
             resp['timeshift'] = player.timeshift()
+            shown = player.displayed_title()
+            if shown:
+                resp['displayed_icy'] = shown
         return resp
     if cmd == 'stop':
         player.stop()

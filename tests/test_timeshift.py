@@ -135,3 +135,50 @@ class TestTimelineBar(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestIcyLog(unittest.TestCase):
+    def setUp(self):
+        player._icy_log.clear()
+        self.addCleanup(player._icy_log.clear)
+
+    def _log(self, end, icy):
+        with mock.patch.object(player, "timeshift",
+                               return_value={"pos": 0, "start": 0, "end": end}):
+            player._log_icy(icy)
+
+    def test_title_follows_playhead(self):
+        self._log(30.0, "A - One")
+        self._log(200.0, "B - Two")
+        self._log(500.0, "C - Three")
+        self.assertEqual(player.title_at(0), "A - One")  # before first entry
+        self.assertEqual(player.title_at(199.9), "A - One")
+        self.assertEqual(player.title_at(200.0), "B - Two")
+        self.assertEqual(player.title_at(900), "C - Three")
+
+    def test_empty_log(self):
+        self.assertIsNone(player.title_at(10))
+
+    def test_log_is_bounded(self):
+        for i in range(player._ICY_LOG_MAX + 25):
+            self._log(float(i), f"T - {i}")
+        self.assertEqual(len(player._icy_log), player._ICY_LOG_MAX)
+        self.assertEqual(player._icy_log[-1][1], f"T - {player._ICY_LOG_MAX + 24}")
+
+    def test_displayed_title_uses_playhead(self):
+        self._log(10.0, "A - One")
+        self._log(100.0, "B - Two")
+        for pos, want in ((50.0, "A - One"), (150.0, "B - Two")):
+            with mock.patch.object(player, "timeshift",
+                                   return_value={"pos": pos, "start": 0, "end": 200}):
+                self.assertEqual(player.displayed_title(), want)
+        with mock.patch.object(player, "timeshift", return_value=None):
+            self.assertIsNone(player.displayed_title())
+
+    def test_status_carries_displayed_icy(self):
+        with mock.patch.object(player, "current", return_value={"type": "station", "item": {}}), \
+             mock.patch.object(player, "status_string", return_value="x"), \
+             mock.patch.object(player, "timeshift", return_value=None), \
+             mock.patch.object(player, "displayed_title", return_value="A - One"), \
+             mock.patch("sqlch.core.recorder.status", return_value={}):
+            self.assertEqual(daemon._handle({"cmd": "status"})["displayed_icy"], "A - One")

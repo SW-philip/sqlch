@@ -44,6 +44,10 @@ _current: dict[str, Any] | None = None
 _preview_timer: threading.Timer | None = None
 _metadata_thread: threading.Thread | None = None
 _metadata_stop = threading.Event()
+# (stream position, raw icy title) per ICY change, keyed by where in the
+# buffer the title arrived so it can be replayed against the playhead.
+_icy_log: list[tuple[float, str]] = []
+_ICY_LOG_MAX = 500
 
 
 # ------------------------------------------------------------
@@ -165,6 +169,31 @@ def _apply_enrichment_now(artist: str | None, track: str, station_name: str) -> 
         mpv_set_userdata("genre", ", ".join(genres))
 
 
+def _log_icy(icy: str) -> None:
+    ts = timeshift()
+    _icy_log.append((ts["end"] if ts else 0.0, icy))
+    del _icy_log[:-_ICY_LOG_MAX]
+
+
+def title_at(pos: float) -> str | None:
+    """Title that was playing at stream position pos. Before the first logged
+    change the earliest known title is the best guess."""
+    if not _icy_log:
+        return None
+    chosen = _icy_log[0]
+    for entry in _icy_log:
+        if entry[0] <= pos:
+            chosen = entry
+        else:
+            break
+    return chosen[1]
+
+
+def displayed_title() -> str | None:
+    ts = timeshift()
+    return title_at(ts["pos"]) if ts else None
+
+
 def _watch_metadata(station_name: str) -> None:
     _metadata_stop.clear()
     last_seen: str | None = None
@@ -179,6 +208,7 @@ def _watch_metadata(station_name: str) -> None:
         if icy and icy != last_seen:
             last_seen = icy
             artist, track = _parse_icy(icy)
+            _log_icy(icy)
             if track:
                 try:
                     _apply_enrichment_now(artist, track, station_name)
@@ -312,6 +342,7 @@ def play_station(station: dict[str, Any]) -> None:
 
     stop(notify_user=False)
     notify.notify("sqlch", f"NOW PLAYING\n{station.get('name', 'Unknown Station')}")
+    _icy_log.clear()
     _spawn_mpv(url, timeshift=True)
     _current = {"type": "station", "item": station}
 

@@ -339,6 +339,9 @@ class NowPlayingPanel(Gtk.Box):
         self._cur_frequency = frequency
         self._live_station_name = station_name
 
+        shown = resp.get("displayed_icy")
+        if shown:
+            icy = metadata.parse_icy(shown)
         raw_artist, raw_title = icy
         artist = raw_artist.strip() if raw_artist else ""
         title = raw_title.strip() if raw_title else ""
