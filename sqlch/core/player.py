@@ -229,7 +229,14 @@ def _kill_existing() -> None:
     _metadata_thread = None
 
 
-def _mpv_args(url: str, *, video: bool = False, preview: bool = False) -> list[str]:
+# One hour of 320 kbps is ~144 MB; forward and back together never exceed an hour.
+TIMESHIFT_SECS = 3600
+TIMESHIFT_BYTES = 160 * 1024 * 1024
+LIVE_MARGIN = 1.0  # seeking exactly to the edge stalls on a live stream
+
+
+def _mpv_args(url: str, *, video: bool = False, preview: bool = False,
+              timeshift: bool = False) -> list[str]:
     args: list[str] = [
         mpv_bin(),
         f"--input-ipc-server={mpv_socket()}",
@@ -248,13 +255,18 @@ def _mpv_args(url: str, *, video: bool = False, preview: bool = False) -> list[s
         args.append("--no-video")
     if preview:
         args.append("--volume=60")
+    if timeshift:
+        args += [f"--cache-secs={TIMESHIFT_SECS}",
+                 f"--demuxer-max-bytes={TIMESHIFT_BYTES}",
+                 f"--demuxer-max-back-bytes={TIMESHIFT_BYTES}"]
     args.append(url)
     return args
 
 
-def _spawn_mpv(url: str, *, video: bool = False, preview: bool = False) -> None:
+def _spawn_mpv(url: str, *, video: bool = False, preview: bool = False,
+               timeshift: bool = False) -> None:
     mpv_socket().parent.mkdir(parents=True, exist_ok=True)
-    args = _mpv_args(url, video=video, preview=preview)
+    args = _mpv_args(url, video=video, preview=preview, timeshift=timeshift)
 
     proc = subprocess.Popen(
         args,
@@ -300,7 +312,7 @@ def play_station(station: dict[str, Any]) -> None:
 
     stop(notify_user=False)
     notify.notify("sqlch", f"NOW PLAYING\n{station.get('name', 'Unknown Station')}")
-    _spawn_mpv(url)
+    _spawn_mpv(url, timeshift=True)
     _current = {"type": "station", "item": station}
 
     sid = station.get("id")
@@ -327,6 +339,31 @@ def play_target(target, item: dict[str, Any]) -> None:
 
 def seek(pos: float) -> None:
     mpv_command("seek", float(pos), "absolute")
+
+
+def timeshift() -> dict[str, float] | None:
+    """Playhead and buffered span of the radio buffer, in mpv stream seconds."""
+    state = mpv_get("demuxer-cache-state") or {}
+    ranges = state.get("seekable-ranges") or []
+    pos = mpv_get("time-pos")
+    if not ranges or pos is None:
+        return None
+    r = ranges[-1]
+    return {"pos": float(pos), "start": float(r["start"]), "end": float(r["end"])}
+
+
+def seek_relative(delta: float) -> None:
+    ts = timeshift()
+    if ts is None:
+        return
+    target = min(max(ts["pos"] + delta, ts["start"]), ts["end"] - LIVE_MARGIN)
+    seek(target)
+
+
+def go_live() -> None:
+    ts = timeshift()
+    if ts is not None:
+        seek(ts["end"] - LIVE_MARGIN)
 
 
 def item_progress() -> tuple[float | None, float | None]:

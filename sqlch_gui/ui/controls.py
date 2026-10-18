@@ -401,3 +401,129 @@ class SeekBar(Gtk.Box):
             return
         self._scale.set_range(0, duration)
         self._scale.set_value(min(position, duration))
+
+
+class TimelineBar(Gtk.Box):
+    """Radio timeshift: the buffered hour as a strip with a playhead, a
+    behind-live readout, back/forward 15 s and a LIVE button. Drawn as a
+    timeline (buffered span, playhead tick, 10-minute marks from the live
+    edge), not a scrubber dot. Hidden until there is audio to move into."""
+
+    __gsignals__ = {
+        'seek-requested': (GObject.SignalFlags.RUN_LAST, None, (float,)),
+        'seek-relative': (GObject.SignalFlags.RUN_LAST, None, (float,)),
+        'go-live': (GObject.SignalFlags.RUN_LAST, None, ()),
+    }
+    HOLD = 1.5
+    MIN_BUFFER = 10.0
+    LIVE_WITHIN = 3.0
+    STEP = 15.0
+    MARK_EVERY = 600.0
+
+    def __init__(self):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        self.add_css_class("timeline-bar")
+        self._hold_until = 0.0
+        self._ts = None
+
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self._back = Gtk.Button(label="−15")
+        self._fwd = Gtk.Button(label="+15")
+        self._live = Gtk.Button(label="LIVE")
+        for b in (self._back, self._fwd, self._live):
+            b.add_css_class("timeline-btn")
+        self._back.connect("clicked", lambda _b: self.emit("seek-relative", -self.STEP))
+        self._fwd.connect("clicked", lambda _b: self.emit("seek-relative", self.STEP))
+        self._live.connect("clicked", lambda _b: self.emit("go-live"))
+
+        self._strip = Gtk.DrawingArea()
+        self._strip.set_hexpand(True)
+        self._strip.set_content_height(16)
+        self._strip.set_draw_func(self._on_draw)
+        click = Gtk.GestureClick.new()
+        click.connect("pressed", lambda _g, _n, x, _y: self._seek_to_x(x))
+        self._strip.add_controller(click)
+        drag = Gtk.GestureDrag.new()
+        drag.connect("drag-update", self._on_drag_update)
+        drag.connect("drag-begin", lambda _g, x, _y: self._seek_to_x(x))
+        self._strip.add_controller(drag)
+        self._drag_start_x = 0.0
+
+        row.append(self._back)
+        row.append(self._strip)
+        row.append(self._fwd)
+        row.append(self._live)
+        self._label = Gtk.Label(label="")
+        self._label.add_css_class("seek-time")
+        self.append(row)
+        self.append(self._label)
+        self.set_visible(False)
+
+    def behind(self) -> float:
+        ts = self._ts
+        return max(0.0, ts["end"] - ts["pos"]) if ts else 0.0
+
+    def set_state(self, ts):
+        if not ts or ts["end"] - ts["start"] < self.MIN_BUFFER:
+            self._ts = None
+            self.set_visible(False)
+            return
+        self.set_visible(True)
+        if time.monotonic() >= self._hold_until:
+            self._ts = ts
+        else:
+            self._ts = dict(ts, pos=self._ts["pos"] if self._ts else ts["pos"])
+        behind = self.behind()
+        at_live = behind < self.LIVE_WITHIN
+        self._label.set_text(
+            "LIVE" if at_live else f"−{format_duration(behind)} behind live")
+        self._live.set_sensitive(not at_live)
+        self._strip.queue_draw()
+
+    def _x_to_pos(self, x: float):
+        ts = self._ts
+        w = self._strip.get_width()
+        if not ts or w <= 0:
+            return None
+        frac = max(0.0, min(1.0, x / w))
+        return ts["start"] + frac * (ts["end"] - ts["start"])
+
+    def _seek_to_x(self, x: float):
+        pos = self._x_to_pos(x)
+        if pos is None:
+            return
+        self._hold_until = time.monotonic() + self.HOLD
+        self._ts = dict(self._ts, pos=pos)
+        self._strip.queue_draw()
+        self.emit("seek-requested", pos)
+
+    def _on_drag_update(self, gesture, dx, _dy):
+        ok, sx, _sy = gesture.get_start_point()
+        if ok:
+            self._seek_to_x(sx + dx)
+
+    def _on_draw(self, area, cr, width, height, user_data=None):
+        ts = self._ts
+        colors = palette.load()
+        trough = _hex_to_rgb_floats(colors.get('DIM', '#1a1828'))
+        span = _hex_to_rgb_floats(colors.get('WING', '#393552'))
+        head = _hex_to_rgb_floats(colors.get('SCORE', '#e0def4'))
+        cr.set_source_rgba(*trough, 1.0)
+        cr.rectangle(0, 2, width, height - 4)
+        cr.fill()
+        if not ts:
+            return
+        total = ts["end"] - ts["start"]
+        px = lambda t: (t - ts["start"]) / total * width  # noqa: E731
+        cr.set_source_rgba(*span, 1.0)
+        cr.rectangle(0, 2, px(ts["pos"]), height - 4)
+        cr.fill()
+        cr.set_source_rgba(*head, 0.45)
+        t = ts["end"] - self.MARK_EVERY
+        while t > ts["start"]:
+            cr.rectangle(px(t) - 0.5, height - 6, 1, 4)
+            t -= self.MARK_EVERY
+        cr.fill()
+        cr.set_source_rgba(*head, 1.0)
+        cr.rectangle(min(max(px(ts["pos"]) - 1.5, 0), width - 3), 0, 3, height)
+        cr.fill()

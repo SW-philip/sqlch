@@ -30,6 +30,8 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
                 'recording': recorder.status()}
         if cur and cur.get('type') == 'item':
             resp['position'], resp['duration'] = player.item_progress()
+        elif cur:
+            resp['timeshift'] = player.timeshift()
         return resp
     if cmd == 'stop':
         player.stop()
@@ -83,6 +85,16 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
         except (KeyError, TypeError, ValueError):
             return {'ok': False, 'error': 'missing pos'}
         player.seek(pos)
+        return {'ok': True}
+    if cmd == 'seek_rel':
+        try:
+            delta = float(msg['delta'])
+        except (KeyError, TypeError, ValueError):
+            return {'ok': False, 'error': 'missing delta'}
+        player.seek_relative(delta)
+        return {'ok': True}
+    if cmd == 'go_live':
+        player.go_live()
         return {'ok': True}
     if cmd == 'preview':
         url = (msg.get('url') or '').strip()

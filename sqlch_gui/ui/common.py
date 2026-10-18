@@ -582,6 +582,16 @@ def _build_css(colors: dict) -> str:
         min-width: 10px;
         min-height: 10px;
     }}
+    .timeline-btn {{
+        min-height: 0;
+        min-width: 0;
+        padding: 0 5px;
+        font-family: {mono};
+        font-size: 0.65em;
+        color: {rest};
+        background: transparent;
+        box-shadow: none;
+    }}
     .seek-time {{
         font-family: {mono};
         font-size: 0.65em;

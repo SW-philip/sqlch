@@ -9,7 +9,7 @@ from pathlib import Path
 from gi.repository import Gtk, GLib, GdkPixbuf, GObject, Pango
 
 from .. import XDG_CACHE, daemon, metadata
-from .controls import VolumeMeter, RecordBubble, NavColumn, SeekBar
+from .controls import VolumeMeter, RecordBubble, NavColumn, SeekBar, TimelineBar
 from .header import Header
 
 _COVER_SIZE = 220     # keep in sync with .cover-art's min-width/min-height in common.py
@@ -140,6 +140,13 @@ class NowPlayingPanel(Gtk.Box):
         self.seek_bar = SeekBar()
         self.seek_bar.connect("seek-requested", self._on_seek_requested)
         card.append(self.seek_bar)
+
+        self.timeline = TimelineBar()
+        self.timeline.connect("seek-requested", self._on_seek_requested)
+        self.timeline.connect(
+            "seek-relative", lambda _b, d: self._send_async({"cmd": "seek_rel", "delta": d}))
+        self.timeline.connect("go-live", lambda _b: self._send_async({"cmd": "go_live"}))
+        card.append(self.timeline)
 
         # --- Row 4: RecordBubble / stop-play toggle | speaker + volume meter ---
         control_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -305,14 +312,17 @@ class NowPlayingPanel(Gtk.Box):
             self._set_stale(True)
             self.lbl_live_tag.set_visible(False)
             self.seek_bar.set_state(None, None)
+            self.timeline.set_state(None)
             return
 
         self._set_stale(False)
         curr = resp["current"]
         if curr.get("type") == "item":
+            self.timeline.set_state(None)
             self._update_item(curr.get("item") or {}, resp)
             return
         self.seek_bar.set_state(None, None)
+        self.timeline.set_state(resp.get("timeshift"))
         # resp["current"] is {"type": "station", "item": station}, not a
         # flat station dict -- id/name/frequency live under "item".
         item = curr.get("item") or {}
@@ -388,6 +398,9 @@ class NowPlayingPanel(Gtk.Box):
                 self.clear_cover()
 
         self.seek_bar.set_state(resp.get("position"), resp.get("duration"))
+
+    def _send_async(self, msg: dict):
+        threading.Thread(target=daemon.send, args=(msg,), daemon=True).start()
 
     def _on_seek_requested(self, _bar, pos: float):
         threading.Thread(target=daemon.send, args=({"cmd": "seek", "pos": pos},),
