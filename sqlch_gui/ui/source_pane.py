@@ -9,6 +9,8 @@ from sqlch.core import follows, progress as watch_progress
 from sqlch.sources import safe_available, sections_for
 
 from .. import daemon
+from .banner import RibbonBanner
+from .grouping import LABELS, group, next_mode
 from .timefmt import format_date, format_duration
 
 _THUMBS = ThreadPoolExecutor(max_workers=4, thread_name_prefix="thumb")
@@ -54,6 +56,10 @@ class SourcePane(Gtk.Box):
         self._progress: dict = {}
         self._row_refs: dict = {}
         self._oldest_first = False
+        self._groupings = tuple(getattr(source, "GROUPINGS", ()) or ())
+        self._group_mode = self._groupings[0] if self._groupings else None
+        self._collapsed: set = set()
+        self._group_rows: list = []
 
         search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         self.entry = Gtk.Entry(placeholder_text=f"Search {source.NAME}...")
@@ -70,6 +76,13 @@ class SourcePane(Gtk.Box):
             self.btn_order.add_css_class("section-pill")
             self.btn_order.connect("toggled", self._on_order_toggled)
             search_box.append(self.btn_order)
+        self.btn_group = None
+        if self._groupings:
+            self.btn_group = Gtk.Button(label=LABELS.get(self._group_mode, self._group_mode))
+            self.btn_group.add_css_class("section-pill")
+            self.btn_group.set_tooltip_text("Group by")
+            self.btn_group.connect("clicked", self._on_group_clicked)
+            search_box.append(self.btn_group)
         self.append(search_box)
 
         self.section_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
@@ -205,6 +218,7 @@ class SourcePane(Gtk.Box):
             return False
         self._items = list(result or [])
         self._progress = self._watch.read_all()
+        self._collapsed = set()
         self._fill()
         self._set_status(warning or ("" if self._items else "Nothing here"))
         return False
@@ -213,12 +227,62 @@ class SourcePane(Gtk.Box):
         while child := self.list.get_first_child():
             self.list.remove(child)
         self._row_refs = {}
+        self._group_rows = []
+        if self._grouped():
+            self._fill_grouped()
+            return
         items = self._items
         if self._oldest_first:
             # Stable: undated rows (folders) keep their place after the dated ones.
             items = sorted(items, key=lambda i: (i.get("date") is None, i.get("date") or 0))
         for item in items:
             self.list.append(self._build_row(item))
+
+    def _grouped(self):
+        return bool(self._groupings) and not self._stack and \
+            (self._searching or self._section != "favorites")
+
+    def _fill_grouped(self):
+        path: list[str] = []
+        providers = getattr(self.source, "PROVIDERS", None) or {}
+        for kind, value, extra in group(self._items, self._group_mode, providers):
+            if kind == "header":
+                del path[extra:]
+                path.append(value)
+                key = "/".join(path)
+                banner = RibbonBanner(value, gold=extra == 0, collapsible=True,
+                                      collapsed=key in self._collapsed,
+                                      on_toggle=lambda c, k=key: self._toggle_group(k, c))
+                if extra:
+                    banner.set_margin_start(10 * extra)
+                self.list.append(banner)
+                self._group_rows.append((banner, extra, key))
+            else:
+                row = self._build_row(value, tag=extra)
+                self.list.append(row)
+                self._group_rows.append((row, None, None))
+        self._apply_collapse()
+
+    def _toggle_group(self, key, collapsed):
+        if collapsed:
+            self._collapsed.add(key)
+        else:
+            self._collapsed.discard(key)
+        self._apply_collapse()
+
+    def _apply_collapse(self):
+        hidden_below = None  # depth of the collapsed header hiding what follows
+        for widget, depth, key in self._group_rows:
+            if depth is not None and hidden_below is not None and depth <= hidden_below:
+                hidden_below = None
+            (widget.get_parent() or widget).set_visible(hidden_below is None)
+            if depth is not None and hidden_below is None and key in self._collapsed:
+                hidden_below = depth
+
+    def _on_group_clicked(self, button):
+        self._group_mode = next_mode(self._group_mode, self._groupings)
+        button.set_label(LABELS.get(self._group_mode, self._group_mode))
+        self._fill()
 
     def _on_order_toggled(self, button):
         self._oldest_first = button.get_active()
@@ -258,7 +322,7 @@ class SourcePane(Gtk.Box):
         else:
             self.crumb.set_text(" / ".join(t for _, t in self._stack))
 
-    def _build_row(self, item):
+    def _build_row(self, item, tag=None):
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         row.add_css_class("station-row")
         is_video = item.get("kind") == "video"
@@ -272,7 +336,7 @@ class SourcePane(Gtk.Box):
         title.set_ellipsize(3)
         body.append(title)
         sub_text = " · ".join(x for x in (item.get("artist"), item.get("album"),
-                                          format_date(item.get("date"))) if x)
+                                          format_date(item.get("date")), tag) if x)
         sub = Gtk.Label(label=sub_text, xalign=0.0)
         sub.add_css_class("station-live")
         sub.set_ellipsize(3)

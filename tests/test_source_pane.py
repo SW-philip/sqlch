@@ -5,6 +5,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gtk
 
+from sqlch_gui.ui.banner import RibbonBanner
 from sqlch_gui.ui.source_pane import SourcePane
 from sqlch_gui.ui.timefmt import format_date, format_duration
 
@@ -655,3 +656,97 @@ class TestSearchWarning(unittest.TestCase):
         p.on_shown()
         p._search("x")
         self.assertFalse(p.status.get_visible())
+
+
+def show_item(title, genre, providers):
+    return {"source": "fake", "id": title, "title": title, "kind": "folder",
+            "path": f"feed:{title}", "feed_url": f"https://f/{title}",
+            "genre": genre, "providers": list(providers)}
+
+
+SHOWS = [show_item("Serial", "True Crime", ["apple"]),
+         show_item("Conan", "Comedy", ["apple", "podcastindex"])]
+
+
+def grouped_fake(tree=None):
+    src = Fake(tree=tree or {"section:following": SHOWS, "feed:Conan": [TRACK]})
+    src.GROUPINGS = ("source", "genre", "az")
+    src.PROVIDERS = {"apple": {"title": "APPLE PODCASTS", "short": "apple"},
+                     "podcastindex": {"title": "PODCAST INDEX", "short": "pi"}}
+    src.sections = lambda: [{"id": "following", "title": "FOLLOWING"}]
+    return src
+
+
+def list_texts(p):
+    """Header texts and row titles in list order, visible rows only."""
+    out = []
+    row = p.list.get_first_child()
+    while row:
+        child = row.get_child() if isinstance(row, Gtk.ListBoxRow) else row
+        if row.get_visible():
+            if isinstance(child, RibbonBanner):
+                out.append(("H", child._text))
+            else:
+                out.append(("R", labels_of(child)[0].get_text()))
+        row = row.get_next_sibling()
+    return out
+
+
+class TestGroupedPane(unittest.TestCase):
+    def test_no_sort_pill_without_groupings(self):
+        p = make(Fake())
+        self.assertIsNone(p.btn_group)
+
+    def test_source_mode_by_default(self):
+        p = make(grouped_fake())
+        p.on_shown()
+        self.assertEqual(p.btn_group.get_label(), "SOURCE")
+        self.assertEqual(list_texts(p), [
+            ("H", "APPLE PODCASTS"), ("H", "Comedy"), ("R", "Conan"),
+            ("H", "True Crime"), ("R", "Serial"),
+            ("H", "PODCAST INDEX"), ("H", "Comedy"), ("R", "Conan")])
+
+    def test_cycling_regroups_without_reloading(self):
+        src = grouped_fake()
+        p = make(src)
+        p.on_shown()
+        loads = len(src.browsed)
+        p.btn_group.emit("clicked")
+        self.assertEqual(p.btn_group.get_label(), "GENRE")
+        self.assertEqual(list_texts(p), [("H", "Comedy"), ("R", "Conan"),
+                                         ("H", "True Crime"), ("R", "Serial")])
+        p.btn_group.emit("clicked")
+        self.assertEqual(p.btn_group.get_label(), "A–Z")
+        self.assertEqual(list_texts(p), [("R", "Conan"), ("R", "Serial")])
+        self.assertEqual(len(src.browsed), loads)
+
+    def test_collapsing_a_source_hides_its_genres_and_rows(self):
+        p = make(grouped_fake())
+        p.on_shown()
+        p._toggle_group("APPLE PODCASTS", True)
+        self.assertEqual(list_texts(p), [("H", "APPLE PODCASTS"), ("H", "PODCAST INDEX"),
+                                         ("H", "Comedy"), ("R", "Conan")])
+        p._toggle_group("APPLE PODCASTS", False)
+        p._toggle_group("APPLE PODCASTS/Comedy", True)
+        self.assertEqual(list_texts(p)[:4], [("H", "APPLE PODCASTS"), ("H", "Comedy"),
+                                             ("H", "True Crime"), ("R", "Serial")])
+
+    def test_episode_lists_are_not_grouped(self):
+        p = make(grouped_fake())
+        p.on_shown()
+        p._activate(SHOWS[1])
+        self.assertEqual(list_texts(p), [("R", "Song")])
+
+    def test_favorites_are_not_grouped(self):
+        p = make(grouped_fake(), store=FakeStore(favs=SHOWS))
+        p.on_shown()
+        p._select_section("favorites")
+        self.assertEqual(list_texts(p), [("R", "Serial"), ("R", "Conan")])
+
+    def test_search_results_are_grouped(self):
+        src = grouped_fake()
+        src.search = lambda q: SHOWS
+        p = make(src)
+        p.on_shown()
+        p._search("x")
+        self.assertEqual(list_texts(p)[0], ("H", "APPLE PODCASTS"))
