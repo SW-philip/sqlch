@@ -20,8 +20,7 @@ TITLE = "SPOTIFY"
 LABEL = "Spotify"
 HINT = ("Needs SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in "
         "/run/secrets/spotify_env, and the Spotify desktop app to play. "
-        "Run `sqlch spotify-login` to see your playlists and followed artists. "
-        'Browse shortcuts: sources.spotify.shortcuts [{"name": "...", "uri": "spotify:playlist:..."}]')
+        "Run `sqlch spotify-login` to see your playlists and followed artists.")
 
 DEFAULT_ENV_FILE = "/run/secrets/spotify_env"
 TIMEOUT = 8
@@ -31,7 +30,6 @@ MAX_ITEMS = 200
 PAGE = 50
 LOGIN_NEEDED = f"Not logged in to Spotify: {spotify_auth.LOGIN_HINT}"
 KINDS = ("artist", "album", "playlist")
-_REF = re.compile(r"(?:spotify:|open\.spotify\.com/(?:intl-[a-z]+/)?)(artist|album|playlist)[:/]([A-Za-z0-9]+)")
 _ID = re.compile(r"^[A-Za-z0-9]+$")
 
 
@@ -137,21 +135,8 @@ def _compact(items) -> list[dict]:
     return [i for i in items if i]
 
 
-def _shortcuts() -> list[dict]:
-    cfg = source_config(NAME)
-    raw = cfg.get("shortcuts") if isinstance(cfg, dict) else None
-    out = []
-    for s in raw if isinstance(raw, list) else []:
-        m = _REF.search(str(s.get("uri") or s.get("url") or "")) if isinstance(s, dict) else None
-        if m and s.get("name"):
-            out.append(make_item(NAME, m[2], s["name"], kind="folder",
-                                 path=f"{m[1]}:{m[2]}"))
-    return out
-
-
 def sections() -> list[dict]:
-    return [{"id": "shortcuts", "title": "SHORTCUTS"},
-            {"id": "playlists", "title": "PLAYLISTS"},
+    return [{"id": "playlists", "title": "PLAYLISTS"},
             {"id": "artists", "title": "ARTISTS"}]
 
 
@@ -188,9 +173,7 @@ def _followed_artists() -> list[dict]:
 
 
 def browse(path: str | None = None) -> list[dict]:
-    if not path or path == "section:shortcuts":
-        return _shortcuts()
-    if path == "section:playlists":
+    if not path or path == "section:playlists":
         _need_login()
         return _compact(_folder("playlist", p) for p in _my_playlists())
     if path == "section:artists":

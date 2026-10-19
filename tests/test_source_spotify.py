@@ -77,14 +77,6 @@ class TestSpotify(unittest.TestCase):
             json.dumps({"access_token": "TOK", "expires_at": 9e12}))
         self.assertEqual(spotify._token(), "TOK")
 
-    def test_root_shortcuts_parse_uris_and_urls(self):
-        self.cfg(env_file=str(self.env), shortcuts=[
-            {"name": "A", "uri": "spotify:playlist:PL1"},
-            {"name": "B", "url": "https://open.spotify.com/intl-de/artist/AR9?si=x"},
-            {"name": "bad", "uri": "spotify:track:T1"}, {"uri": "spotify:album:X"}, "junk"])
-        self.assertEqual([(i["title"], i["path"]) for i in spotify.browse(None)],
-                         [("A", "playlist:PL1"), ("B", "artist:AR9")])
-
     def test_search_orders_artists_albums_tracks(self):
         fake = self.api(**{"/search": {
             "artists": {"items": [{"id": "AR", "name": "Band"}]},
@@ -141,12 +133,16 @@ class TestSpotify(unittest.TestCase):
 
     def test_sections(self):
         self.assertEqual([s["id"] for s in spotify.sections()],
-                         ["shortcuts", "playlists", "artists"])
+                         ["playlists", "artists"])
 
-    def test_shortcuts_section_is_the_old_root(self):
-        with mock.patch.object(spotify, "_shortcuts", return_value=["s"]):
-            self.assertEqual(spotify.browse("section:shortcuts"), ["s"])
-            self.assertEqual(spotify.browse(None), ["s"])
+    def test_root_is_playlists(self):
+        with mock.patch.object(spotify, "_my_playlists", return_value=[]), \
+                mock.patch.object(spotify.spotify_auth, "logged_in", return_value=True):
+            self.assertEqual(spotify.browse(None), [])
+            self.assertEqual(spotify.browse("section:playlists"), [])
+
+    def test_hint_has_no_shortcuts(self):
+        self.assertNotIn("shortcuts", spotify.HINT)
 
     def logged_in(self, value=True):
         p = mock.patch.object(spotify.spotify_auth, "logged_in", return_value=value)
