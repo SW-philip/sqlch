@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from sqlch import sources
-from sqlch.core import library, notify, player, discover
+from sqlch.core import discover, follows, library, notify, player, watcher
+from sqlch.sources import youtube
 from sqlch.core.paths import runtime_dir
 
 
@@ -145,6 +146,29 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
             cur = player.current() or {}
             return recorder.start(mode, cur.get('item'))
         return {'ok': False, 'error': f'unknown record action: {action}'}
+    if cmd == 'toggle_favorite':
+        item = msg.get('item')
+        if not isinstance(item, dict):
+            return {'ok': False, 'error': 'missing item'}
+        try:
+            return {'ok': True, 'favorite': follows.toggle_favorite(item)}
+        except ValueError as e:
+            return {'ok': False, 'error': str(e)}
+    if cmd == 'follow':
+        cid = msg.get('channel_id')
+        if not isinstance(cid, str) or not youtube.valid_channel_id(cid):
+            return {'ok': False, 'error': 'bad channel id'}
+        name = msg.get('name')
+        follows.follow(cid, name if isinstance(name, str) and name else cid)
+        return {'ok': True}
+    if cmd == 'unfollow':
+        cid = msg.get('channel_id')
+        if not isinstance(cid, str):
+            return {'ok': False, 'error': 'bad channel id'}
+        follows.unfollow(cid)
+        return {'ok': True}
+    if cmd == 'drain_notices':
+        return {'ok': True, 'notices': watcher.drain()}
     return {'ok': False, 'error': f'unknown cmd: {cmd}'}
 
 
@@ -153,6 +177,7 @@ def run_daemon():
     # Start MPRIS daemon in background thread
     from sqlch.core import mpris_daemon
     threading.Thread(target=mpris_daemon.main, daemon=True, name="mpris").start()
+    watcher.start(youtube.fetch_feed, youtube.poll_seconds)
 
     try:
         if sock.exists():
