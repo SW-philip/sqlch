@@ -137,6 +137,12 @@ class TestPane(unittest.TestCase):
         self.assertEqual(s.browsed, [])
         self.assertEqual(p.status.get_text(), "set it up")
         self.assertTrue(p.status.get_visible())
+        self.assertFalse(p.section_row.get_visible())
+
+    def test_available_shows_section_row(self):
+        p = make(Fake(tree={None: []}))
+        p.on_shown()
+        self.assertTrue(p.section_row.get_visible())
 
     def test_error(self):
         p = make(Fake(tree=FileNotFoundError("gone")))

@@ -132,7 +132,11 @@ def fetch_feed(channel_id: str) -> list[dict]:
 
 
 def poll_seconds() -> float:
-    minutes = source_config(NAME).get("poll_minutes")
+    try:
+        cfg = source_config(NAME)
+    except Exception:
+        cfg = {}
+    minutes = cfg.get("poll_minutes") if isinstance(cfg, dict) else None
     if isinstance(minutes, bool) or not isinstance(minutes, (int, float)):
         minutes = DEFAULT_POLL_MINUTES
     return max(1, minutes) * 60

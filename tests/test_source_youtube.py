@@ -170,6 +170,14 @@ class TestYoutube(unittest.TestCase):
         self.cfg(poll_minutes="soon")
         self.assertEqual(youtube.poll_seconds(), 30 * 60)
 
+    def test_poll_seconds_survives_malformed_config(self):
+        def boom(name):
+            raise AttributeError("sources is a list")
+
+        for repl in (lambda n: ["x"], lambda n: "x", boom):
+            with mock.patch.object(youtube, "source_config", repl):
+                self.assertEqual(youtube.poll_seconds(), 30 * 60)
+
 
 if __name__ == "__main__":
     unittest.main()

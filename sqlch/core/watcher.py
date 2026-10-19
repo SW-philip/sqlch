@@ -16,6 +16,7 @@ log = logging.getLogger(__name__)
 SUMMARY_OVER = 3     # more new videos than this from one channel -> one summary notice
 GIVE_UP_AFTER = 10   # consecutive failures before a single "can't reach" notice
 MAX_NOTICES = 20
+DEFAULT_INTERVAL = 30 * 60
 
 
 class Watcher:
@@ -71,7 +72,12 @@ class Watcher:
                 self.poll_once()
             except Exception:
                 log.exception("watcher poll failed")
-            time.sleep(interval())
+            try:
+                wait = interval()
+            except Exception:
+                log.exception("watcher interval failed; using default")
+                wait = DEFAULT_INTERVAL
+            time.sleep(wait)
 
 
 _watcher: Watcher | None = None

@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 from sqlch.core import watcher
 
@@ -35,6 +36,26 @@ def make(rows, feeds):
         return feed
 
     return watcher.Watcher(fetch, store=store, clock=lambda: 42.0), store
+
+
+class Stop(Exception):
+    pass
+
+
+class TestRun(unittest.TestCase):
+    def test_bad_interval_falls_back_to_default(self):
+        w, _ = make([], {})
+        polled = []
+        w.poll_once = lambda: polled.append(1)
+
+        def bad():
+            raise AttributeError("sources is a list")
+
+        with mock.patch.object(watcher.time, "sleep", side_effect=Stop) as sleep:
+            with self.assertRaises(Stop):
+                w.run(bad)
+        self.assertEqual(polled, [1])
+        sleep.assert_called_once_with(watcher.DEFAULT_INTERVAL)
 
 
 class TestPoll(unittest.TestCase):

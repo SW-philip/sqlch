@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -46,17 +47,52 @@ class TestFavorites(Base):
         follows.toggle_favorite(ITEM)
         self.assertEqual([p.name for p in self.dir.iterdir()], ["favorites.json"])
 
-    def test_corrupt_file_is_quarantined_and_store_recovers(self):
+    def bad_files(self, name="favorites.json"):
+        return sorted(self.dir.glob(name + ".*.bad"))
+
+    def test_reader_leaves_corrupt_file_alone(self):
+        for text in ("{not json", '{"a": 1}'):
+            (self.dir / "favorites.json").write_text(text)
+            self.assertEqual(follows.list_favorites("youtube"), [])
+            self.assertEqual(follows.favorite_ids("youtube"), set())
+            self.assertEqual((self.dir / "favorites.json").read_text(), text)
+            self.assertEqual(self.bad_files(), [])
+        (self.dir / "youtube_follows.json").write_text("{not json")
+        self.assertEqual(follows.list_follows(), [])
+        self.assertEqual(follows.followed_ids(), set())
+        self.assertTrue((self.dir / "youtube_follows.json").exists())
+        self.assertEqual(self.bad_files("youtube_follows.json"), [])
+
+    def test_writer_quarantines_corrupt_file_then_succeeds(self):
         (self.dir / "favorites.json").write_text("{not json")
-        self.assertEqual(follows.list_favorites("youtube"), [])
-        self.assertTrue((self.dir / "favorites.json.bad").exists())
         self.assertTrue(follows.toggle_favorite(ITEM))
         self.assertEqual(follows.list_favorites("youtube"), [ITEM])
+        (bad,) = self.bad_files()
+        self.assertEqual(bad.read_text(), "{not json")
 
-    def test_non_list_file_is_quarantined(self):
+    def test_writer_quarantines_non_list_file(self):
         (self.dir / "favorites.json").write_text('{"a": 1}')
-        self.assertEqual(follows.list_favorites("youtube"), [])
-        self.assertTrue((self.dir / "favorites.json.bad").exists())
+        self.assertTrue(follows.toggle_favorite(ITEM))
+        self.assertEqual(len(self.bad_files()), 1)
+
+    def test_writer_raises_on_os_error_and_touches_nothing(self):
+        (self.dir / "favorites.json").write_text(json.dumps([ITEM]))
+        before = sorted(p.name for p in self.dir.iterdir())
+        with mock.patch.object(Path, "read_text", side_effect=PermissionError("no")):
+            with self.assertRaises(PermissionError):
+                follows.toggle_favorite(OTHER)
+            with self.assertRaises(PermissionError):
+                follows.follow("UC1", "A")
+            self.assertEqual(follows.list_favorites("youtube"), [])
+        self.assertEqual(sorted(p.name for p in self.dir.iterdir()), before)
+        self.assertEqual(follows.list_favorites("youtube"), [ITEM])
+
+    def test_two_quarantines_keep_two_files(self):
+        for text in ("{one", "{two"):
+            (self.dir / "favorites.json").write_text(text)
+            follows.toggle_favorite(ITEM)
+        self.assertEqual(len(self.bad_files()), 2)
+        self.assertEqual({p.read_text() for p in self.bad_files()}, {"{one", "{two"})
 
 
 class TestFollows(Base):

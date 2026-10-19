@@ -24,7 +24,8 @@ uploads a new video.
   answered by the pane from `follows.list_favorites(source)` and never reaches
   the source, so no source can omit it.
 - `SourcePane` shows a pill row above the list (for example
-  `CHANNELS · FAVORITES`) only when the source has sections. Style matches the
+  `CHANNELS · FAVORITES`). A source with no sections of its own shows
+  `BROWSE · FAVORITES`. The row is hidden for an unavailable source. Style matches the
   other flat panes. A section with no items keeps its button and shows an
   empty-state line.
 - Search results replace the list as they do now. Clearing the search returns
@@ -34,7 +35,7 @@ uploads a new video.
   - **Jellyfin:** LIBRARIES (today's root listing), PLAYLISTS, FAVORITES.
   - **Spotify:** SHORTCUTS (today's list), FAVORITES. Account playlists need an
     extra scope and are out of scope.
-  - **Local, video:** FAVORITES only.
+  - **Local, video:** BROWSE (today's listing), FAVORITES.
 
 ## 2. Favorites
 
@@ -110,8 +111,12 @@ uploads a new video.
   ten consecutive failures for a channel, one "can't reach <Channel>" notice is
   queued, then that channel stays quiet until it succeeds again.
 - An unavailable source shows its existing setup hint and loads no sections.
-- A corrupt JSON file is renamed to `<name>.bad`, logged, and replaced by an
-  empty store. It never raises into the daemon.
+- Only the daemon writes or quarantines the store files; the gui only reads.
+  When a daemon writer finds corrupt JSON or a non-list payload, it renames the
+  file to `<name>.<timestamp>.bad` (a name never reused), logs it, and starts
+  from an empty store. Readers (the gui, and daemon read-only calls) log and
+  return an empty list without touching the file. Any other I/O error makes a
+  writer fail, and the daemon replies `{ok: false, error}`.
 
 ## 7. Testing
 
@@ -124,7 +129,7 @@ uploads a new video.
 - `toast`: shows text, auto-hides, queues a second toast behind the first
   (timer injectable).
 - `source_pane` (same pattern as `tests/test_source_pane.py`): section row
-  appears only with sections, star toggles, search then clear returns to the
+  shows source sections or BROWSE, plus FAVORITES, and is hidden for unavailable sources, star toggles, search then clear returns to the
   section, Follow/Unfollow reflects state.
 - Source `sections()` and `section:` browse tests for YouTube, Jellyfin,
   Spotify.

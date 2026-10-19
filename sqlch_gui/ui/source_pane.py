@@ -115,6 +115,7 @@ class SourcePane(Gtk.Box):
             return
         self._loaded = True
         if not safe_available(self.source):
+            self.section_row.set_visible(False)
             self._set_status(self.source.HINT)
             return
         self._reload()
