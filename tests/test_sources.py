@@ -12,7 +12,16 @@ class TestMakeItem(unittest.TestCase):
         self.assertEqual(item, {
             "source": "local", "id": "a/b.mp3", "title": "B", "artist": None,
             "album": None, "art": None, "duration": None, "kind": "track",
-            "path": None, "channel_id": None, "date": None})
+            "path": None, "channel_id": None, "date": None, "genre": None,
+            "providers": None, "feed_url": None, "url": None})
+
+    def test_podcast_fields(self):
+        item = make_item("podcasts", "f", "Show", kind="folder", path="feed:f",
+                         genre="Comedy", providers=["apple"], feed_url="https://x/f")
+        self.assertEqual((item["genre"], item["providers"], item["feed_url"]),
+                         ("Comedy", ["apple"], "https://x/f"))
+        self.assertEqual(make_item("podcasts", "e", "Ep", url="https://x/e.mp3")["url"],
+                         "https://x/e.mp3")
 
     def test_folder_requires_path(self):
         with self.assertRaises(ValueError):
