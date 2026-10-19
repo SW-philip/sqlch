@@ -41,7 +41,7 @@ Later phases, not built here:
 - `search(q)` queries both directories in parallel, each with its own timeout,
   and merges results on the normalized feed URL (scheme and `www.` dropped,
   trailing slash dropped, lowercased host). Each result is a show folder:
-  `{kind: "folder", path: "feed:<url>", feed_url, genre, providers, art,
+  `{kind: "folder", path: "feed:<url>", feed_url, genre, providers, image,
   artist: <author>}`. `providers` lists every directory that returned the show,
   in a fixed order (`apple`, `podcastindex`).
 - If one directory fails, the other's results come back along with a warning.
@@ -79,7 +79,7 @@ enclosure) fields, defaulting to None.
 ## 2. Following
 
 - `follows.py` gets a third store, `podcast_follows.json`: a list of
-  `{feed_url, title, author, art, genre, providers}`. It has the same rules as
+  `{feed_url, title, artist, genre, providers, image}`. It has the same rules as
   the other two stores: only the daemon writes, the GUI reads directly, and
   writes replace the file atomically.
 - Functions: `list_podcasts()`, `followed_feeds()`, `follow_podcast(row)`,
