@@ -241,6 +241,24 @@ out of a `palette.sh` shell script — see `sqlch_gui/palette.py`'s
 hardcoded colors, so the widget can be re-skinned by pointing
 `SQLCH_GUI_PALETTE` at a different file.
 
+### Podcasts
+
+The Podcasts pane searches Apple Podcasts and, when a key is set,
+Podcast Index at the same time. A show listed in both appears once.
+Opening a show lists its episodes from the RSS feed, newest first, and
+they play through mpv. **Follow** saves a show to FOLLOWING; the star
+marks favorite episodes. The sort pill groups show lists by SOURCE
+(service, then genre), GENRE, or A–Z.
+
+Apple needs no setup. To add Podcast Index, get a free key at
+api.podcastindex.org and put it in `/run/secrets/podcastindex_env`
+(or point `sources.podcasts.env_file` in `sqlch.json` elsewhere):
+
+```bash
+PODCASTINDEX_API_KEY=...
+PODCASTINDEX_API_SECRET=...
+```
+
 ---
 
 ## MPRIS2 / Desktop Integration
@@ -287,6 +305,10 @@ MusicBrainz enrichment requires no credentials.
 | `SPOTIFY_CLIENT_ID` | *(unset)* | Spotify API client ID |
 | `SPOTIFY_CLIENT_SECRET` | *(unset)* | Spotify API client secret |
 | `SQLCH_SPOTIFY_BASE` | Spotify API | Override Spotify API base URL |
+| `PODCASTINDEX_API_KEY` | *(unset)* | Podcast Index API key (overrides the secrets file) |
+| `PODCASTINDEX_API_SECRET` | *(unset)* | Podcast Index API secret |
+| `SQLCH_APPLE_PODCASTS_BASE` | Apple search API | Override Apple Podcasts search base URL |
+| `SQLCH_PODCASTINDEX_BASE` | Podcast Index API | Override Podcast Index API base URL |
 | `SQLCH_MUSICBRAINZ_BASE` | MusicBrainz API | Override MusicBrainz API base URL |
 | `SQLCH_RADIOBROWSER_BASE` | RadioBrowser API | Override RadioBrowser API base URL |
 | `XDG_CACHE_HOME` | `~/.cache` | Cache directory root |
