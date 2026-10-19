@@ -167,6 +167,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
     def _daemon_monitor_loop(self):
         import time
         from .. import metadata
+        tick = 0
         while self._keep_running:
             resp = daemon.send({"cmd": "status"})
             icy = metadata.get_icy_track()
@@ -179,7 +180,16 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
                 self._apply_daemon_state,
                 resp, icy, vol, muted, bitrate, fmt, buffer
             )
+            tick += 1
+            if tick % 5 == 0:
+                GLib.idle_add(self._show_notices, daemon.send({"cmd": "drain_notices"}))
             time.sleep(1.0)
+
+    def _show_notices(self, resp) -> bool:
+        if self._keep_running and resp and resp.get("ok"):
+            for text in resp.get("notices") or []:
+                self.now_playing.show_toast(text)
+        return False
 
     def _apply_daemon_state(self, resp, icy, vol, muted, bitrate, fmt, buffer) -> bool:
         if not self._keep_running:

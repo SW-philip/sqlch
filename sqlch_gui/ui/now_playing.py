@@ -11,6 +11,7 @@ from gi.repository import Gtk, GLib, GdkPixbuf, GObject, Pango
 from .. import XDG_CACHE, daemon, metadata
 from .controls import VolumeMeter, RecordBubble, NavColumn, SeekBar, TimelineBar
 from .header import Header
+from .toast import Toast
 
 _COVER_SIZE = 220     # keep in sync with .cover-art's min-width/min-height in common.py
 _PREVIOUS_SLOTS = 3  # matches the history deque's maxlen
@@ -67,6 +68,10 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_live_tag.set_valign(Gtk.Align.START)
         self.lbl_live_tag.set_visible(False)
         self.cover_overlay.add_overlay(self.lbl_live_tag)
+        # Overlay on the cover (never a child that sizes it), so the card's
+        # height does not change when a toast appears.
+        self.toast = Toast()
+        self.cover_overlay.add_overlay(self.toast)
 
         card.append(self.cover_overlay)
 
@@ -303,6 +308,9 @@ class NowPlayingPanel(Gtk.Box):
                 row.set_text("It's playing now")
             else:
                 row.set_text(" ")  # empty text collapses the row; a space keeps its height
+
+    def show_toast(self, text: str) -> None:
+        self.toast.push(text)
 
     def update(self, resp: dict | None, icy: tuple[str | None, str | None]):
         if not resp or not resp.get("ok") or not resp.get("current"):

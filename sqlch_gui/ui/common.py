@@ -156,6 +156,18 @@ def _build_css(colors: dict) -> str:
         color: {outline};
     }}
 
+    .toast {{
+        font-family: {mono};
+        font-weight: 700;
+        font-size: 0.75em;
+        padding: 5px 10px;
+        margin: 8px;
+        border-radius: 9px;
+        border: {hairline};
+        background-color: {root};
+        color: {outline};
+    }}
+
     .list-plate {{
         background-color: {dim};
         border-radius: 12px;
