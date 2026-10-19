@@ -21,7 +21,7 @@ uploads a new video.
 - A source module may define `sections() -> list[{"id": str, "title": str}]`.
   It is optional. A source without it behaves exactly as today.
 - `browse("section:<id>")` returns that section's items. `section:favorites` is
-  answered by sqlch core (`follows.list_favorites(source)`) and never reaches
+  answered by the pane from `follows.list_favorites(source)` and never reaches
   the source, so no source can omit it.
 - `SourcePane` shows a pill row above the list (for example
   `CHANNELS · FAVORITES`) only when the source has sections. Style matches the
@@ -41,7 +41,8 @@ uploads a new video.
 - A star on every item row in every pane toggles favorite.
 - `favorites.json` in `data_dir()` stores full item dicts tagged with their
   source, so a favorite plays without browsing back to it.
-- Daemon commands: `toggle_favorite` (item) and `list_favorites` (source).
+- Daemon command: `toggle_favorite` (item). The GUI reads favorites directly
+  through `sqlch.core.follows` (writes are atomic renames); only the daemon writes.
 
 ## 3. YouTube channels
 
@@ -49,8 +50,8 @@ uploads a new video.
   `{channel_id, name, last_video_id, last_checked}`.
 - `make_item` takes an optional `channel_id`. A YouTube video row with a
   `channel_id` shows Follow (or Unfollow when already followed).
-- Daemon commands: `follow`, `unfollow`. The daemon owns both files so the
-  GUI and the watcher never write concurrently.
+- Daemon commands: `follow`, `unfollow`. The daemon owns writes to both files;
+  the GUI reads them directly.
 - CHANNELS lists followed channels. Opening one lists its latest videos through
   the existing yt-dlp `browse` path (`LIST_LIMIT`).
 - Existing `sources.youtube.shortcuts` config entries still appear in CHANNELS.
@@ -81,7 +82,7 @@ uploads a new video.
   full width, hidden by default). The cover stays the main child and the toast
   is the overlay, per the GTK4 overlay z-order convention, so card height never
   changes.
-- `Toast.show(text)` sets the text, shows it, and hides it after 6 s. A toast
+- `Toast.push(text)` sets the text, shows it, and hides it after 6 s. A toast
   arriving while one is showing is queued and shown after it. The GUI shows at
   most one toast per 6 s window, with no cap on queue length beyond the
   daemon's 20.
