@@ -8,7 +8,7 @@ import logging
 log = logging.getLogger(__name__)
 
 RESERVED = ("library", "discover", "np")
-_MODULES = ("local", "video", "jellyfin", "youtube", "spotify")
+_MODULES = ("local", "video", "jellyfin", "youtube", "spotify", "podcasts")
 
 
 def source_config(name: str) -> dict:
