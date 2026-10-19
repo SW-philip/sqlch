@@ -205,6 +205,19 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
             return {'ok': False, 'error': 'bad channel id'}
         follows.unfollow(cid)
         return {'ok': True}
+    if cmd == 'podcast_follow':
+        item = msg.get('item')
+        feed = item.get('feed_url') if isinstance(item, dict) else None
+        if not (isinstance(feed, str) and feed.startswith(('http://', 'https://'))):
+            return {'ok': False, 'error': 'bad feed url'}
+        follows.follow_podcast(item)
+        return {'ok': True}
+    if cmd == 'podcast_unfollow':
+        feed = msg.get('feed_url')
+        if not (isinstance(feed, str) and feed.startswith(('http://', 'https://'))):
+            return {'ok': False, 'error': 'bad feed url'}
+        follows.unfollow_podcast(feed)
+        return {'ok': True}
     if cmd == 'mark_watched':
         item = msg.get('item')
         if not isinstance(item, dict) or not item.get('source') or not item.get('id'):

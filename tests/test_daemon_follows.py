@@ -47,6 +47,27 @@ class TestDaemonFollowCommands(unittest.TestCase):
             self.assertEqual(daemon._handle({"cmd": "drain_notices"}),
                              {"ok": True, "notices": ["a", "b"]})
 
+    def test_podcast_follow(self):
+        item = {"feed_url": "https://f/a", "title": "A"}
+        with mock.patch.object(daemon.follows, "follow_podcast") as f:
+            self.assertEqual(daemon._handle({"cmd": "podcast_follow", "item": item}),
+                             {"ok": True})
+        f.assert_called_once_with(item)
+
+    def test_podcast_follow_rejects_non_http_feeds(self):
+        with mock.patch.object(daemon.follows, "follow_podcast") as f:
+            for msg in ({"cmd": "podcast_follow"},
+                        {"cmd": "podcast_follow", "item": "x"},
+                        {"cmd": "podcast_follow", "item": {"feed_url": "file:///etc/passwd"}}):
+                self.assertFalse(daemon._handle(msg)["ok"])
+        f.assert_not_called()
+
+    def test_podcast_unfollow(self):
+        with mock.patch.object(daemon.follows, "unfollow_podcast") as u:
+            self.assertEqual(daemon._handle({"cmd": "podcast_unfollow",
+                                             "feed_url": "https://f/a"}), {"ok": True})
+            self.assertFalse(daemon._handle({"cmd": "podcast_unfollow", "feed_url": 3})["ok"])
+        u.assert_called_once_with("https://f/a")
 
 if __name__ == "__main__":
     unittest.main()
