@@ -53,6 +53,11 @@ class TestSpotifyCli(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("login timed out", err)
 
+    def test_ctrl_c_during_login_exits_130_without_a_traceback(self):
+        lg, code, _, err = self.run_login([], login=mock.Mock(side_effect=KeyboardInterrupt))
+        self.assertEqual(code, 130)
+        self.assertIn("sqlch: login cancelled", err)
+
     def test_logout_clears_the_token(self):
         with mock.patch.object(spotify_auth, "clear") as clear, \
                 redirect_stdout(io.StringIO()) as out:

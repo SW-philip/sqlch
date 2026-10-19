@@ -111,6 +111,9 @@ def spotify_login_cmd(args: list[str]) -> None:
         sys.exit(1)
     try:
         spotify_auth.login(cid, port)
+    except KeyboardInterrupt:
+        print('sqlch: login cancelled', file=sys.stderr)
+        sys.exit(130)
     except spotify_auth.AuthError as e:
         print(f'sqlch: spotify login failed: {e}', file=sys.stderr)
         sys.exit(1)

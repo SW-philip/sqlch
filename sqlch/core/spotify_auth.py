@@ -4,6 +4,7 @@ No client secret is involved. Tokens live in data_dir()/spotify_user.json
 (mode 0600); writes are atomic renames so the gui and daemon can both read."""
 
 import base64
+import fcntl
 import hashlib
 import json
 import os
@@ -11,6 +12,7 @@ import secrets
 import tempfile
 import time
 import webbrowser
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlencode, urlparse
@@ -94,11 +96,25 @@ def logged_in() -> bool:
     return _load() is not None
 
 
-def clear() -> None:
+@contextmanager
+def _locked():
+    """Exclusive cross-process lock so only one process refreshes at a time.
+    Not reentrant: only public entry points take it."""
+    with open(data_dir() / "spotify_user.lock", "a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        yield
+
+
+def _clear_unlocked() -> None:
     try:
         _path().unlink()
     except FileNotFoundError:
         pass
+
+
+def clear() -> None:
+    with _locked():
+        _clear_unlocked()
 
 
 # ---- token endpoint ----
@@ -129,21 +145,37 @@ def _store_token(resp: dict, old: dict | None = None) -> dict:
     return tok
 
 
+def _fresh(tok: dict | None) -> bool:
+    return bool(tok and tok.get("access_token")
+                and tok.get("expires_at", 0) > time.time() + EXPIRY_MARGIN)
+
+
 def access_token(client_id: str) -> str:
-    tok = _load()
-    if tok is None:
-        raise NotLoggedIn(f"Not logged in to Spotify: {LOGIN_HINT}")
-    if tok.get("access_token") and tok.get("expires_at", 0) > time.time() + EXPIRY_MARGIN:
-        return tok["access_token"]
-    try:
-        resp = _post_token({"grant_type": "refresh_token",
-                            "refresh_token": tok["refresh_token"], "client_id": client_id})
-    except AuthError as e:
-        if str(e) == "invalid_grant":
-            clear()
-            raise NotLoggedIn(f"Spotify login expired: {LOGIN_HINT}") from e
-        raise
-    return _store_token(resp, tok)["access_token"]
+    with _locked():
+        tok = _load()
+        if tok is None:
+            raise NotLoggedIn(f"Not logged in to Spotify: {LOGIN_HINT}")
+        retried = False
+        while True:
+            if _fresh(tok):
+                return tok["access_token"]
+            try:
+                resp = _post_token({"grant_type": "refresh_token",
+                                    "refresh_token": tok["refresh_token"],
+                                    "client_id": client_id})
+            except AuthError as e:
+                if str(e) != "invalid_grant":
+                    raise
+                current = _load()
+                if current is not None and current["refresh_token"] != tok["refresh_token"] \
+                        and not retried:
+                    tok, retried = current, True  # another process rotated it
+                    continue
+                if current is not None and current["refresh_token"] != tok["refresh_token"]:
+                    raise AuthError("invalid_grant") from e
+                _clear_unlocked()
+                raise NotLoggedIn(f"Spotify login expired: {LOGIN_HINT}") from e
+            return _store_token(resp, tok)["access_token"]
 
 
 # ---- interactive login ----
@@ -210,4 +242,5 @@ def login(client_id: str, port: int = DEFAULT_PORT, open_browser=webbrowser.open
     resp = _post_token({"grant_type": "authorization_code", "code": code,
                         "redirect_uri": redirect_uri(actual), "client_id": client_id,
                         "code_verifier": verifier})
-    _store_token(resp)
+    with _locked():
+        _store_token(resp)

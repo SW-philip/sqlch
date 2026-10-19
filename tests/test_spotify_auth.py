@@ -4,6 +4,7 @@ import os
 import stat
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -147,6 +148,99 @@ class TestAccessToken(Base):
             with self.assertRaisesRegex(auth.AuthError, "503"):
                 auth.access_token("CID")
         self.assertTrue(auth.logged_in())
+
+
+class TestRefreshRace(Base):
+    def test_loser_of_a_refresh_race_uses_the_winners_token_and_keeps_the_file(self):
+        self.token_file()
+        winner = {"access_token": "WIN", "refresh_token": "R2",
+                  "expires_at": 9e12}
+
+        def post(data):
+            (self.dir / "spotify_user.json").write_text(json.dumps(winner))
+            raise auth.AuthError("invalid_grant")
+
+        with mock.patch.object(auth, "_post_token", side_effect=post):
+            self.assertEqual(auth.access_token("CID"), "WIN")
+        self.assertEqual(json.loads((self.dir / "spotify_user.json").read_text()), winner)
+
+    def test_rotated_refresh_token_with_stale_access_is_retried_once(self):
+        self.token_file()
+        calls = []
+
+        def post(data):
+            calls.append(data["refresh_token"])
+            if len(calls) == 1:
+                (self.dir / "spotify_user.json").write_text(json.dumps(
+                    {"access_token": "X", "refresh_token": "R2", "expires_at": 0}))
+                raise auth.AuthError("invalid_grant")
+            return {"access_token": "NEW", "refresh_token": "R3", "expires_in": 3600}
+
+        with mock.patch.object(auth, "_post_token", side_effect=post):
+            self.assertEqual(auth.access_token("CID"), "NEW")
+        self.assertEqual(calls, ["R1", "R2"])
+
+    def test_invalid_grant_with_the_same_refresh_token_clears(self):
+        self.token_file()
+        with mock.patch.object(auth, "_post_token",
+                               side_effect=auth.AuthError("invalid_grant")):
+            with self.assertRaisesRegex(auth.NotLoggedIn, "expired"):
+                auth.access_token("CID")
+        self.assertFalse((self.dir / "spotify_user.json").exists())
+
+    def test_concurrent_callers_refresh_once(self):
+        self.token_file()
+        count = []
+
+        def post(data):
+            count.append(1)
+            time.sleep(0.3)
+            return {"access_token": "NEW", "refresh_token": "R2", "expires_in": 3600}
+
+        results = []
+        with mock.patch.object(auth, "_post_token", side_effect=post):
+            ts = [threading.Thread(target=lambda: results.append(auth.access_token("CID")))
+                  for _ in range(2)]
+            for t in ts:
+                t.start()
+            for t in ts:
+                t.join(10)
+        self.assertEqual(len(count), 1)
+        self.assertEqual(results, ["NEW", "NEW"])
+
+    def test_clear_and_access_token_do_not_deadlock(self):
+        self.token_file(access_token="GOOD", expires_at=9e12)
+        done = []
+
+        def work():
+            auth.access_token("CID")
+            auth.clear()
+            self.token_file(access_token="GOOD", expires_at=9e12)
+            auth.access_token("CID")
+            done.append(1)
+
+        t = threading.Thread(target=work, daemon=True)
+        t.start()
+        t.join(5)
+        self.assertEqual(done, [1])
+
+    def test_expired_path_does_not_deadlock_on_invalid_grant(self):
+        self.token_file()
+        done = []
+
+        def work():
+            with mock.patch.object(auth, "_post_token",
+                                   side_effect=auth.AuthError("invalid_grant")):
+                try:
+                    auth.access_token("CID")
+                except auth.NotLoggedIn:
+                    pass
+            done.append(1)
+
+        t = threading.Thread(target=work, daemon=True)
+        t.start()
+        t.join(5)
+        self.assertEqual(done, [1])
 
 
 class TestLogin(Base):

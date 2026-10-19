@@ -20,6 +20,7 @@ TITLE = "SPOTIFY"
 LABEL = "Spotify"
 HINT = ("Needs SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in "
         "/run/secrets/spotify_env, and the Spotify desktop app to play. "
+        "Run `sqlch spotify-login` to see your playlists and followed artists. "
         'Browse shortcuts: sources.spotify.shortcuts [{"name": "...", "uri": "spotify:playlist:..."}]')
 
 DEFAULT_ENV_FILE = "/run/secrets/spotify_env"

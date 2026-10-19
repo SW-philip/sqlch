@@ -21,6 +21,11 @@ TRACK = {"id": "T1", "name": "Song", "duration_ms": 200000,
          "album": {"id": "AL1", "name": "Album", "images": [{"url": "http://img/x"}]}}
 
 
+class TestHint(unittest.TestCase):
+    def test_hint_mentions_login(self):
+        self.assertIn("sqlch spotify-login", spotify.HINT)
+
+
 class TestSpotify(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
