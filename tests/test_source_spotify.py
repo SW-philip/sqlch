@@ -135,12 +135,111 @@ class TestSpotify(unittest.TestCase):
             self.assertIsNone(spotify.resolve({"id": "T1"}).meta["art"])
 
     def test_sections(self):
-        self.assertEqual([s["id"] for s in spotify.sections()], ["shortcuts"])
+        self.assertEqual([s["id"] for s in spotify.sections()],
+                         ["shortcuts", "playlists", "artists"])
 
     def test_shortcuts_section_is_the_old_root(self):
         with mock.patch.object(spotify, "_shortcuts", return_value=["s"]):
             self.assertEqual(spotify.browse("section:shortcuts"), ["s"])
             self.assertEqual(spotify.browse(None), ["s"])
+
+    def logged_in(self, value=True):
+        p = mock.patch.object(spotify.spotify_auth, "logged_in", return_value=value)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_client_id_and_redirect_port(self):
+        self.assertEqual(spotify.client_id(), "abc")
+        self.assertEqual(spotify.redirect_port(), 8888)
+        self.cfg(env_file=str(self.env), redirect_port=9001)
+        self.assertEqual(spotify.redirect_port(), 9001)
+        self.cfg(env_file=str(self.env), redirect_port="nope")
+        self.assertEqual(spotify.redirect_port(), 8888)
+        self.cfg(env_file=str(self.dir / "missing"))
+        self.assertIsNone(spotify.client_id())
+
+    def test_get_uses_the_user_token_when_logged_in(self):
+        self.logged_in()
+        resp = mock.MagicMock()
+        resp.__enter__.return_value.read.return_value = b'{"ok": 1}'
+        with mock.patch.object(spotify.spotify_auth, "access_token",
+                               return_value="USER") as at, \
+             mock.patch.object(spotify, "urlopen", return_value=resp) as op:
+            self.assertEqual(spotify._get("/x"), {"ok": 1})
+        self.assertEqual(op.call_args[0][0].get_header("Authorization"), "Bearer USER")
+        at.assert_called_once_with("abc")
+
+    def test_get_uses_the_app_token_when_logged_out(self):
+        self.logged_in(False)
+        resp = mock.MagicMock()
+        resp.__enter__.return_value.read.return_value = b'{"ok": 1}'
+        with mock.patch.object(spotify, "_token", return_value="APP"), \
+             mock.patch.object(spotify, "urlopen", return_value=resp) as op:
+            spotify._get("/x")
+        self.assertEqual(op.call_args[0][0].get_header("Authorization"), "Bearer APP")
+
+    def test_library_sections_need_login(self):
+        self.logged_in(False)
+        for sec in ("section:playlists", "section:artists"):
+            with self.assertRaisesRegex(RuntimeError, "spotify-login"):
+                spotify.browse(sec)
+
+    def test_playlists_section_maps_items(self):
+        self.logged_in()
+        page = {"items": [{"id": "P1", "name": "Mine"}, None, {"name": "no id"}],
+                "next": None}
+        with mock.patch.object(spotify, "_get", return_value=page) as get:
+            out = spotify.browse("section:playlists")
+        self.assertEqual([(i["title"], i["kind"], i["path"]) for i in out],
+                         [("Mine", "folder", "playlist:P1")])
+        get.assert_called_once_with("/me/playlists", {"limit": 50, "offset": 0})
+
+    def test_playlists_page_by_offset_until_next_is_empty(self):
+        self.logged_in()
+        pages = [{"items": [{"id": f"A{i}", "name": "a"} for i in range(50)], "next": "u"},
+                 {"items": [{"id": "B", "name": "b"}], "next": None}]
+        with mock.patch.object(spotify, "_get", side_effect=pages) as get:
+            out = spotify.browse("section:playlists")
+        self.assertEqual(len(out), 51)
+        self.assertEqual([c.args[1]["offset"] for c in get.call_args_list], [0, 50])
+
+    def test_playlists_are_capped_at_200(self):
+        self.logged_in()
+        page = lambda n: {"items": [{"id": f"P{n}-{i}", "name": "p"} for i in range(50)],
+                          "next": "more"}
+        with mock.patch.object(spotify, "_get", side_effect=[page(n) for n in range(10)]) as get:
+            out = spotify.browse("section:playlists")
+        self.assertEqual(len(out), 200)
+        self.assertEqual(get.call_count, 4)
+
+    def test_artists_section_pages_by_cursor(self):
+        self.logged_in()
+        pages = [{"artists": {"items": [{"id": "AR1", "name": "One"}],
+                              "cursors": {"after": "AR1"}}},
+                 {"artists": {"items": [{"id": "AR2", "name": "Two"}, None],
+                              "cursors": {"after": None}}}]
+        with mock.patch.object(spotify, "_get", side_effect=pages) as get:
+            out = spotify.browse("section:artists")
+        self.assertEqual([(i["title"], i["path"]) for i in out],
+                         [("One", "artist:AR1"), ("Two", "artist:AR2")])
+        self.assertEqual(get.call_args_list[0].args,
+                         ("/me/following", {"type": "artist", "limit": 50}))
+        self.assertEqual(get.call_args_list[1].args,
+                         ("/me/following", {"type": "artist", "limit": 50, "after": "AR1"}))
+
+    def test_artists_are_capped_at_200(self):
+        self.logged_in()
+        n = iter(range(200))
+
+        def page(*a, **k):
+            return {"artists": {"items": [{"id": f"X{next(n)}", "name": "x"}
+                                          for _ in range(50)],
+                                "cursors": {"after": "more"}}}
+
+        with mock.patch.object(spotify, "_get", side_effect=page) as get:
+            out = spotify.browse("section:artists")
+        self.assertEqual(len(out), 200)
+        self.assertEqual(get.call_count, 4)
 
 
 if __name__ == "__main__":

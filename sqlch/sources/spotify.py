@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from sqlch.core.paths import cache_dir
+from sqlch.core import spotify_auth
 from sqlch.sources import source_config
 from sqlch.sources.base import Target, make_item
 
@@ -25,6 +26,9 @@ DEFAULT_ENV_FILE = "/run/secrets/spotify_env"
 TIMEOUT = 8
 SEARCH_LIMIT = 10
 LIST_LIMIT = 50
+MAX_ITEMS = 200
+PAGE = 50
+LOGIN_NEEDED = f"Not logged in to Spotify: {spotify_auth.LOGIN_HINT}"
 KINDS = ("artist", "album", "playlist")
 _REF = re.compile(r"(?:spotify:|open\.spotify\.com/(?:intl-[a-z]+/)?)(artist|album|playlist)[:/]([A-Za-z0-9]+)")
 _ID = re.compile(r"^[A-Za-z0-9]+$")
@@ -58,6 +62,17 @@ def available() -> bool:
     return _credentials() is not None
 
 
+def client_id() -> str | None:
+    creds = _credentials()
+    return creds[0] if creds else None
+
+
+def redirect_port() -> int:
+    cfg = source_config(NAME)
+    port = cfg.get("redirect_port") if isinstance(cfg, dict) else None
+    return port if isinstance(port, int) and not isinstance(port, bool) else spotify_auth.DEFAULT_PORT
+
+
 def _token() -> str:
     cache = cache_dir() / "spotify_token.json"
     try:
@@ -79,9 +94,19 @@ def _token() -> str:
     return tok["access_token"]
 
 
+def _bearer() -> str:
+    """The user's token when logged in (reads private playlists), else the app token."""
+    if spotify_auth.logged_in():
+        cid = client_id()
+        if cid is None:
+            raise RuntimeError("spotify credentials missing")
+        return spotify_auth.access_token(cid)
+    return _token()
+
+
 def _get(path: str, params: dict | None = None) -> dict:
     url = _api() + path + (f"?{urlencode(params)}" if params else "")
-    req = Request(url, headers={"Authorization": f"Bearer {_token()}"})
+    req = Request(url, headers={"Authorization": f"Bearer {_bearer()}"})
     with urlopen(req, timeout=TIMEOUT) as r:
         return json.loads(r.read())
 
@@ -124,12 +149,52 @@ def _shortcuts() -> list[dict]:
 
 
 def sections() -> list[dict]:
-    return [{"id": "shortcuts", "title": "SHORTCUTS"}]
+    return [{"id": "shortcuts", "title": "SHORTCUTS"},
+            {"id": "playlists", "title": "PLAYLISTS"},
+            {"id": "artists", "title": "ARTISTS"}]
+
+
+def _need_login() -> None:
+    if not spotify_auth.logged_in():
+        raise RuntimeError(LOGIN_NEEDED)
+
+
+def _my_playlists() -> list[dict]:
+    out, offset = [], 0
+    while len(out) < MAX_ITEMS:
+        data = _get("/me/playlists", {"limit": PAGE, "offset": offset})
+        items = data.get("items") or []
+        out += items
+        if not data.get("next") or not items:
+            break
+        offset += PAGE
+    return out[:MAX_ITEMS]
+
+
+def _followed_artists() -> list[dict]:
+    out, after = [], None
+    while len(out) < MAX_ITEMS:
+        params = {"type": "artist", "limit": PAGE}
+        if after:
+            params["after"] = after
+        data = _get("/me/following", params).get("artists") or {}
+        items = data.get("items") or []
+        out += items
+        after = (data.get("cursors") or {}).get("after")
+        if not after or not items:
+            break
+    return out[:MAX_ITEMS]
 
 
 def browse(path: str | None = None) -> list[dict]:
     if not path or path == "section:shortcuts":
         return _shortcuts()
+    if path == "section:playlists":
+        _need_login()
+        return _compact(_folder("playlist", p) for p in _my_playlists())
+    if path == "section:artists":
+        _need_login()
+        return _compact(_folder("artist", a) for a in _followed_artists())
     kind, _, sid = path.partition(":")
     if kind not in KINDS or not _ID.match(sid):
         raise ValueError("bad spotify path")
