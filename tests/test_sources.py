@@ -11,7 +11,7 @@ class TestMakeItem(unittest.TestCase):
         self.assertEqual(item, {
             "source": "local", "id": "a/b.mp3", "title": "B", "artist": None,
             "album": None, "art": None, "duration": None, "kind": "track",
-            "path": None})
+            "path": None, "channel_id": None})
 
     def test_folder_requires_path(self):
         with self.assertRaises(ValueError):
@@ -22,6 +22,10 @@ class TestMakeItem(unittest.TestCase):
     def test_unknown_kind_rejected(self):
         with self.assertRaises(ValueError):
             make_item("local", "x", "X", kind="podcast")
+
+    def test_make_item_channel_id_defaults_to_none(self):
+        self.assertIsNone(make_item("local", "a", "A")["channel_id"])
+        self.assertEqual(make_item("youtube", "a", "A", channel_id="UC1")["channel_id"], "UC1")
 
 
 class TestTarget(unittest.TestCase):
