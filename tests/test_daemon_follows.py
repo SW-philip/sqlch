@@ -69,5 +69,13 @@ class TestDaemonFollowCommands(unittest.TestCase):
             self.assertFalse(daemon._handle({"cmd": "podcast_unfollow", "feed_url": 3})["ok"])
         u.assert_called_once_with("https://f/a")
 
+    def test_podcast_unfollow_rejects_missing_and_non_http_feeds(self):
+        with mock.patch.object(daemon.follows, "unfollow_podcast") as u:
+            for msg in ({"cmd": "podcast_unfollow"},
+                        {"cmd": "podcast_unfollow", "feed_url": "file:///x"}):
+                self.assertFalse(daemon._handle(msg)["ok"])
+        u.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

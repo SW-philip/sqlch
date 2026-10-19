@@ -247,6 +247,19 @@ class TestFollowing(unittest.TestCase):
                          ("folder", "feed:https://f/a", "https://f/a", "Comedy",
                           ["apple", "podcastindex"]))
 
+    def test_following_survives_malformed_rows(self):
+        rows = [{"feed_url": "https://f/a", "title": "A", "providers": ["apple"]},
+                {"feed_url": "https://f/b"},
+                {"feed_url": "https://f/c", "title": "C", "providers": "apple"},
+                {"feed_url": "https://f/d", "title": "D", "providers": 5}]
+        with mock.patch.object(podcasts.follows, "list_podcasts", return_value=rows):
+            items = podcasts.browse("section:following")
+        self.assertEqual([(i["feed_url"], i["title"], i["providers"]) for i in items],
+                         [("https://f/a", "A", ["apple"]),
+                          ("https://f/b", "https://f/b", []),
+                          ("https://f/c", "C", []),
+                          ("https://f/d", "D", [])])
+
     def test_root_is_following(self):
         with mock.patch.object(podcasts.follows, "list_podcasts", return_value=[]):
             self.assertEqual(podcasts.browse(None), [])

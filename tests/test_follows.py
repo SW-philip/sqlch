@@ -120,10 +120,6 @@ class TestFollows(Base):
         self.assertEqual(len(follows.list_follows()), 1)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 SHOW = {"source": "podcasts", "id": "https://f/a", "title": "A", "kind": "folder",
         "path": "feed:https://f/a", "feed_url": "https://f/a", "artist": "Ann",
         "genre": "Comedy", "providers": ["apple"], "image": "https://img/a",
@@ -156,3 +152,39 @@ class TestPodcastFollows(Base):
     def test_follow_needs_a_feed_url(self):
         with self.assertRaises(ValueError):
             follows.follow_podcast({"title": "x"})
+
+    def test_follow_cleans_a_messy_item(self):
+        follows.follow_podcast({"feed_url": "https://f/m", "title": {"x": 1}, "artist": "",
+                                "genre": 5, "providers": "apple", "image": "file:///x"})
+        self.assertEqual(follows.list_podcasts(), [
+            {"feed_url": "https://f/m", "title": None, "artist": None, "genre": None,
+             "providers": [], "image": None}])
+
+    def test_follow_keeps_only_string_providers(self):
+        follows.follow_podcast({**SHOW, "providers": ["apple", 3, None, "podcastindex"]})
+        self.assertEqual(follows.list_podcasts()[0]["providers"], ["apple", "podcastindex"])
+
+    def test_reader_skips_malformed_rows(self):
+        good = {"feed_url": "https://f/a", "title": "A"}
+        (self.dir / "podcast_follows.json").write_text(json.dumps(
+            ["x", {"feed_url": ["https://f/b"]}, {"feed_url": "file:///etc/passwd"}, good]))
+        self.assertEqual(follows.list_podcasts(), [good])
+        self.assertEqual(follows.followed_feeds(), {"https://f/a"})
+
+    def test_reader_leaves_corrupt_file_alone(self):
+        path = self.dir / "podcast_follows.json"
+        path.write_text("{not json")
+        self.assertEqual(follows.list_podcasts(), [])
+        self.assertEqual(follows.followed_feeds(), set())
+        self.assertEqual(path.read_text(), "{not json")
+        self.assertEqual(list(self.dir.glob("podcast_follows.json.*.bad")), [])
+
+    def test_writer_quarantines_corrupt_file_then_succeeds(self):
+        (self.dir / "podcast_follows.json").write_text("{not json")
+        follows.follow_podcast(SHOW)
+        self.assertEqual(follows.followed_feeds(), {"https://f/a"})
+        (bad,) = self.dir.glob("podcast_follows.json.*.bad")
+        self.assertEqual(bad.read_text(), "{not json")
+
+if __name__ == "__main__":
+    unittest.main()

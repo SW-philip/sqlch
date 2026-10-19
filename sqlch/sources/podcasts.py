@@ -70,6 +70,18 @@ def show_item(s: dict, providers: list[str]) -> dict:
     return item
 
 
+def _followed_item(r: dict) -> dict:
+    """A stored follow as a show row; a damaged field must not break the section."""
+    title = r.get("title")
+    providers = r.get("providers")
+    if isinstance(providers, list):
+        providers = [p for p in providers if isinstance(p, str)]
+    else:
+        providers = []
+    return show_item({**r, "title": title if isinstance(title, str) and title else r["feed_url"]},
+                     providers)
+
+
 def _merge(batches: list[tuple]) -> list[dict]:
     merged: dict[str, dict] = {}
     for provider, shows in batches:
@@ -228,7 +240,7 @@ def resolve(item: dict) -> Target:
 def browse(path: str | None = None) -> list[dict]:
     _state.warning = None
     if not path or path == "section:following":
-        return [show_item(r, r.get("providers") or []) for r in follows.list_podcasts()]
+        return [_followed_item(r) for r in follows.list_podcasts()]
     kind, _, url = path.partition(":")
     if kind != "feed" or not _is_http(url):
         raise ValueError("bad podcasts path")

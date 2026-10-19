@@ -148,11 +148,20 @@ def record_seen(channel_id: str, video_id: str | None, checked: float) -> None:
 
 # ---- followed podcasts ----
 
-_PODCAST_FIELDS = ("feed_url", "title", "artist", "genre", "providers", "image")
+def _is_http(url) -> bool:
+    return isinstance(url, str) and url.startswith(("http://", "https://"))
+
+
+def _text(v) -> str | None:
+    return v if isinstance(v, str) and v else None
+
+
+def _strings(v) -> list[str]:
+    return [x for x in v if isinstance(x, str)] if isinstance(v, list) else []
 
 
 def list_podcasts() -> list[dict]:
-    return [r for r in _read(PODCASTS) if isinstance(r, dict) and r.get("feed_url")]
+    return [r for r in _read(PODCASTS) if isinstance(r, dict) and _is_http(r.get("feed_url"))]
 
 
 def followed_feeds() -> set[str]:
@@ -160,12 +169,17 @@ def followed_feeds() -> set[str]:
 
 
 def follow_podcast(item: dict) -> None:
-    row = {k: item.get(k) for k in _PODCAST_FIELDS}
-    if not row["feed_url"]:
-        raise ValueError("a followed podcast needs a feed_url")
+    feed = item.get("feed_url")
+    if not _is_http(feed):
+        raise ValueError("a followed podcast needs an http(s) feed_url")
+    image = item.get("image")
+    row = {"feed_url": feed, "title": _text(item.get("title")),
+           "artist": _text(item.get("artist")), "genre": _text(item.get("genre")),
+           "providers": _strings(item.get("providers")),
+           "image": image if _is_http(image) else None}
     with _lock:
         rows = _read_for_write(PODCASTS)
-        if any(isinstance(r, dict) and r.get("feed_url") == row["feed_url"] for r in rows):
+        if any(isinstance(r, dict) and r.get("feed_url") == feed for r in rows):
             return
         rows.append(row)
         _write(PODCASTS, rows)
