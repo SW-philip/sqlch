@@ -1,13 +1,18 @@
 """Podcasts from several directories (Apple Podcasts, Podcast Index) merged on
 their feed URL. Episodes come from the show's RSS feed and play in mpv."""
 
+import hashlib
 import threading
+import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
+from email.utils import parsedate_to_datetime
 from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
 
+from sqlch.core.paths import cache_dir
 from sqlch.sources import _podcast_dirs as dirs
 from sqlch.sources import source_config
-from sqlch.sources.base import make_item
+from sqlch.sources.base import Target, make_item
 
 NAME = "podcasts"
 TITLE = "PODCASTS"
@@ -98,8 +103,108 @@ def search(query: str) -> list[dict]:
     return _merge(batches)
 
 
+FEED_LIMIT = 100
+MAX_FEED_BYTES = 10 * 1024 * 1024
+TIMEOUT = 8
+_ITUNES = "{http://www.itunes.com/dtds/podcast-1.0.dtd}"
+
+
+def _is_http(url) -> bool:
+    return isinstance(url, str) and url.startswith(("http://", "https://"))
+
+
+def _download(url: str, limit: int = MAX_FEED_BYTES) -> bytes:
+    req = Request(url, headers={"User-Agent": dirs.UA})
+    with urlopen(req, timeout=TIMEOUT) as r:
+        return r.read(limit)
+
+
+def _fetch_feed(url: str) -> bytes:
+    return _download(url)
+
+
+def parse_duration(text) -> int | None:
+    text = (text or "").strip()
+    if not text:
+        return None
+    parts = text.split(":")
+    if len(parts) > 3:
+        return None
+    try:
+        secs = 0
+        for p in parts:
+            secs = secs * 60 + int(float(p))
+    except ValueError:
+        return None
+    return secs or None
+
+
+def _date(text) -> int | None:
+    try:
+        return int(parsedate_to_datetime(text).timestamp())
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def _image(node) -> str | None:
+    el = node.find(f"{_ITUNES}image")
+    href = el.get("href") if el is not None else None
+    return href or (node.findtext("image/url") or "").strip() or None
+
+
+def parse_feed(data: bytes, feed_url: str) -> list[dict]:
+    root = ET.fromstring(data)
+    channel = root.find("channel")
+    if channel is None:
+        raise ValueError("not an RSS feed")
+    show = (channel.findtext("title") or "").strip() or feed_url
+    show_image = _image(channel)
+    episodes = []
+    for it in channel.findall("item"):
+        enc = it.find("enclosure")
+        url = enc.get("url") if enc is not None else None
+        if not url:
+            continue
+        guid = (it.findtext("guid") or "").strip() or url
+        ep = make_item(NAME, guid, (it.findtext("title") or "").strip() or "Untitled",
+                       artist=show, date=_date(it.findtext("pubDate")),
+                       duration=parse_duration(it.findtext(f"{_ITUNES}duration")), url=url)
+        ep["image"] = _image(it) or show_image
+        episodes.append(ep)
+    episodes.sort(key=lambda e: e["date"] or 0, reverse=True)
+    return episodes[:FEED_LIMIT]
+
+
+def _cached_art(url) -> str | None:
+    if not _is_http(url):
+        return None
+    dest = cache_dir() / "podcasts" / (hashlib.sha1(url.encode()).hexdigest()[:20] + ".img")
+    if dest.is_file():
+        return str(dest)
+    try:
+        data = _download(url)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(data)
+    except OSError:
+        return None
+    return str(dest)
+
+
+def resolve(item: dict) -> Target:
+    url = item.get("url")
+    if not _is_http(url):
+        raise ValueError("episode has no audio url")
+    show = item.get("artist")
+    meta = {"title": item.get("title"), "artist": show, "album": show,
+            "art": _cached_art(item.get("image"))}
+    return Target(url, False, meta)
+
+
 def browse(path: str | None = None) -> list[dict]:
     _state.warning = None
     if not path or path == "section:following":
         return []
-    raise ValueError("bad podcasts path")
+    kind, _, url = path.partition(":")
+    if kind != "feed" or not _is_http(url):
+        raise ValueError("bad podcasts path")
+    return parse_feed(_fetch_feed(url), url)
