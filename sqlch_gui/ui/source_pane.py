@@ -158,12 +158,11 @@ class SourcePane(Gtk.Box):
         self._load(lambda: self._browse(self._current_path()))
 
     def _with_marks(self, work):
-        """Also refresh star/follow state; runs in the worker with the load."""
+        """Read star/follow state in the worker; _show applies it on the main thread."""
         def run():
             result = work()
-            self._fav_ids = self._store.favorite_ids(self.source.NAME)
-            self._followed = self._store.followed_ids()
-            return result
+            return (result, set(self._store.favorite_ids(self.source.NAME)),
+                    set(self._store.followed_ids()))
         return run
 
     def _load(self, work):
@@ -177,6 +176,8 @@ class SourcePane(Gtk.Box):
         if gen != self._gen:
             return False
         self._pending = None
+        if err is None:
+            result, self._fav_ids, self._followed = result
         while child := self.list.get_first_child():
             self.list.remove(child)
         if err is not None:

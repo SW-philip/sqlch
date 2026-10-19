@@ -335,6 +335,19 @@ class TestStarAndFollow(unittest.TestCase):
         self.assertEqual(btn.get_label(), "☆")
         self.assertNotIn("t", p._fav_ids)
 
+    def test_stale_load_does_not_overwrite_marks(self):
+        held = []
+        store = FakeStore()
+        p = make(Fake(), run=lambda w, d: held.append((w, d)), store=store)
+        p.on_shown()
+        work, done = held.pop(0)
+        stale = work()
+        store.favs.append(TRACK)
+        p._gen += 1
+        p._fav_ids.add("t")
+        done(stale, None)
+        self.assertEqual(p._fav_ids, {"t"})
+
     def test_toggle_favorite_failure_shows_status(self):
         p = make(Fake(), send=lambda m: None)
         p.on_shown()
