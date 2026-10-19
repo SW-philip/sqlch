@@ -68,6 +68,44 @@ class TestSpotifyCli(unittest.TestCase):
         login.assert_called_once_with(["--port", "1"])
         logout.assert_called_once_with()
 
+    def test_out_of_range_port_is_a_usage_error(self):
+        for port in ("0", "-5", "65536", "70000"):
+            lg, code, _, err = self.run_login(["--port", port])
+            self.assertEqual(code, 2, port)
+            self.assertIn("usage", err, port)
+            lg.assert_not_called()
+
+    def test_port_edges_are_accepted(self):
+        for port in (1, 65535):
+            lg, code, _, _ = self.run_login(["--port", str(port)])
+            lg.assert_called_once_with("CID", port)
+            self.assertIsNone(code)
+
+    def test_unknown_args_are_usage_errors(self):
+        for args in (["--prot", "9999"], ["--port=9999"],
+                     ["--port", "9999", "extra"], ["extra"]):
+            lg, code, _, err = self.run_login(args)
+            self.assertEqual(code, 2, args)
+            self.assertIn("usage", err, args)
+            lg.assert_not_called()
+
+    def test_out_of_range_configured_port_exits_2(self):
+        for port in (0, 70000):
+            lg, code, _, err = self.run_login([], port=port)
+            self.assertEqual(code, 2, port)
+            self.assertIn("sources.spotify.redirect_port", err)
+            lg.assert_not_called()
+
+    def test_logout_extra_args_are_usage_error(self):
+        with mock.patch.object(spotify_auth, "clear") as clear, \
+                redirect_stdout(io.StringIO()), \
+                redirect_stderr(io.StringIO()) as err:
+            with self.assertRaises(SystemExit) as cm:
+                main.dispatch_command("spotify-logout", ["extra"])
+        self.assertEqual(cm.exception.code, 2)
+        self.assertIn("usage", err.getvalue())
+        clear.assert_not_called()
+
     def test_help_lists_the_commands(self):
         self.assertIn("sqlch spotify-login", main.HELP)
         self.assertIn("sqlch spotify-logout", main.HELP)

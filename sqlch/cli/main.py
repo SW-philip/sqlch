@@ -77,16 +77,33 @@ def status():
     return player.status_string()
 
 
+SPOTIFY_LOGIN_USAGE = 'usage: sqlch spotify-login [--port N]'
+
+
+def _valid_port(port: int) -> bool:
+    return 1 <= port <= 65535
+
+
 def spotify_login_cmd(args: list[str]) -> None:
     from sqlch.core import spotify_auth
     from sqlch.sources import spotify
-    port = spotify.redirect_port()
-    if args[:1] == ['--port']:
+    if args == []:
+        port = spotify.redirect_port()
+        if not _valid_port(port):
+            print(f'sqlch: sources.spotify.redirect_port must be 1-65535, got {port}',
+                  file=sys.stderr)
+            sys.exit(2)
+    elif len(args) == 2 and args[0] == '--port':
         try:
             port = int(args[1])
-        except (IndexError, ValueError):
-            print('usage: sqlch spotify-login [--port N]', file=sys.stderr)
+        except ValueError:
+            port = 0
+        if not _valid_port(port):
+            print(SPOTIFY_LOGIN_USAGE, file=sys.stderr)
             sys.exit(2)
+    else:
+        print(SPOTIFY_LOGIN_USAGE, file=sys.stderr)
+        sys.exit(2)
     cid = spotify.client_id()
     if cid is None:
         print('sqlch: no Spotify credentials; put SPOTIFY_CLIENT_ID and '
@@ -111,6 +128,9 @@ def dispatch_command(cmd: str, args: list[str]) -> None:
         spotify_login_cmd(args)
         return
     if cmd == 'spotify-logout':
+        if args:
+            print('usage: sqlch spotify-logout', file=sys.stderr)
+            sys.exit(2)
         spotify_logout_cmd()
         return
     if cmd == 'status':
