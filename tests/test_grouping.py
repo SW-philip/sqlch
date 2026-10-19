@@ -66,3 +66,18 @@ class TestGrouping(unittest.TestCase):
                          [("header", "Other", 0), ("item", bad, "apple")])
         self.assertEqual(group([bad], "az", PROV), [("item", bad, "")])
         self.assertEqual(group([bad], "source", PROV)[1], ("header", "Other", 1))
+        self.assertIs(group([B, bad], "az", PROV)[0][1], bad)
+
+    def test_blank_genre_is_other(self):
+        self.assertEqual(shape(group([it("Q", "   ")], "genre", PROV)),
+                         [("header", "Other", 0), ("item", "Q", "apple")])
+
+    def test_malformed_providers(self):
+        dup = {"title": "Dup", "genre": "Arts", "providers": ["apple", "apple", 5, None]}
+        flat = {"title": "Flat", "genre": "Arts", "providers": "apple"}
+        for m in MODES:
+            group([dup, flat], m, PROV)
+        self.assertIn(("item", "Dup", "apple"), shape(group([dup], "genre", PROV)))
+        self.assertEqual(shape(group([dup, flat], "source", PROV)), [
+            ("header", "APPLE PODCASTS", 0), ("header", "Arts", 1), ("item", "Dup", ""),
+            ("header", "OTHER", 0), ("header", "Arts", 1), ("item", "Flat", "")])

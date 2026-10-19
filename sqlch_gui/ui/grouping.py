@@ -20,7 +20,12 @@ def _title(item) -> str:
 
 
 def _genre(item) -> str:
-    return _str(item.get("genre")) or OTHER
+    return _str(item.get("genre")).strip() or OTHER
+
+
+def _provs(item) -> list:
+    v = item.get("providers")
+    return list(dict.fromkeys(p for p in v if isinstance(p, str))) if isinstance(v, list) else []
 
 
 def _by_genre(items, depth, tag) -> list:
@@ -35,19 +40,19 @@ def group(items, mode, providers=None) -> list:
     providers = providers or {}
 
     def shorts(i):
-        return "·".join(providers.get(p, {}).get("short", p) for p in i.get("providers") or [])
+        return "·".join(providers.get(p, {}).get("short", p) for p in _provs(i))
 
     if mode == "az":
         return [("item", i, _str(i.get("genre"))) for i in sorted(items, key=_title)]
     if mode == "genre":
         return _by_genre(items, 0, shorts)
-    seen = {p for i in items for p in i.get("providers") or []}
+    seen = {p for i in items for p in _provs(i)}
     order = [p for p in providers if p in seen] + sorted(seen - set(providers))
     rows = []
     for p in order:
         rows.append(("header", providers.get(p, {}).get("title", p.upper()), 0))
-        rows += _by_genre([i for i in items if p in (i.get("providers") or [])], 1, lambda i: "")
-    loose = [i for i in items if not i.get("providers")]
+        rows += _by_genre([i for i in items if p in _provs(i)], 1, lambda i: "")
+    loose = [i for i in items if not _provs(i)]
     if loose:
         rows.append(("header", OTHER.upper(), 0))
         rows += _by_genre(loose, 1, lambda i: "")
