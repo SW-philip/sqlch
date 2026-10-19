@@ -189,3 +189,21 @@ class TestResolve(unittest.TestCase):
     def test_cached_art_failure_is_none(self):
         with mock.patch.object(podcasts, "_download", side_effect=OSError("x")):
             self.assertIsNone(podcasts._cached_art("https://img/b.jpg"))
+
+
+class TestFollowing(unittest.TestCase):
+    def test_following_section_lists_stored_shows_as_folders(self):
+        rows = [{"feed_url": "https://f/a", "title": "A", "artist": "Ann",
+                 "genre": "Comedy", "providers": ["apple", "podcastindex"],
+                 "image": "https://img/a"}]
+        with mock.patch.object(podcasts.follows, "list_podcasts", return_value=rows):
+            items = podcasts.browse("section:following")
+        self.assertEqual(len(items), 1)
+        a = items[0]
+        self.assertEqual((a["kind"], a["path"], a["feed_url"], a["genre"], a["providers"]),
+                         ("folder", "feed:https://f/a", "https://f/a", "Comedy",
+                          ["apple", "podcastindex"]))
+
+    def test_root_is_following(self):
+        with mock.patch.object(podcasts.follows, "list_podcasts", return_value=[]):
+            self.assertEqual(podcasts.browse(None), [])

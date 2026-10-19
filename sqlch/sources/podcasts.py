@@ -9,6 +9,7 @@ from email.utils import parsedate_to_datetime
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
+from sqlch.core import follows
 from sqlch.core.paths import cache_dir
 from sqlch.sources import _podcast_dirs as dirs
 from sqlch.sources import source_config
@@ -203,7 +204,7 @@ def resolve(item: dict) -> Target:
 def browse(path: str | None = None) -> list[dict]:
     _state.warning = None
     if not path or path == "section:following":
-        return []
+        return [show_item(r, r.get("providers") or []) for r in follows.list_podcasts()]
     kind, _, url = path.partition(":")
     if kind != "feed" or not _is_http(url):
         raise ValueError("bad podcasts path")

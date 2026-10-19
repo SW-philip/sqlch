@@ -122,3 +122,37 @@ class TestFollows(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+SHOW = {"source": "podcasts", "id": "https://f/a", "title": "A", "kind": "folder",
+        "path": "feed:https://f/a", "feed_url": "https://f/a", "artist": "Ann",
+        "genre": "Comedy", "providers": ["apple"], "image": "https://img/a",
+        "art": None, "url": None}
+
+
+class TestPodcastFollows(Base):
+    def test_empty(self):
+        self.assertEqual(follows.list_podcasts(), [])
+        self.assertEqual(follows.followed_feeds(), set())
+
+    def test_follow_stores_only_the_show_fields(self):
+        follows.follow_podcast(SHOW)
+        self.assertEqual(follows.list_podcasts(), [
+            {"feed_url": "https://f/a", "title": "A", "artist": "Ann",
+             "genre": "Comedy", "providers": ["apple"], "image": "https://img/a"}])
+        self.assertEqual(follows.followed_feeds(), {"https://f/a"})
+
+    def test_duplicate_follow_is_ignored(self):
+        follows.follow_podcast(SHOW)
+        follows.follow_podcast({**SHOW, "title": "Again"})
+        self.assertEqual([r["title"] for r in follows.list_podcasts()], ["A"])
+
+    def test_unfollow(self):
+        follows.follow_podcast(SHOW)
+        follows.unfollow_podcast("https://f/a")
+        self.assertEqual(follows.list_podcasts(), [])
+        follows.unfollow_podcast("https://f/a")  # absent: no error
+
+    def test_follow_needs_a_feed_url(self):
+        with self.assertRaises(ValueError):
+            follows.follow_podcast({"title": "x"})

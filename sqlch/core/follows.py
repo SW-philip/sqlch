@@ -1,4 +1,4 @@
-"""Favorites and followed YouTube channels: small JSON files in data_dir().
+"""Favorites, followed YouTube channels and followed podcasts: small JSON files in data_dir().
 
 The daemon is the only writer and the only one that quarantines a corrupt
 file; the gui only reads. Every write replaces the file atomically, so
@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 
 FAVORITES = "favorites.json"
 FOLLOWS = "youtube_follows.json"
+PODCASTS = "podcast_follows.json"
 
 _lock = threading.Lock()  # serializes read-modify-write between daemon threads
 
@@ -143,3 +144,37 @@ def record_seen(channel_id: str, video_id: str | None, checked: float) -> None:
                 r["last_checked"] = checked
                 _write(FOLLOWS, rows)
                 return
+
+
+# ---- followed podcasts ----
+
+_PODCAST_FIELDS = ("feed_url", "title", "artist", "genre", "providers", "image")
+
+
+def list_podcasts() -> list[dict]:
+    return [r for r in _read(PODCASTS) if isinstance(r, dict) and r.get("feed_url")]
+
+
+def followed_feeds() -> set[str]:
+    return {r["feed_url"] for r in list_podcasts()}
+
+
+def follow_podcast(item: dict) -> None:
+    row = {k: item.get(k) for k in _PODCAST_FIELDS}
+    if not row["feed_url"]:
+        raise ValueError("a followed podcast needs a feed_url")
+    with _lock:
+        rows = _read_for_write(PODCASTS)
+        if any(isinstance(r, dict) and r.get("feed_url") == row["feed_url"] for r in rows):
+            return
+        rows.append(row)
+        _write(PODCASTS, rows)
+
+
+def unfollow_podcast(feed_url: str) -> None:
+    with _lock:
+        rows = _read_for_write(PODCASTS)
+        kept = [r for r in rows
+                if not (isinstance(r, dict) and r.get("feed_url") == feed_url)]
+        if len(kept) != len(rows):
+            _write(PODCASTS, kept)
