@@ -2,9 +2,12 @@
 their feed URL. Episodes come from the show's RSS feed and play in mpv."""
 
 import hashlib
+import os
+import tempfile
 import threading
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timezone
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
@@ -107,6 +110,8 @@ def search(query: str) -> list[dict]:
 FEED_LIMIT = 100
 MAX_FEED_BYTES = 10 * 1024 * 1024
 TIMEOUT = 8
+MAX_ART_BYTES = 2 * 1024 * 1024
+ART_TIMEOUT = 3
 _ITUNES = "{http://www.itunes.com/dtds/podcast-1.0.dtd}"
 
 
@@ -114,14 +119,17 @@ def _is_http(url) -> bool:
     return isinstance(url, str) and url.startswith(("http://", "https://"))
 
 
-def _download(url: str, limit: int = MAX_FEED_BYTES) -> bytes:
+def _download(url: str, limit: int, timeout: float = TIMEOUT) -> bytes:
     req = Request(url, headers={"User-Agent": dirs.UA})
-    with urlopen(req, timeout=TIMEOUT) as r:
+    with urlopen(req, timeout=timeout) as r:
         return r.read(limit)
 
 
 def _fetch_feed(url: str) -> bytes:
-    return _download(url)
+    data = _download(url, MAX_FEED_BYTES + 1)
+    if len(data) > MAX_FEED_BYTES:
+        raise ValueError("feed too large")
+    return data
 
 
 def parse_duration(text) -> int | None:
@@ -132,18 +140,24 @@ def parse_duration(text) -> int | None:
     if len(parts) > 3:
         return None
     try:
-        secs = 0
-        for p in parts:
-            secs = secs * 60 + int(float(p))
-    except ValueError:
+        nums = [int(float(p)) for p in parts]
+    except (ValueError, OverflowError):
         return None
-    return secs or None
+    if any(n < 0 for n in nums):
+        return None
+    secs = 0
+    for n in nums:
+        secs = secs * 60 + n
+    return secs if secs > 0 else None
 
 
 def _date(text) -> int | None:
     try:
-        return int(parsedate_to_datetime(text).timestamp())
-    except (TypeError, ValueError, IndexError):
+        dt = parsedate_to_datetime(text)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp())
+    except (TypeError, ValueError, IndexError, OverflowError):
         return None
 
 
@@ -154,7 +168,10 @@ def _image(node) -> str | None:
 
 
 def parse_feed(data: bytes, feed_url: str) -> list[dict]:
-    root = ET.fromstring(data)
+    try:
+        root = ET.fromstring(data)
+    except ET.ParseError:
+        raise ValueError("feed is not valid XML") from None
     channel = root.find("channel")
     if channel is None:
         raise ValueError("not an RSS feed")
@@ -163,7 +180,7 @@ def parse_feed(data: bytes, feed_url: str) -> list[dict]:
     episodes = []
     for it in channel.findall("item"):
         enc = it.find("enclosure")
-        url = enc.get("url") if enc is not None else None
+        url = (enc.get("url") or "").strip() if enc is not None else None
         if not url:
             continue
         guid = (it.findtext("guid") or "").strip() or url
@@ -183,10 +200,17 @@ def _cached_art(url) -> str | None:
     if dest.is_file():
         return str(dest)
     try:
-        data = _download(url)
+        data = _download(url, MAX_ART_BYTES, timeout=ART_TIMEOUT)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(data)
-    except OSError:
+        fd, tmp = tempfile.mkstemp(dir=dest.parent, suffix=".part")
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            os.replace(tmp, dest)
+        except BaseException:
+            os.unlink(tmp)
+            raise
+    except Exception:
         return None
     return str(dest)
 

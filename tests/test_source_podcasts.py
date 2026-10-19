@@ -1,4 +1,7 @@
+import http.client
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from sqlch.sources import REGISTRY, podcasts
@@ -85,9 +88,6 @@ class TestSearch(unittest.TestCase):
             self.assertEqual([n for n, _ in podcasts._directories()], ["apple", "podcastindex"])
 
 
-import tempfile
-from pathlib import Path
-
 FEED = b"""<?xml version="1.0"?>
 <rss xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" version="2.0"><channel>
   <title>The Show</title>
@@ -131,6 +131,33 @@ class TestFeed(unittest.TestCase):
         d = podcasts.parse_duration
         self.assertEqual([d("90"), d("1:30"), d("1:00:00"), d(""), d(None), d("abc"), d("1:2:3:4")],
                          [90, 90, 3600, None, None, None, None])
+        self.assertEqual([d("inf"), d("1e400"), d("-5"), d("1:-30"), d("0")],
+                         [None, None, None, None, None])
+
+    def test_date_without_zone_is_utc(self):
+        self.assertEqual(podcasts._date("Fri, 16 Oct 2026 00:00:00 -0000"), 1792108800)
+
+    def test_invalid_xml_is_value_error(self):
+        with self.assertRaisesRegex(ValueError, "not valid XML"):
+            podcasts.parse_feed(b"<rss><channel>", "https://f/x")
+
+    def test_enclosure_url_is_stripped(self):
+        feed = (b'<rss><channel><title>S</title><item><title>X</title>'
+                b'<enclosure url=" https://cdn/x.mp3 "/></item></channel></rss>')
+        [ep] = podcasts.parse_feed(feed, "https://f/x")
+        self.assertEqual((ep["url"], ep["id"]), ("https://cdn/x.mp3", "https://cdn/x.mp3"))
+
+    def test_fetch_feed_rejects_oversized(self):
+        with mock.patch.object(podcasts, "_download",
+                               return_value=b"x" * (podcasts.MAX_FEED_BYTES + 1)) as dl:
+            with self.assertRaisesRegex(ValueError, "too large"):
+                podcasts._fetch_feed("https://f/x")
+        dl.assert_called_once_with("https://f/x", podcasts.MAX_FEED_BYTES + 1)
+
+    def test_fetch_feed_at_the_cap_is_fine(self):
+        data = b"x" * podcasts.MAX_FEED_BYTES
+        with mock.patch.object(podcasts, "_download", return_value=data):
+            self.assertIs(podcasts._fetch_feed("https://f/x"), data)
 
     def test_browse_feed_rejects_non_http(self):
         for bad in ("feed:file:///etc/passwd", "feed:", "nope"):
@@ -174,7 +201,7 @@ class TestResolve(unittest.TestCase):
     def test_cached_art_downloads_once(self):
         calls = []
 
-        def fake_get(url):
+        def fake_get(url, *args, **kwargs):
             calls.append(url)
             return b"img"
 
@@ -189,6 +216,22 @@ class TestResolve(unittest.TestCase):
     def test_cached_art_failure_is_none(self):
         with mock.patch.object(podcasts, "_download", side_effect=OSError("x")):
             self.assertIsNone(podcasts._cached_art("https://img/b.jpg"))
+
+    def test_art_failure_never_blocks_playback(self):
+        with mock.patch.object(podcasts, "_download", side_effect=http.client.InvalidURL("x")):
+            self.assertIsNone(podcasts._cached_art("https://img/c.jpg"))
+            t = podcasts.resolve(self.ep())
+        self.assertEqual(t.url, "https://cdn/new.mp3")
+        self.assertIsNone(t.meta["art"])
+
+    def test_cached_art_is_small_and_quick(self):
+        with mock.patch.object(podcasts, "_download", return_value=b"img") as dl:
+            p = podcasts._cached_art("https://img/d.jpg")
+        dl.assert_called_once_with("https://img/d.jpg", podcasts.MAX_ART_BYTES,
+                                   timeout=podcasts.ART_TIMEOUT)
+        self.assertEqual(podcasts.MAX_ART_BYTES, 2 * 1024 * 1024)
+        self.assertEqual(podcasts.ART_TIMEOUT, 3)
+        self.assertEqual([f.name for f in Path(p).parent.iterdir()], [Path(p).name])
 
 
 class TestFollowing(unittest.TestCase):
