@@ -22,6 +22,7 @@ SCOPES = "playlist-read-private playlist-read-collaborative user-follow-read"
 DEFAULT_PORT = 8888
 LOGIN_WAIT = 180
 TIMEOUT = 8
+REQUEST_TIMEOUT = 5  # drop a callback connection that sends nothing for this long
 EXPIRY_MARGIN = 30  # refresh when the token has less than this many seconds left
 LOGIN_HINT = "run `sqlch spotify-login`"
 
@@ -148,12 +149,21 @@ def access_token(client_id: str) -> str:
 # ---- interactive login ----
 
 class _Callback(BaseHTTPRequestHandler):
+    def setup(self):
+        self.timeout = REQUEST_TIMEOUT
+        super().setup()
+
     def do_GET(self):
         url = urlparse(self.path)
         if url.path != "/callback":
             self.send_error(404)
             return
         query = {k: v[0] for k, v in parse_qs(url.query).items()}
+        state = query.get("state")
+        if state is None or not secrets.compare_digest(
+                state.encode(), self.server.expected_state.encode()):
+            self.send_error(400)
+            return
         self.server.result = query
         body = (b"sqlch: you can close this tab." if "code" in query
                 else b"sqlch: login failed, see the terminal.")
@@ -177,6 +187,7 @@ def login(client_id: str, port: int = DEFAULT_PORT, open_browser=webbrowser.open
     server.timeout = 1
     actual = server.server_address[1]
     verifier, state = new_verifier(), secrets.token_urlsafe(16)
+    server.expected_state = state
     url = authorize_url(client_id, actual, verifier, state)
     try:
         say(f"Opening your browser to log in to Spotify.\nIf it does not open, visit:\n{url}")

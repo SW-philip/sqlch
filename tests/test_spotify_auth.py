@@ -9,9 +9,13 @@ from pathlib import Path
 from unittest import mock
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlparse
-from urllib.request import urlopen
+from urllib.request import ProxyHandler, build_opener, urlopen
 
 from sqlch.core import spotify_auth as auth
+
+
+def _get(url):
+    build_opener(ProxyHandler({})).open(url, timeout=5).read()
 
 
 class Base(unittest.TestCase):
@@ -160,7 +164,7 @@ class TestLogin(Base):
 
             def hit():
                 try:
-                    urlopen(f"http://127.0.0.1:{port}/callback?{qs}", timeout=5).read()
+                    _get(f"http://127.0.0.1:{port}/callback?{qs}")
                 except Exception:
                     pass
 
@@ -182,13 +186,51 @@ class TestLogin(Base):
         self.assertEqual(auth.challenge(data["code_verifier"]), q["code_challenge"][0])
         self.assertTrue(auth.logged_in())
 
-    def test_state_mismatch_fails_and_saves_nothing(self):
+    def test_wrong_state_is_ignored_and_saves_nothing(self):
         browser, _ = self._browser(state="WRONG")
         with mock.patch.object(auth, "_post_token") as post:
-            with self.assertRaisesRegex(auth.AuthError, "state"):
-                auth.login("CID", port=0, open_browser=browser, wait=10, say=lambda s: None)
+            with self.assertRaisesRegex(auth.AuthError, "timed out"):
+                auth.login("CID", port=0, open_browser=browser, wait=1.5, say=lambda s: None)
         post.assert_not_called()
         self.assertFalse(auth.logged_in())
+
+    def test_stray_request_before_the_real_callback_does_not_cancel_login(self):
+        def browser(url):
+            q = parse_qs(urlparse(url).query)
+            port = urlparse(q["redirect_uri"][0]).port
+            base = f"http://127.0.0.1:{port}"
+
+            def hit():
+                for path in ("/callback", "/favicon.ico",
+                             f"/callback?state={q['state'][0]}&code=CODE"):
+                    try:
+                        _get(base + path)
+                    except Exception:
+                        pass
+
+            threading.Thread(target=hit, daemon=True).start()
+
+        resp = {"access_token": "A", "refresh_token": "R", "expires_in": 3600}
+        with mock.patch.object(auth, "_post_token", return_value=resp) as post:
+            auth.login("CID", port=0, open_browser=browser, wait=10, say=lambda s: None)
+        self.assertEqual(post.call_args[0][0]["code"], "CODE")
+        self.assertTrue(auth.logged_in())
+
+    def test_silent_connection_does_not_block_the_real_callback(self):
+        import socket
+        real, _ = self._browser()
+
+        def browser(url):
+            port = urlparse(parse_qs(urlparse(url).query)["redirect_uri"][0]).port
+            silent = socket.create_connection(("127.0.0.1", port))
+            self.addCleanup(silent.close)
+            real(url)
+
+        resp = {"access_token": "A", "refresh_token": "R", "expires_in": 3600}
+        with mock.patch.object(auth, "REQUEST_TIMEOUT", 0.3), \
+             mock.patch.object(auth, "_post_token", return_value=resp):
+            auth.login("CID", port=0, open_browser=browser, wait=10, say=lambda s: None)
+        self.assertTrue(auth.logged_in())
 
     def test_denied_login_fails_with_the_error_code(self):
         browser, _ = self._browser(error="access_denied", code=None)
