@@ -34,6 +34,10 @@ HELP = (
     'Discovery:\n'
     '  sqlch search <query>\n'
     '  sqlch preview <index|url>\n'
+    '\n'
+    'Spotify:\n'
+    '  sqlch spotify-login [--port N]   (log in to see your playlists)\n'
+    '  sqlch spotify-logout\n'
 )
 
 
@@ -73,7 +77,42 @@ def status():
     return player.status_string()
 
 
+def spotify_login_cmd(args: list[str]) -> None:
+    from sqlch.core import spotify_auth
+    from sqlch.sources import spotify
+    port = spotify.redirect_port()
+    if args[:1] == ['--port']:
+        try:
+            port = int(args[1])
+        except (IndexError, ValueError):
+            print('usage: sqlch spotify-login [--port N]', file=sys.stderr)
+            sys.exit(2)
+    cid = spotify.client_id()
+    if cid is None:
+        print('sqlch: no Spotify credentials; put SPOTIFY_CLIENT_ID and '
+              f'SPOTIFY_CLIENT_SECRET in {spotify.DEFAULT_ENV_FILE}', file=sys.stderr)
+        sys.exit(1)
+    try:
+        spotify_auth.login(cid, port)
+    except spotify_auth.AuthError as e:
+        print(f'sqlch: spotify login failed: {e}', file=sys.stderr)
+        sys.exit(1)
+    print('sqlch: logged in to Spotify')
+
+
+def spotify_logout_cmd() -> None:
+    from sqlch.core import spotify_auth
+    spotify_auth.clear()
+    print('sqlch: logged out of Spotify')
+
+
 def dispatch_command(cmd: str, args: list[str]) -> None:
+    if cmd == 'spotify-login':
+        spotify_login_cmd(args)
+        return
+    if cmd == 'spotify-logout':
+        spotify_logout_cmd()
+        return
     if cmd == 'status':
         print(status())
         return
