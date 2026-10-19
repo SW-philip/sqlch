@@ -337,16 +337,15 @@ class TestStarAndFollow(unittest.TestCase):
 
     def test_stale_load_does_not_overwrite_marks(self):
         held = []
-        store = FakeStore()
-        p = make(Fake(), run=lambda w, d: held.append((w, d)), store=store)
+        p = make(Fake(), run=lambda w, d: held.append((w, d)), store=FakeStore())
         p.on_shown()
         work, done = held.pop(0)
-        stale = work()
-        store.favs.append(TRACK)
+        p._fav_ids = {"t"}
+        p._followed = {"UC1"}
         p._gen += 1
-        p._fav_ids.add("t")
-        done(stale, None)
+        done(work(), None)
         self.assertEqual(p._fav_ids, {"t"})
+        self.assertEqual(p._followed, {"UC1"})
 
     def test_toggle_favorite_failure_shows_status(self):
         p = make(Fake(), send=lambda m: None)
