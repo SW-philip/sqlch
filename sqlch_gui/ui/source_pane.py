@@ -4,7 +4,8 @@ import threading
 
 from gi.repository import Gtk, GLib
 
-from sqlch.sources import safe_available
+from sqlch.core import follows
+from sqlch.sources import safe_available, sections_for
 
 from .. import daemon
 from .timefmt import format_duration
@@ -22,7 +23,8 @@ def _thread_run(work, done):
 
 
 class SourcePane(Gtk.Box):
-    def __init__(self, parent_window, source, run_async=_thread_run, play=None):
+    def __init__(self, parent_window, source, run_async=_thread_run, play=None,
+                 store=None, send=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.set_margin_start(6)
         self.set_margin_end(6)
@@ -39,6 +41,12 @@ class SourcePane(Gtk.Box):
         self._loaded = False
         self._pending = None
         self._play_error = False
+        self._store = store or follows
+        self._send = send or (lambda msg: daemon.send(msg))
+        self._sections = sections_for(source)
+        self._section = self._sections[0]["id"]
+        self._fav_ids: set = set()
+        self._followed: set = set()
 
         search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         self.entry = Gtk.Entry(placeholder_text=f"Search {source.NAME}...")
@@ -51,6 +59,17 @@ class SourcePane(Gtk.Box):
         search_box.append(self.entry)
         search_box.append(btn_go)
         self.append(search_box)
+
+        self.section_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self._pills: dict[str, Gtk.Button] = {}
+        for sec in self._sections:
+            pill = Gtk.Button(label=sec["title"])
+            pill.add_css_class("section-pill")
+            pill.connect("clicked", lambda _b, sid=sec["id"]: self._select_section(sid))
+            self.section_row.append(pill)
+            self._pills[sec["id"]] = pill
+        self._mark_pills()
+        self.append(self.section_row)
 
         self.nav = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.nav.set_visible(False)
@@ -109,17 +128,50 @@ class SourcePane(Gtk.Box):
         self.status.set_visible(bool(text))
 
     def _current_path(self):
-        return self._stack[-1][0] if self._stack else None
+        if self._stack:
+            return self._stack[-1][0]
+        if self._section == "browse":
+            return None
+        return f"section:{self._section}"
+
+    def _mark_pills(self):
+        for sid, pill in self._pills.items():
+            if sid == self._section:
+                pill.add_css_class("active")
+            else:
+                pill.remove_css_class("active")
+
+    def _select_section(self, sid):
+        self._section = sid
+        self._stack = []
+        self._searching = False
+        self.entry.set_text("")
+        self._mark_pills()
+        self._reload()
+
+    def _browse(self, path):
+        if path == "section:favorites":
+            return self._store.list_favorites(self.source.NAME)
+        return self.source.browse(path)
 
     def _reload(self):
-        self._load(lambda: self.source.browse(self._current_path()))
+        self._load(lambda: self._browse(self._current_path()))
+
+    def _with_marks(self, work):
+        """Also refresh star/follow state; runs in the worker with the load."""
+        def run():
+            result = work()
+            self._fav_ids = self._store.favorite_ids(self.source.NAME)
+            self._followed = self._store.followed_ids()
+            return result
+        return run
 
     def _load(self, work):
         self._gen += 1
         gen = self._gen
         self._pending = work
         self._update_nav()
-        self._run(work, lambda result, err: self._show(gen, result, err))
+        self._run(self._with_marks(work), lambda result, err: self._show(gen, result, err))
 
     def _show(self, gen, result, err):
         if gen != self._gen:
@@ -164,6 +216,18 @@ class SourcePane(Gtk.Box):
         end.add_css_class("meta-genre")
         end.set_valign(Gtk.Align.CENTER)
         row.append(end)
+        star = Gtk.Button(label="★" if item.get("id") in self._fav_ids else "☆")
+        star.add_css_class("row-btn")
+        star.set_valign(Gtk.Align.CENTER)
+        star.connect("clicked", lambda b, it=item: self._toggle_favorite(it, b))
+        row.append(star)
+        if item.get("channel_id"):
+            following = item["channel_id"] in self._followed
+            fol = Gtk.Button(label="Unfollow" if following else "Follow")
+            fol.add_css_class("row-btn")
+            fol.set_valign(Gtk.Align.CENTER)
+            fol.connect("clicked", lambda b, it=item: self._toggle_follow(it, b))
+            row.append(fol)
         click = Gtk.GestureClick()
         click.set_button(1)
         click.connect("released", lambda g, n, x, y, it=item: self._activate(it))
@@ -184,6 +248,52 @@ class SourcePane(Gtk.Box):
         elif self._play_error:
             self._set_status("")
         return False
+
+    def _toggle_favorite(self, item, button):
+        def done(result, err):
+            resp = result or {}
+            if err is not None or not resp.get("ok"):
+                self._set_status("Couldn't update favorites: "
+                                 f"{err or resp.get('error') or 'daemon not running'}")
+                return False
+            if resp["favorite"]:
+                self._fav_ids.add(item["id"])
+            else:
+                self._fav_ids.discard(item["id"])
+            button.set_label("★" if resp["favorite"] else "☆")
+            if (self._section == "favorites" and not self._stack
+                    and not self._searching and not resp["favorite"]):
+                self._reload()
+            return False
+
+        self._run(lambda: self._send({"cmd": "toggle_favorite", "item": item}), done)
+
+    def _toggle_follow(self, item, button):
+        cid = item["channel_id"]
+        following = cid in self._followed
+        if following:
+            msg = {"cmd": "unfollow", "channel_id": cid}
+        else:
+            name = item["title"] if item.get("kind") == "folder" else item.get("artist")
+            msg = {"cmd": "follow", "channel_id": cid, "name": name or cid}
+
+        def done(result, err):
+            resp = result or {}
+            if err is not None or not resp.get("ok"):
+                self._set_status("Couldn't update follows: "
+                                 f"{err or resp.get('error') or 'daemon not running'}")
+                return False
+            if following:
+                self._followed.discard(cid)
+            else:
+                self._followed.add(cid)
+            button.set_label("Follow" if following else "Unfollow")
+            if following and self._section == "channels" and not self._stack \
+                    and not self._searching:
+                self._reload()
+            return False
+
+        self._run(lambda: self._send(msg), done)
 
     def back(self):
         if self._searching:

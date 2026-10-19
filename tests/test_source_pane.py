@@ -46,8 +46,25 @@ class Fake:
         return [TRACK]
 
 
-def make(src, run=sync, play=None):
-    return SourcePane(Gtk.Box(), src, run_async=run, play=play or (lambda i: None))
+class FakeStore:
+    def __init__(self, favs=(), followed=()):
+        self.favs = list(favs)
+        self.followed = set(followed)
+
+    def list_favorites(self, source):
+        return [f for f in self.favs if f["source"] == source]
+
+    def favorite_ids(self, source):
+        return {f["id"] for f in self.list_favorites(source)}
+
+    def followed_ids(self):
+        return set(self.followed)
+
+
+def make(src, run=sync, play=None, store=None, send=None):
+    return SourcePane(Gtk.Box(), src, run_async=run, play=play or (lambda i: None),
+                      store=store or FakeStore(),
+                      send=send or (lambda m: {"ok": True}))
 
 
 class TestFormat(unittest.TestCase):
@@ -229,6 +246,159 @@ class TestPlayErrors(unittest.TestCase):
         p = self._play_with({"ok": True})
         self.assertFalse(p.status.get_visible())
         self.assertEqual(p._items, [FOLDER])
+
+
+class Sectioned(Fake):
+    def __init__(self):
+        super().__init__(tree={"section:a": [FOLDER], "section:b": [TRACK], "/d": [TRACK]})
+
+    def sections(self):
+        return [{"id": "a", "title": "A"}, {"id": "b", "title": "B"}]
+
+
+VIDEO = {"source": "fake", "id": "v", "title": "Vid", "artist": "Chan",
+         "kind": "video", "channel_id": "UC1"}
+
+
+class TestSections(unittest.TestCase):
+    def test_source_without_sections_shows_browse_and_favorites(self):
+        p = make(Fake())
+        self.assertEqual([s["id"] for s in p._sections], ["browse", "favorites"])
+        p.on_shown()
+        self.assertEqual(p._section, "browse")
+
+    def test_first_section_loads_by_default(self):
+        s = Sectioned()
+        p = make(s)
+        p.on_shown()
+        self.assertEqual(s.browsed, ["section:a"])
+        self.assertEqual(p._items, [FOLDER])
+
+    def test_selecting_a_section_loads_it_and_resets_navigation(self):
+        s = Sectioned()
+        p = make(s)
+        p.on_shown()
+        p._activate(FOLDER)
+        self.assertEqual(p._stack, [("/d", "Dir")])
+        p._select_section("b")
+        self.assertEqual(p._stack, [])
+        self.assertEqual(s.browsed[-1], "section:b")
+        self.assertEqual(p._items, [TRACK])
+
+    def test_search_then_clear_returns_to_the_section(self):
+        s = Sectioned()
+        p = make(s)
+        p.on_shown()
+        p._select_section("b")
+        p._search("q")
+        self.assertTrue(p._searching)
+        p._search("")
+        self.assertFalse(p._searching)
+        self.assertEqual(s.browsed[-1], "section:b")
+
+    def test_favorites_come_from_the_store_not_the_source(self):
+        s = Sectioned()
+        fav = {**TRACK, "source": "fake"}
+        p = make(s, store=FakeStore(favs=[fav, {**TRACK, "source": "other", "id": "z"}]))
+        p.on_shown()
+        p._select_section("favorites")
+        self.assertEqual(p._items, [fav])
+        self.assertNotIn("section:favorites", s.browsed)
+
+    def test_active_pill_follows_the_section(self):
+        p = make(Sectioned())
+        p.on_shown()
+        self.assertTrue(p._pills["a"].has_css_class("active"))
+        p._select_section("b")
+        self.assertFalse(p._pills["a"].has_css_class("active"))
+        self.assertTrue(p._pills["b"].has_css_class("active"))
+
+
+class TestStarAndFollow(unittest.TestCase):
+    def test_star_state_comes_from_the_store(self):
+        p = make(Fake(tree={None: [TRACK]}), store=FakeStore(favs=[TRACK]))
+        p.on_shown()
+        self.assertEqual(p._fav_ids, {"t"})
+
+    def test_toggle_favorite_sends_to_daemon_and_updates_button(self):
+        sent = []
+        p = make(Fake(), send=lambda m: sent.append(m) or {"ok": True, "favorite": True})
+        p.on_shown()
+        btn = Gtk.Button(label="☆")
+        p._toggle_favorite(TRACK, btn)
+        self.assertEqual(sent, [{"cmd": "toggle_favorite", "item": TRACK}])
+        self.assertEqual(btn.get_label(), "★")
+        self.assertIn("t", p._fav_ids)
+        sent.clear()
+        p._send = lambda m: {"ok": True, "favorite": False}
+        p._toggle_favorite(TRACK, btn)
+        self.assertEqual(btn.get_label(), "☆")
+        self.assertNotIn("t", p._fav_ids)
+
+    def test_toggle_favorite_failure_shows_status(self):
+        p = make(Fake(), send=lambda m: None)
+        p.on_shown()
+        p._toggle_favorite(TRACK, Gtk.Button(label="☆"))
+        self.assertIn("Couldn't update favorites", p.status.get_text())
+
+    def test_unfavoriting_in_favorites_section_refreshes_the_list(self):
+        store = FakeStore(favs=[TRACK])
+        p = make(Fake(), store=store, send=lambda m: {"ok": True, "favorite": False})
+        p.on_shown()
+        p._select_section("favorites")
+        self.assertEqual(p._items, [TRACK])
+        store.favs.clear()
+        p._toggle_favorite(TRACK, Gtk.Button(label="★"))
+        self.assertEqual(p._items, [])
+
+    def test_follow_sends_channel_id_and_channel_name(self):
+        sent = []
+        p = make(Fake(tree={None: [VIDEO]}),
+                 send=lambda m: sent.append(m) or {"ok": True})
+        p.on_shown()
+        btn = Gtk.Button(label="Follow")
+        p._toggle_follow(VIDEO, btn)
+        self.assertEqual(sent, [{"cmd": "follow", "channel_id": "UC1", "name": "Chan"}])
+        self.assertEqual(btn.get_label(), "Unfollow")
+        self.assertIn("UC1", p._followed)
+
+    def test_unfollow_sends_unfollow(self):
+        sent = []
+        p = make(Fake(tree={None: [VIDEO]}), store=FakeStore(followed=["UC1"]),
+                 send=lambda m: sent.append(m) or {"ok": True})
+        p.on_shown()
+        btn = Gtk.Button(label="Unfollow")
+        p._toggle_follow(VIDEO, btn)
+        self.assertEqual(sent, [{"cmd": "unfollow", "channel_id": "UC1"}])
+        self.assertEqual(btn.get_label(), "Follow")
+        self.assertNotIn("UC1", p._followed)
+
+    def test_channel_folder_uses_its_title_as_the_name(self):
+        sent = []
+        chan = {"source": "fake", "id": "UC1", "title": "Chan Folder", "kind": "folder",
+                "path": "/c", "channel_id": "UC1"}
+        p = make(Fake(), send=lambda m: sent.append(m) or {"ok": True})
+        p.on_shown()
+        p._toggle_follow(chan, Gtk.Button(label="Follow"))
+        self.assertEqual(sent[0]["name"], "Chan Folder")
+
+    def test_rows_only_offer_follow_when_there_is_a_channel(self):
+        p = make(Fake())
+        labels = []
+
+        def collect(widget):
+            child = widget.get_first_child()
+            while child:
+                if isinstance(child, Gtk.Button):
+                    labels.append(child.get_label())
+                collect(child)
+                child = child.get_next_sibling()
+
+        collect(p._build_row(TRACK))
+        self.assertEqual(labels, ["☆"])
+        labels.clear()
+        collect(p._build_row(VIDEO))
+        self.assertEqual(labels, ["☆", "Follow"])
 
 
 if __name__ == "__main__":

@@ -168,6 +168,31 @@ def _build_css(colors: dict) -> str:
         color: {outline};
     }}
 
+    .section-pill {{
+        font-family: {mono};
+        font-size: 0.7em;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 9px;
+        border: {hairline};
+        background: none;
+        color: {root};
+    }}
+    .section-pill.active {{
+        background-color: {root};
+        color: {outline};
+    }}
+    .row-btn {{
+        font-family: {mono};
+        font-size: 0.7em;
+        padding: 1px 6px;
+        min-height: 0;
+        border: {hairline};
+        border-radius: 8px;
+        background: none;
+        color: {root};
+    }}
+
     .list-plate {{
         background-color: {dim};
         border-radius: 12px;
