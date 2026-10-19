@@ -173,11 +173,14 @@ class SourcePane(Gtk.Box):
         self._load(lambda: self._browse(self._current_path()))
 
     def _with_marks(self, work):
-        """Read star/follow state in the worker; _show applies it on the main thread."""
+        """Read star/follow state and any source warning in the worker; _show
+        applies them on the main thread."""
         def run():
             result = work()
+            warn = getattr(self.source, "last_warning", None)
             return (result, set(self._store.favorite_ids(self.source.NAME)),
-                    set(self._store.followed_ids()))
+                    set(self._store.followed_ids()) | set(self._store.followed_feeds()),
+                    warn() if warn else None)
         return run
 
     def _load(self, work):
@@ -191,8 +194,9 @@ class SourcePane(Gtk.Box):
         if gen != self._gen:
             return False
         self._pending = None
+        warning = None
         if err is None:
-            result, self._fav_ids, self._followed = result
+            result, self._fav_ids, self._followed, warning = result
         while child := self.list.get_first_child():
             self.list.remove(child)
         if err is not None:
@@ -202,7 +206,7 @@ class SourcePane(Gtk.Box):
         self._items = list(result or [])
         self._progress = self._watch.read_all()
         self._fill()
-        self._set_status("" if self._items else "Nothing here")
+        self._set_status(warning or ("" if self._items else "Nothing here"))
         return False
 
     def _fill(self):
@@ -304,8 +308,9 @@ class SourcePane(Gtk.Box):
             self._row_refs[key] = {"banner": banner, "bar": bar,
                                    "note": note, "toggle": toggle}
             self._apply_progress(key)
-        if item.get("channel_id"):
-            following = item["channel_id"] in self._followed
+        follow_key = item.get("channel_id") or item.get("feed_url")
+        if follow_key:
+            following = follow_key in self._followed
             fol = Gtk.Button(label="Unfollow" if following else "Follow")
             fol.add_css_class("row-btn")
             fol.set_valign(Gtk.Align.CENTER)
@@ -427,13 +432,18 @@ class SourcePane(Gtk.Box):
         self._run(lambda: self._send({"cmd": "toggle_favorite", "item": item}), done)
 
     def _toggle_follow(self, item, button):
-        cid = item["channel_id"]
-        following = cid in self._followed
-        if following:
-            msg = {"cmd": "unfollow", "channel_id": cid}
+        key = item.get("channel_id") or item["feed_url"]
+        following = key in self._followed
+        if item.get("channel_id"):
+            if following:
+                msg = {"cmd": "unfollow", "channel_id": key}
+            else:
+                name = item["title"] if item.get("kind") == "folder" else item.get("artist")
+                msg = {"cmd": "follow", "channel_id": key, "name": name or key}
+        elif following:
+            msg = {"cmd": "podcast_unfollow", "feed_url": key}
         else:
-            name = item["title"] if item.get("kind") == "folder" else item.get("artist")
-            msg = {"cmd": "follow", "channel_id": cid, "name": name or cid}
+            msg = {"cmd": "podcast_follow", "item": item}
 
         def done(result, err):
             resp = result or {}
@@ -442,12 +452,12 @@ class SourcePane(Gtk.Box):
                                  f"{err or resp.get('error') or 'daemon not running'}")
                 return False
             if following:
-                self._followed.discard(cid)
+                self._followed.discard(key)
             else:
-                self._followed.add(cid)
+                self._followed.add(key)
             button.set_label("Follow" if following else "Unfollow")
-            if following and self._section == "channels" and not self._stack \
-                    and not self._searching:
+            if following and self._section in ("channels", "following") \
+                    and not self._stack and not self._searching:
                 self._reload()
             return False
 

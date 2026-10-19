@@ -47,9 +47,10 @@ class Fake:
 
 
 class FakeStore:
-    def __init__(self, favs=(), followed=()):
+    def __init__(self, favs=(), followed=(), feeds=()):
         self.favs = list(favs)
         self.followed = set(followed)
+        self.feeds = set(feeds)
 
     def list_favorites(self, source):
         return [f for f in self.favs if f["source"] == source]
@@ -59,6 +60,9 @@ class FakeStore:
 
     def followed_ids(self):
         return set(self.followed)
+
+    def followed_feeds(self):
+        return set(self.feeds)
 
 
 def make(src, run=sync, play=None, store=None, send=None):
@@ -269,6 +273,9 @@ class Sectioned(Fake):
 
 VIDEO = {"source": "fake", "id": "v", "title": "Vid", "artist": "Chan",
          "kind": "video", "channel_id": "UC1"}
+SHOW = {"source": "fake", "id": "https://f/a", "title": "Show", "kind": "folder",
+        "path": "feed:https://f/a", "feed_url": "https://f/a", "genre": "Comedy",
+        "providers": ["apple"]}
 
 
 class TestSections(unittest.TestCase):
@@ -451,6 +458,17 @@ def labels_of(widget, out=None):
     return out
 
 
+def button_labels(widget, out=None):
+    out = [] if out is None else out
+    child = widget.get_first_child()
+    while child:
+        if isinstance(child, Gtk.Button):
+            out.append(child.get_label())
+        button_labels(child, out)
+        child = child.get_next_sibling()
+    return out
+
+
 class TestWatchedUi(unittest.TestCase):
     def pane(self, rows=None, play=None, send=None, tree=None):
         src = Fake(tree=tree or {None: [vid("a", "Alpha", 1792108800)]})
@@ -589,3 +607,51 @@ class TestPlayErrorClears(unittest.TestCase):
         pane._activate(TRACK)
         self.assertEqual(pane.status.get_text(), "set it up")
         self.assertTrue(pane.status.get_visible())
+
+
+class TestPodcastFollow(unittest.TestCase):
+    def test_feed_rows_offer_follow(self):
+        p = make(Fake(tree={None: [SHOW]}))
+        p.on_shown()
+        self.assertIn("Follow", button_labels(p._build_row(SHOW)))
+        p = make(Fake(tree={None: [SHOW]}), store=FakeStore(feeds=["https://f/a"]))
+        p.on_shown()
+        self.assertIn("Unfollow", button_labels(p._build_row(SHOW)))
+
+    def test_follow_sends_podcast_follow_with_the_item(self):
+        sent = []
+        p = make(Fake(tree={None: [SHOW]}), send=lambda m: sent.append(m) or {"ok": True})
+        p.on_shown()
+        btn = Gtk.Button(label="Follow")
+        p._toggle_follow(SHOW, btn)
+        self.assertEqual(sent, [{"cmd": "podcast_follow", "item": SHOW}])
+        self.assertEqual(btn.get_label(), "Unfollow")
+
+    def test_unfollow_in_following_reloads(self):
+        sent = []
+        src = Fake(tree={"section:following": [SHOW]})
+        src.sections = lambda: [{"id": "following", "title": "FOLLOWING"}]
+        p = make(src, store=FakeStore(feeds=["https://f/a"]),
+                 send=lambda m: sent.append(m) or {"ok": True})
+        p.on_shown()
+        src.tree["section:following"] = []
+        p._toggle_follow(SHOW, Gtk.Button(label="Unfollow"))
+        self.assertEqual(sent, [{"cmd": "podcast_unfollow", "feed_url": "https://f/a"}])
+        self.assertEqual(p._items, [])
+
+
+class TestSearchWarning(unittest.TestCase):
+    def test_warning_shows_in_status(self):
+        src = Fake()
+        src.last_warning = lambda: "Podcast Index unavailable"
+        p = make(src)
+        p.on_shown()
+        p._search("x")
+        self.assertTrue(p.status.get_visible())
+        self.assertEqual(p.status.get_text(), "Podcast Index unavailable")
+
+    def test_no_warning_hook_is_fine(self):
+        p = make(Fake())
+        p.on_shown()
+        p._search("x")
+        self.assertFalse(p.status.get_visible())
