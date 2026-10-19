@@ -8,6 +8,7 @@ from collections import deque
 from pathlib import Path
 from gi.repository import Gtk, GLib, GdkPixbuf, GObject, Pango
 
+from sqlch.core import progress
 from .. import XDG_CACHE, daemon, metadata
 from .controls import VolumeMeter, RecordBubble, NavColumn, SeekBar, TimelineBar
 from .header import Header
@@ -68,6 +69,14 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_live_tag.set_valign(Gtk.Align.START)
         self.lbl_live_tag.set_visible(False)
         self.cover_overlay.add_overlay(self.lbl_live_tag)
+
+        self.lbl_watched_tag = Gtk.Label(label="WATCHED")
+        self.lbl_watched_tag.add_css_class("corner-tag")
+        self.lbl_watched_tag.add_css_class("corner-tag-right")
+        self.lbl_watched_tag.set_halign(Gtk.Align.END)
+        self.lbl_watched_tag.set_valign(Gtk.Align.END)
+        self.lbl_watched_tag.set_visible(False)
+        self.cover_overlay.add_overlay(self.lbl_watched_tag)
         # Overlay on the cover (never a child that sizes it), so the card's
         # height does not change when a toast appears.
         self.toast = Toast()
@@ -229,6 +238,7 @@ class NowPlayingPanel(Gtk.Box):
         self.header.set_track("<i>Not Playing</i>")
         self.btn_toggle.set_icon_name("media-playback-start-symbolic")
         self.lbl_live_tag.set_visible(False)
+        self.lbl_watched_tag.set_visible(False)
         self._set_pills_placeholder()
         self.rec_bubble.set_state(False, "full")
         self.clear_cover()
@@ -319,6 +329,7 @@ class NowPlayingPanel(Gtk.Box):
             # only the LIVE tag is no longer accurate and gets hidden.
             self._set_stale(True)
             self.lbl_live_tag.set_visible(False)
+            self.lbl_watched_tag.set_visible(False)
             self.seek_bar.set_state(None, None)
             self.timeline.set_state(None)
             return
@@ -361,6 +372,7 @@ class NowPlayingPanel(Gtk.Box):
             self._cur_artist, self._cur_title = None, None
         else:
             self.lbl_live_tag.set_visible(False)
+            self.lbl_watched_tag.set_visible(False)
             display_artist = artist or "Unknown Artist"
             display_title = title or "Unknown Track"
             self.header.set_track(
@@ -383,6 +395,7 @@ class NowPlayingPanel(Gtk.Box):
 
     def _update_item(self, item: dict, resp: dict):
         self.lbl_live_tag.set_visible(False)
+        self.lbl_watched_tag.set_visible(False)
         self._cur_station_id = None
         self._cur_frequency = None
         artist = item.get("artist") or ""
@@ -409,6 +422,9 @@ class NowPlayingPanel(Gtk.Box):
                 self.clear_cover()
 
         self.seek_bar.set_state(resp.get("position"), resp.get("duration"))
+        row = progress.get(item.get("source", ""), item.get("id", "")) \
+            if item.get("kind") == "video" else None
+        self.lbl_watched_tag.set_visible(bool(row and row.get("watched")))
 
     def _send_async(self, msg: dict):
         threading.Thread(target=daemon.send, args=(msg,), daemon=True).start()

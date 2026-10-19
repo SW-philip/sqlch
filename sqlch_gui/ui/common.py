@@ -156,6 +156,30 @@ def _build_css(colors: dict) -> str:
         color: {outline};
     }}
 
+    .corner-tag-right {{
+        background-color: {seventh};
+        color: {hall};
+    }}
+    .thumb {{
+        border-radius: 5px;
+        background-color: {dim};
+    }}
+    .thumb-tag {{
+        margin: 3px;
+        padding: 1px 4px;
+        font-size: 0.5em;
+    }}
+    .watch-bar trough {{
+        background-color: {wing};
+        border-radius: 2px;
+        min-height: 3px;
+    }}
+    .watch-bar progress {{
+        background-color: {score};
+        border-radius: 2px;
+        min-height: 3px;
+    }}
+
     .toast {{
         font-family: {mono};
         font-weight: 700;

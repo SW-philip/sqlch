@@ -6,7 +6,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gtk
 
 from sqlch_gui.ui.source_pane import SourcePane
-from sqlch_gui.ui.timefmt import format_duration
+from sqlch_gui.ui.timefmt import format_date, format_duration
 
 
 def sync(work, done):
@@ -68,6 +68,11 @@ def make(src, run=sync, play=None, store=None, send=None):
 
 
 class TestFormat(unittest.TestCase):
+    def test_date_is_the_utc_calendar_day(self):
+        self.assertEqual(format_date(1792108800), "Oct 16, 2026")
+        self.assertEqual(format_date(None), "")
+        self.assertEqual(format_date(0), "")
+
     def test_duration(self):
         self.assertEqual(format_duration(None), "")
         self.assertEqual(format_duration(0), "")
@@ -416,7 +421,134 @@ class TestStarAndFollow(unittest.TestCase):
         self.assertEqual(labels, ["☆"])
         labels.clear()
         collect(p._build_row(VIDEO))
-        self.assertEqual(labels, ["☆", "Follow"])
+        self.assertEqual(labels, ["☆", "○", "Follow"])
+
+
+class FakeWatch:
+    def __init__(self, rows=None):
+        self.rows = rows or {}
+
+    def read_all(self):
+        return dict(self.rows)
+
+    def get(self, source, id):
+        return self.rows.get(f"{source}:{id}")
+
+
+def vid(id, title, date=None):
+    return {"source": "fake", "id": id, "title": title, "artist": "Chan",
+            "kind": "video", "duration": 1200, "date": date}
+
+
+def labels_of(widget, out=None):
+    out = [] if out is None else out
+    child = widget.get_first_child()
+    while child:
+        if isinstance(child, Gtk.Label):
+            out.append(child)
+        labels_of(child, out)
+        child = child.get_next_sibling()
+    return out
+
+
+class TestWatchedUi(unittest.TestCase):
+    def pane(self, rows=None, play=None, send=None, tree=None):
+        src = Fake(tree=tree or {None: [vid("a", "Alpha", 1792108800)]})
+        src.HAS_DATES = True
+        p = SourcePane(Gtk.Box(), src, run_async=sync, play=play or (lambda i, **k: None),
+                       store=FakeStore(), send=send or (lambda m: {"ok": True}),
+                       watch=FakeWatch(rows))
+        p.on_shown()
+        return p
+
+    def test_unwatched_row_has_no_banner_or_bar(self):
+        p = self.pane()
+        refs = p._row_refs["fake:a"]
+        self.assertFalse(refs["banner"].get_visible())
+        self.assertFalse(refs["bar"].get_visible())
+        self.assertEqual(refs["toggle"].get_label(), "○")
+
+    def test_watched_row_shows_banner(self):
+        p = self.pane({"fake:a": {"watched": True, "position": 0, "duration": 1200}})
+        refs = p._row_refs["fake:a"]
+        self.assertTrue(refs["banner"].get_visible())
+        self.assertEqual(refs["banner"].get_label(), "WATCHED")
+        self.assertEqual(refs["note"].get_text(), "Watched")
+        self.assertEqual(refs["toggle"].get_label(), "✓")
+
+    def test_partial_row_shows_how_much_was_watched(self):
+        p = self.pane({"fake:a": {"watched": False, "position": 300, "duration": 1200}})
+        refs = p._row_refs["fake:a"]
+        self.assertFalse(refs["banner"].get_visible())
+        self.assertTrue(refs["bar"].get_visible())
+        self.assertAlmostEqual(refs["bar"].get_fraction(), 0.25)
+        self.assertEqual(refs["note"].get_text(), "5:00 of 20:00 watched")
+
+    def test_row_shows_upload_date(self):
+        p = self.pane()
+        texts = [l.get_text() for l in labels_of(p.list)]
+        self.assertIn("Chan · Oct 16, 2026", texts)
+
+    def test_oldest_first_orders_by_date_with_undated_last(self):
+        tree = {None: [vid("n", "Newest", 300 * 86400), vid("u", "Undated"),
+                       vid("o", "Oldest", 100 * 86400)]}
+        p = self.pane(tree=tree)
+
+        def titles():
+            names = {"Newest", "Undated", "Oldest"}
+            return [l.get_text() for l in labels_of(p.list) if l.get_text() in names]
+
+        self.assertEqual(titles(), ["Newest", "Undated", "Oldest"])
+        p.btn_order.set_active(True)
+        self.assertEqual(titles(), ["Oldest", "Newest", "Undated"])
+
+    def test_click_without_saved_point_just_plays(self):
+        played = []
+        p = self.pane(play=lambda i, **k: played.append((i["id"], k)))
+        with mock.patch.object(p, "_offer_resume") as offer:
+            p._activate(vid("a", "Alpha"), Gtk.Box())
+        offer.assert_not_called()
+        self.assertEqual(played, [("a", {})])
+
+    def test_click_with_saved_point_offers_resume_or_restart(self):
+        played = []
+        rows = {"fake:a": {"watched": False, "position": 300, "duration": 1200}}
+        p = self.pane(rows, play=lambda i, **k: played.append(k))
+        anchor = Gtk.Box()
+        with mock.patch.object(p, "_offer_resume") as offer:
+            p._activate(vid("a", "Alpha"), anchor)
+        offer.assert_called_once_with(vid("a", "Alpha"), 300.0, anchor)
+        self.assertEqual(played, [])
+        pop = mock.Mock()
+        p._start(vid("a", "Alpha"), True, pop)
+        p._start(vid("a", "Alpha"), False, pop)
+        self.assertEqual(played, [{"resume": True}, {}])
+
+    def test_watched_video_replays_from_the_start(self):
+        played = []
+        rows = {"fake:a": {"watched": True, "position": 0, "duration": 1200}}
+        p = self.pane(rows, play=lambda i, **k: played.append(k))
+        with mock.patch.object(p, "_offer_resume") as offer:
+            p._activate(vid("a", "Alpha"), Gtk.Box())
+        offer.assert_not_called()
+        self.assertEqual(played, [{}])
+
+    def test_toggle_sends_mark_and_refreshes(self):
+        sent = []
+        p = self.pane(send=lambda m: sent.append(m) or {"ok": True})
+        item = vid("a", "Alpha")
+        p._toggle_watched(item)
+        self.assertEqual(sent[0], {"cmd": "mark_watched", "item": item, "watched": True})
+        p._watch.rows["fake:a"] = {"watched": True, "position": 0, "duration": 1200}
+        p._refresh_progress()
+        p._toggle_watched(item)
+        self.assertFalse(sent[1]["watched"])
+
+    def test_resume_reaches_the_daemon_message(self):
+        with mock.patch("sqlch_gui.ui.source_pane.daemon.send",
+                        return_value={"ok": True}) as send:
+            SourcePane._daemon_play({"source": "fake", "id": "a"}, resume=True)
+        self.assertTrue(send.call_args[0][0]["resume"])
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ from sqlch.sources.base import Target, make_item
 NAME = "youtube"
 TITLE = "YOUTUBE"
 LABEL = "YouTube"
+HAS_DATES = True
 HINT = ("Install yt-dlp. Add channels or playlists to browse under "
         'sources.youtube.shortcuts: [{"name": "...", "url": "https://..."}]')
 
@@ -162,6 +163,14 @@ def _cover(vid: str) -> str | None:
     except OSError:
         return None
     return str(dest)
+
+
+def thumbnail(item: dict) -> str | None:
+    """Cached cover for a listing row; blocking, so call it off the main thread."""
+    vid = item.get("id")
+    if not vid or not all(c.isalnum() or c in "_-" for c in vid):
+        return None
+    return _cover(vid)
 
 
 def resolve(item: dict) -> Target:
