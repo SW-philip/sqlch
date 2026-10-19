@@ -16,11 +16,12 @@ class TestDockState(unittest.TestCase):
         self.assertEqual(dock_state.load(self.path), dock_state.default_state())
 
     def test_round_trip(self):
-        s = dock_state.default_state()
-        s["library"] = {"open": True, "placed": {"mode": "np", "dx": -330, "dy": 12}}
-        s["discover"] = {"open": False, "placed": {"mode": "free", "x": 40, "y": 60}}
+        names = dock_state.NAMES + ("local",)
+        s = dock_state.default_state(names)
+        s["radio"] = {"open": True, "placed": {"mode": "np", "dx": -330, "dy": 12}}
+        s["local"] = {"open": False, "placed": {"mode": "free", "x": 40, "y": 60}}
         dock_state.save(s, self.path)
-        self.assertEqual(dock_state.load(self.path), s)
+        self.assertEqual(dock_state.load(self.path, names=names), s)
 
     def test_corrupt_file_gives_defaults(self):
         self.path.parent.mkdir(parents=True)
@@ -30,14 +31,31 @@ class TestDockState(unittest.TestCase):
     def test_bad_entries_are_sanitized_individually(self):
         self.path.parent.mkdir(parents=True)
         self.path.write_text(json.dumps({
-            "library": {"open": True, "placed": {"mode": "np", "dx": "x"}},
-            "discover": {"open": True, "placed": {"mode": "free", "x": 5, "y": 6}},
+            "radio": {"open": True, "placed": {"mode": "np", "dx": "x"}},
+            "local": {"open": True, "placed": {"mode": "free", "x": 5, "y": 6}},
             "bogus": {"open": True},
         }))
-        s = dock_state.load(self.path)
-        self.assertEqual(s["library"], {"open": True, "placed": None})
-        self.assertEqual(s["discover"]["placed"], {"mode": "free", "x": 5, "y": 6})
+        s = dock_state.load(self.path, names=dock_state.NAMES + ("local",))
+        self.assertEqual(s["radio"], {"open": True, "placed": None})
+        self.assertEqual(s["local"]["placed"], {"mode": "free", "x": 5, "y": 6})
         self.assertNotIn("bogus", s)
+
+    def test_old_library_discover_state_migrates_to_radio(self):
+        self.path.parent.mkdir(parents=True)
+        self.path.write_text(json.dumps({
+            "library": {"open": False, "placed": {"mode": "free", "x": 7, "y": 8}},
+            "discover": {"open": True, "placed": None},
+        }))
+        s = dock_state.load(self.path)
+        self.assertEqual(s["radio"], {"open": True, "placed": {"mode": "free", "x": 7, "y": 8}})
+
+    def test_existing_radio_state_wins_over_old_keys(self):
+        self.path.parent.mkdir(parents=True)
+        self.path.write_text(json.dumps({
+            "radio": {"open": False, "placed": None},
+            "library": {"open": True, "placed": None},
+        }))
+        self.assertEqual(dock_state.load(self.path)["radio"], {"open": False, "placed": None})
 
 
 class TestNowPlayingPosition(unittest.TestCase):
@@ -59,7 +77,7 @@ class TestNowPlayingPosition(unittest.TestCase):
         self.assertEqual(dock_state.load(self.path)["np"], {"x": 900, "y": 48})
 
     def test_missing_or_corrupt_np_is_none(self):
-        self.assertIsNone(self._load_raw({"library": {"open": True}})["np"])
+        self.assertIsNone(self._load_raw({"radio": {"open": True}})["np"])
         self.assertIsNone(self._load_raw({"np": "top-right"})["np"])
         self.assertIsNone(self._load_raw({"np": {"x": 5}})["np"])
 

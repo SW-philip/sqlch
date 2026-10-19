@@ -13,6 +13,7 @@ from .header import next_connected
 from .now_playing import NowPlayingPanel
 from .station_list import StationListPanel
 from .discover import DiscoverPanel
+from .radio_pane import RadioPane
 from .dock_manager import DockManager
 from .overlay_card import OverlayCard
 from .source_pane import SourcePane
@@ -73,6 +74,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         self.now_playing = NowPlayingPanel(self)
         self.station_list = StationListPanel(self)
         self.discover = DiscoverPanel(self)
+        self.radio = RadioPane(self.station_list, self.discover)
 
         self.card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.card.add_css_class("popup-window")
@@ -89,7 +91,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
             exclude=(self.now_playing.nav_column,),
             sized=False)
 
-        panels = {"library": self.station_list, "discover": self.discover}
+        panels = {"radio": self.radio}
         titles = {}
         for name, src in SOURCES.items():
             panels[name] = lambda s=src: SourcePane(self, s)
@@ -101,8 +103,8 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         self.docks = DockManager(
             self, panels=panels, titles=titles,
             nav=self.now_playing.nav_column,
-            on_shown={"library": self.station_list.on_shown, "discover": lambda: None},
-            on_hidden={"library": self.station_list.abort_probes, "discover": lambda: None},
+            on_shown={"radio": self.radio.on_shown},
+            on_hidden={"radio": self.radio.on_hidden},
         )
         self.now_playing.connect("nav-toggled", lambda _p, name: self.docks.toggle(name))
         self.connect("map", lambda _w: GLib.idle_add(self.docks.show_saved))

@@ -1,4 +1,4 @@
-"""Persisted open/placement state for the docked Library/Discover windows,
+"""Persisted open/placement state for the docked Radio and source windows,
 plus Now Playing's position ("np": None = default top-right, else {"x","y"}
 in overlay coordinates)."""
 
@@ -8,7 +8,7 @@ from pathlib import Path
 from .. import XDG_STATE
 
 STATE_PATH = XDG_STATE / "sqlch-gui" / "windows.json"
-NAMES = ("library", "discover")
+NAMES = ("radio",)
 
 
 def default_state(names=NAMES) -> dict:
@@ -50,6 +50,13 @@ def load(path: Path = STATE_PATH, names=NAMES) -> dict:
         if isinstance(entry, dict):
             state[name] = {"open": entry.get("open") is True,
                            "placed": _placed(entry.get("placed"))}
+    if "radio" in names and "radio" not in raw:
+        # Library and Discover used to be separate windows; Radio inherits
+        # whichever was open, placed where Library was.
+        old = [raw.get(n) for n in ("library", "discover") if isinstance(raw.get(n), dict)]
+        if old:
+            state["radio"] = {"open": any(o.get("open") is True for o in old),
+                              "placed": _placed(old[0].get("placed"))}
     state["np"] = _np(raw.get("np"))
     return state
 

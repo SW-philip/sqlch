@@ -271,7 +271,7 @@ class RecordBubble(Gtk.DrawingArea):
 
 
 class NavColumn(Gtk.Box):
-    """Folder-tab row: LIBRARY and DISCOVER toggle their docked windows
+    """Folder-tab row: RADIO and the SOURCES menu toggle their docked windows
     independently. A click only emits `nav-toggled`; the DockManager decides
     what to open or close and syncs the highlight back with `set_open`, so
     the tab can never disagree with the window. Hosted by Header, which
@@ -282,8 +282,7 @@ class NavColumn(Gtk.Box):
     }
 
     _TABS = (
-        ("library", "LIBRARY", "Station Library"),
-        ("discover", "DISCOVER", "Discover Stations"),
+        ("radio", "RADIO", "Radio: station library and discover"),
     )
 
     def __init__(self):
