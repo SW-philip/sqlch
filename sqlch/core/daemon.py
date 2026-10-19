@@ -2,11 +2,12 @@ import json
 import os
 import socket
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
 from sqlch import sources
-from sqlch.core import discover, follows, library, notify, player, watcher
+from sqlch.core import discover, follows, library, notify, player, progress, watcher
 from sqlch.sources import youtube
 from sqlch.core.paths import runtime_dir
 
@@ -20,8 +21,42 @@ def _reply(conn: socket.socket, obj: dict[str, Any]):
     conn.sendall(data)
 
 
+TRACK_EVERY = 5  # seconds between playhead samples
+_FLUSH_BEFORE = {'stop', 'play', 'play_item', 'next', 'prev'}
+
+
+def track_once() -> None:
+    """Save the playhead of the playing video so it can be resumed or marked watched."""
+    cur = player.current()
+    if not cur or cur.get('type') != 'item':
+        return
+    item = cur.get('item') or {}
+    if item.get('kind') != 'video' or not item.get('source') or not item.get('id'):
+        return
+    pos, dur = player.item_progress()
+    # mpv reports nothing or 0 until the file is loaded; recording that would
+    # wipe a saved resume point.
+    if not isinstance(pos, (int, float)) or pos < 1:
+        return
+    progress.record(item['source'], item['id'], pos, dur)
+
+
+def _track_loop() -> None:
+    while True:
+        time.sleep(TRACK_EVERY)
+        try:
+            track_once()
+        except Exception:
+            pass
+
+
 def _handle(msg: dict[str, Any]) -> dict[str, Any]:
     cmd = msg.get('cmd')
+    if cmd in _FLUSH_BEFORE:
+        try:
+            track_once()
+        except Exception:
+            pass
     if cmd == 'ping':
         return {'ok': True, 'msg': 'pong'}
     if cmd == 'status':
@@ -81,7 +116,10 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
             target = src.resolve(item)
         except Exception as e:
             return {'ok': False, 'error': f'resolve failed: {e}'}
-        player.play_target(target, item)
+        start = None
+        if msg.get('resume'):
+            start = progress.resume_point(progress.get(item['source'], item['id']))
+        player.play_target(target, item, start=start)
         return {'ok': True}
     if cmd == 'seek':
         try:
@@ -167,6 +205,12 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
             return {'ok': False, 'error': 'bad channel id'}
         follows.unfollow(cid)
         return {'ok': True}
+    if cmd == 'mark_watched':
+        item = msg.get('item')
+        if not isinstance(item, dict) or not item.get('source') or not item.get('id'):
+            return {'ok': False, 'error': 'missing item'}
+        progress.mark(item['source'], item['id'], bool(msg.get('watched', True)))
+        return {'ok': True}
     if cmd == 'drain_notices':
         return {'ok': True, 'notices': watcher.drain()}
     return {'ok': False, 'error': f'unknown cmd: {cmd}'}
@@ -178,6 +222,7 @@ def run_daemon():
     from sqlch.core import mpris_daemon
     threading.Thread(target=mpris_daemon.main, daemon=True, name="mpris").start()
     watcher.start(youtube.fetch_feed, youtube.poll_seconds)
+    threading.Thread(target=_track_loop, daemon=True, name="progress").start()
 
     try:
         if sock.exists():

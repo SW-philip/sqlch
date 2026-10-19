@@ -22,6 +22,11 @@ class TestMpvArgs(unittest.TestCase):
         self.assertNotIn("--wayland-app-id=sqlch-video", a)
         self.assertEqual(a[-1], "URL")
 
+    def test_start_offset_only_when_given(self):
+        self.assertIn("--start=300.5", self._args(start=300.5))
+        self.assertFalse([x for x in self._args() if x.startswith("--start")])
+        self.assertFalse([x for x in self._args(start=0) if x.startswith("--start")])
+
     def test_mpris_script_inserted_at_index_two(self):
         self.assertEqual(self._args(mpris="/p/mpris.so")[2], "--script=/p/mpris.so")
 
@@ -87,7 +92,7 @@ class TestDaemonItems(unittest.TestCase):
         with mock.patch.object(player, "play_target") as play:
             resp = daemon._handle({"cmd": "play_item", "item": item})
         self.assertEqual(resp, {"ok": True})
-        play.assert_called_once_with(Target("/m/a.mp3"), item)
+        play.assert_called_once_with(Target("/m/a.mp3"), item, start=None)
 
     def test_play_item_errors(self):
         self.assertFalse(daemon._handle({"cmd": "play_item"})["ok"])

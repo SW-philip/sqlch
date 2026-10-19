@@ -12,7 +12,7 @@ class TestMakeItem(unittest.TestCase):
         self.assertEqual(item, {
             "source": "local", "id": "a/b.mp3", "title": "B", "artist": None,
             "album": None, "art": None, "duration": None, "kind": "track",
-            "path": None, "channel_id": None})
+            "path": None, "channel_id": None, "date": None})
 
     def test_folder_requires_path(self):
         with self.assertRaises(ValueError):

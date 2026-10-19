@@ -54,7 +54,7 @@ def _extract(target: str, limit: int) -> list[dict]:
         raise RuntimeError("yt-dlp not found")
     proc = subprocess.run(
         [exe, "--flat-playlist", "--no-warnings", "--playlist-end", str(limit),
-         "-J", "--", target],
+         "--extractor-args", "youtubetab:approximate_date", "-J", "--", target],
         capture_output=True, text=True, timeout=TIMEOUT)
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.strip().splitlines()[-1] if proc.stderr.strip()
@@ -78,7 +78,8 @@ def _to_item(e: dict) -> dict | None:
                          artist=e.get("channel") or e.get("uploader"))
     return make_item(NAME, e["id"], title, kind="video",
                      artist=e.get("channel") or e.get("uploader"),
-                     duration=e.get("duration"), channel_id=e.get("channel_id"))
+                     duration=e.get("duration"), channel_id=e.get("channel_id"),
+                     date=e.get("timestamp"))
 
 
 def _items(entries: list[dict]) -> list[dict]:

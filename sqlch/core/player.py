@@ -273,7 +273,8 @@ def _ytdl_path(url: str) -> str | None:
 
 
 def _mpv_args(url: str, *, video: bool = False, preview: bool = False,
-              timeshift: bool = False, headers: tuple = ()) -> list[str]:
+              timeshift: bool = False, headers: tuple = (),
+              start: float | None = None) -> list[str]:
     args: list[str] = [
         mpv_bin(),
         f"--input-ipc-server={mpv_socket()}",
@@ -292,6 +293,8 @@ def _mpv_args(url: str, *, video: bool = False, preview: bool = False,
         args.append("--no-video")
     if preview:
         args.append("--volume=60")
+    if start:
+        args.append(f"--start={float(start):.1f}")
     args += [f"--http-header-fields-append={h}" for h in headers]
     ytdl = _ytdl_path(url)
     if ytdl:
@@ -306,10 +309,11 @@ def _mpv_args(url: str, *, video: bool = False, preview: bool = False,
 
 
 def _spawn_mpv(url: str, *, video: bool = False, preview: bool = False,
-               timeshift: bool = False, headers: tuple = ()) -> None:
+               timeshift: bool = False, headers: tuple = (),
+               start: float | None = None) -> None:
     mpv_socket().parent.mkdir(parents=True, exist_ok=True)
     args = _mpv_args(url, video=video, preview=preview, timeshift=timeshift,
-                     headers=headers)
+                     headers=headers, start=start)
 
     proc = subprocess.Popen(
         args,
@@ -377,7 +381,7 @@ def play_station(station: dict[str, Any]) -> None:
         _metadata_thread.start()
 
 
-def play_target(target, item: dict[str, Any]) -> None:
+def play_target(target, item: dict[str, Any], start: float | None = None) -> None:
     global _current
     stop(notify_user=False)
     meta = target.meta or {}
@@ -389,6 +393,8 @@ def play_target(target, item: dict[str, Any]) -> None:
         _current = {"type": "item", "item": item, "handoff": target.handoff}
         return
     extra = {"headers": target.headers} if target.headers else {}
+    if start:
+        extra["start"] = start
     _spawn_mpv(target.url, video=target.video, **extra)
     _current = {"type": "item", "item": item}
 

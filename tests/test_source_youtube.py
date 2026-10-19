@@ -61,6 +61,16 @@ class TestYoutube(unittest.TestCase):
         self.assertEqual((items[0]["artist"], items[0]["duration"]), ("Band", 200))
         self.assertEqual(items[1]["path"], "https://www.youtube.com/playlist?list=PL1")
 
+    def test_listing_asks_for_dates_and_maps_them(self):
+        self.cfg()
+        entries = [{"id": "abc", "title": "Song", "timestamp": 1791244800},
+                   {"id": "def", "title": "Undated", "timestamp": None}]
+        with mock.patch.object(youtube.subprocess, "run", return_value=_proc(entries)) as run:
+            items = youtube.search("x")
+        cmd = run.call_args[0][0]
+        self.assertIn("youtubetab:approximate_date", cmd)
+        self.assertEqual([i["date"] for i in items], [1791244800, None])
+
     def test_blank_search(self):
         self.assertEqual(youtube.search("  "), [])
 
