@@ -1,3 +1,4 @@
+import types
 import unittest
 from unittest import mock
 
@@ -73,3 +74,29 @@ class TestSafeAvailable(unittest.TestCase):
     def test_normal_value_passes_through(self):
         self.assertTrue(sources.safe_available(mock.Mock(available=lambda: True)))
         self.assertFalse(sources.safe_available(mock.Mock(available=lambda: False)))
+
+
+class TestSectionsFor(unittest.TestCase):
+    def test_source_without_sections_gets_browse_and_favorites(self):
+        src = types.SimpleNamespace(NAME="x")
+        self.assertEqual([s["id"] for s in sources.sections_for(src)],
+                         ["browse", "favorites"])
+
+    def test_own_sections_come_first_then_favorites(self):
+        src = types.SimpleNamespace(NAME="x", sections=lambda: [{"id": "a", "title": "A"}])
+        self.assertEqual([s["id"] for s in sources.sections_for(src)], ["a", "favorites"])
+
+    def test_broken_sections_fall_back_to_browse(self):
+        def boom():
+            raise RuntimeError("x")
+
+        src = types.SimpleNamespace(NAME="x", sections=boom)
+        with self.assertLogs("sqlch.sources", level="ERROR"):
+            self.assertEqual([s["id"] for s in sources.sections_for(src)],
+                             ["browse", "favorites"])
+
+    def test_registered_sources_have_sections(self):
+        for name, mod in sources.REGISTRY.items():
+            ids = [s["id"] for s in sources.sections_for(mod)]
+            self.assertEqual(ids[-1], "favorites", name)
+            self.assertEqual(len(ids), len(set(ids)), name)

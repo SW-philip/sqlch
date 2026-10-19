@@ -123,8 +123,12 @@ def _shortcuts() -> list[dict]:
     return out
 
 
+def sections() -> list[dict]:
+    return [{"id": "shortcuts", "title": "SHORTCUTS"}]
+
+
 def browse(path: str | None = None) -> list[dict]:
-    if not path:
+    if not path or path == "section:shortcuts":
         return _shortcuts()
     kind, _, sid = path.partition(":")
     if kind not in KINDS or not _ID.match(sid):

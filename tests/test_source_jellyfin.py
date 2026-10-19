@@ -149,6 +149,27 @@ class TestJellyfin(unittest.TestCase):
             t = jellyfin.resolve({"id": "T1"})
         self.assertIsNone(t.meta["art"])
 
+    def test_sections(self):
+        self.assertEqual([s["id"] for s in jellyfin.sections()],
+                         ["libraries", "playlists"])
+
+    def test_libraries_section_is_the_old_root(self):
+        with mock.patch.object(jellyfin, "_user_id", return_value="u"), \
+             mock.patch.object(jellyfin, "_get", return_value={"Items": []}) as get:
+            self.assertEqual(jellyfin.browse("section:libraries"), [])
+        self.assertEqual(get.call_args[0][0], "/UserViews")
+
+    def test_playlists_section(self):
+        with mock.patch.object(jellyfin, "_items", return_value=["x"]) as items:
+            self.assertEqual(jellyfin.browse("section:playlists"), ["x"])
+        items.assert_called_once_with({"IncludeItemTypes": "Playlist",
+                                       "Recursive": "true", "SortBy": "SortName"})
+
+    def test_playlist_contents_keep_playlist_order(self):
+        with mock.patch.object(jellyfin, "_items", return_value=[]) as items:
+            jellyfin.browse("Playlist:abc")
+        items.assert_called_once_with({"parentId": "abc"})
+
 
 if __name__ == "__main__":
     unittest.main()

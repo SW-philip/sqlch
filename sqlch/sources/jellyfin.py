@@ -113,14 +113,24 @@ def _items(params: dict) -> list[dict]:
     return [_to_item(jf) for jf in data.get("Items", [])]
 
 
+def sections() -> list[dict]:
+    return [{"id": "libraries", "title": "LIBRARIES"},
+            {"id": "playlists", "title": "PLAYLISTS"}]
+
+
 def browse(path: str | None = None) -> list[dict]:
-    if not path:
+    if path == "section:playlists":
+        return _items({"IncludeItemTypes": "Playlist", "Recursive": "true",
+                       "SortBy": "SortName"})
+    if not path or path == "section:libraries":
         data = _get("/UserViews", {"userId": _user_id()})
         return [_to_item({**jf, "Type": jf.get("Type") or "CollectionFolder"})
                 for jf in data.get("Items", [])]
     kind, _, jid = path.partition(":")
     if not jid:
         raise ValueError("bad jellyfin path")
+    if kind == "Playlist":
+        return _items({"parentId": jid})
     if kind == "MusicArtist":
         return _items({"AlbumArtistIds": jid, "IncludeItemTypes": "MusicAlbum",
                        "Recursive": "true", "SortBy": "ProductionYear,SortName"})

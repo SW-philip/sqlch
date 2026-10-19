@@ -134,6 +134,14 @@ class TestSpotify(unittest.TestCase):
         with mock.patch.object(spotify, "urlopen", side_effect=OSError):
             self.assertIsNone(spotify.resolve({"id": "T1"}).meta["art"])
 
+    def test_sections(self):
+        self.assertEqual([s["id"] for s in spotify.sections()], ["shortcuts"])
+
+    def test_shortcuts_section_is_the_old_root(self):
+        with mock.patch.object(spotify, "_shortcuts", return_value=["s"]):
+            self.assertEqual(spotify.browse("section:shortcuts"), ["s"])
+            self.assertEqual(spotify.browse(None), ["s"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -25,6 +25,22 @@ def safe_available(source) -> bool:
         return False
 
 
+BROWSE = {"id": "browse", "title": "BROWSE"}
+FAVORITES = {"id": "favorites", "title": "FAVORITES"}
+
+
+def sections_for(source) -> list[dict]:
+    """The source's own sections (BROWSE when it has none), then FAVORITES."""
+    own = getattr(source, "sections", None)
+    mine = [BROWSE]
+    if own:
+        try:
+            mine = list(own())
+        except Exception:
+            log.exception("source %s: sections() failed", getattr(source, "NAME", source))
+    return mine + [FAVORITES]
+
+
 def _load(names=_MODULES, package=__name__) -> dict:
     registry = {}
     for n in names:
