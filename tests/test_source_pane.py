@@ -750,3 +750,91 @@ class TestGroupedPane(unittest.TestCase):
         p.on_shown()
         p._search("x")
         self.assertEqual(list_texts(p)[0], ("H", "APPLE PODCASTS"))
+
+
+def row_children(p):
+    """The row widgets inside the list's ListBoxRows, in order."""
+    out = []
+    row = p.list.get_first_child()
+    while row:
+        out.append(row.get_child() if isinstance(row, Gtk.ListBoxRow) else row)
+        row = row.get_next_sibling()
+    return out
+
+
+def buttons_in(widget, label=None, out=None):
+    out = [] if out is None else out
+    child = widget.get_first_child()
+    while child:
+        if isinstance(child, Gtk.Button) and label in (None, child.get_label()):
+            out.append(child)
+        buttons_in(child, label, out)
+        child = child.get_next_sibling()
+    return out
+
+
+def rows_titled(p, title):
+    return [w for w in row_children(p)
+            if not isinstance(w, RibbonBanner) and labels_of(w)[0].get_text() == title]
+
+
+class TestGroupedFixes(unittest.TestCase):
+    def test_follow_relabels_twin_rows(self):
+        p = make(grouped_fake())
+        p.on_shown()
+        twins = rows_titled(p, "Conan")
+        self.assertEqual(len(twins), 2)
+        p._toggle_follow(SHOWS[1], buttons_in(twins[0], "Follow")[0])
+        for row in twins:
+            self.assertIn("Unfollow", button_labels(row))
+            self.assertNotIn("Follow", button_labels(row))
+
+    def test_star_relabels_twin_rows(self):
+        p = make(grouped_fake(), send=lambda m: {"ok": True, "favorite": True})
+        p.on_shown()
+        twins = rows_titled(p, "Conan")
+        p._toggle_favorite(SHOWS[1], buttons_in(twins[0], "☆")[0])
+        for row in twins:
+            self.assertIn("★", button_labels(row))
+
+    def test_search_inside_a_show_is_grouped(self):
+        src = grouped_fake()
+        src.search = lambda q: SHOWS
+        p = make(src)
+        p.on_shown()
+        p._activate(SHOWS[1])
+        p._search("x")
+        self.assertEqual(list_texts(p)[0], ("H", "APPLE PODCASTS"))
+
+    def test_idle_pills_hide(self):
+        src = grouped_fake()
+        src.HAS_DATES = True
+        p = make(src, store=FakeStore(favs=SHOWS))
+        p.on_shown()
+        self.assertTrue(p.btn_group.get_visible())
+        self.assertFalse(p.btn_order.get_visible())
+        p._activate(SHOWS[1])
+        self.assertFalse(p.btn_group.get_visible())
+        self.assertTrue(p.btn_order.get_visible())
+        p.back()
+        self.assertTrue(p.btn_group.get_visible())
+        p._select_section("favorites")
+        self.assertFalse(p.btn_group.get_visible())
+        self.assertTrue(p.btn_order.get_visible())
+
+    def test_genre_mode_tags_rows_with_provider_shorts(self):
+        p = make(grouped_fake())
+        p.on_shown()
+        p.btn_group.emit("clicked")
+        (conan,) = rows_titled(p, "Conan")
+        self.assertIn("apple·pi", labels_of(conan)[1].get_text())
+
+    def test_collapse_resets_on_reload(self):
+        p = make(grouped_fake())
+        p.on_shown()
+        full = list_texts(p)
+        p._toggle_group("APPLE PODCASTS", True)
+        p._activate(SHOWS[1])
+        p.back()
+        self.assertEqual(list_texts(p), full)
+        self.assertEqual(p._collapsed, set())

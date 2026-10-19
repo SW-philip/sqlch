@@ -55,6 +55,8 @@ class SourcePane(Gtk.Box):
         self._watch = watch or watch_progress
         self._progress: dict = {}
         self._row_refs: dict = {}
+        self._fav_btns: dict[str, list[Gtk.Button]] = {}
+        self._follow_btns: dict[str, list[Gtk.Button]] = {}
         self._oldest_first = False
         self._groupings = tuple(getattr(source, "GROUPINGS", ()) or ())
         self._group_mode = self._groupings[0] if self._groupings else None
@@ -71,6 +73,7 @@ class SourcePane(Gtk.Box):
         btn_go.connect("clicked", lambda b: self._search(self.entry.get_text().strip()))
         search_box.append(self.entry)
         search_box.append(btn_go)
+        self.btn_order = None
         if getattr(source, "HAS_DATES", False):
             self.btn_order = Gtk.ToggleButton(label="Oldest first")
             self.btn_order.add_css_class("section-pill")
@@ -227,8 +230,15 @@ class SourcePane(Gtk.Box):
         while child := self.list.get_first_child():
             self.list.remove(child)
         self._row_refs = {}
+        self._fav_btns = {}
+        self._follow_btns = {}
         self._group_rows = []
-        if self._grouped():
+        grouped = self._grouped()
+        if self.btn_group is not None:
+            self.btn_group.set_visible(grouped)
+        if self.btn_order is not None:
+            self.btn_order.set_visible(not grouped)
+        if grouped:
             self._fill_grouped()
             return
         items = self._items
@@ -239,8 +249,8 @@ class SourcePane(Gtk.Box):
             self.list.append(self._build_row(item))
 
     def _grouped(self):
-        return bool(self._groupings) and not self._stack and \
-            (self._searching or self._section != "favorites")
+        return bool(self._groupings) and (
+            self._searching or (not self._stack and self._section != "favorites"))
 
     def _fill_grouped(self):
         path: list[str] = []
@@ -362,6 +372,7 @@ class SourcePane(Gtk.Box):
         star.set_valign(Gtk.Align.CENTER)
         star.connect("clicked", lambda b, it=item: self._toggle_favorite(it, b))
         row.append(star)
+        self._fav_btns.setdefault(item.get("id"), []).append(star)
         if is_video:
             toggle = Gtk.Button(label="○")
             toggle.add_css_class("row-btn")
@@ -380,6 +391,7 @@ class SourcePane(Gtk.Box):
             fol.set_valign(Gtk.Align.CENTER)
             fol.connect("clicked", lambda b, it=item: self._toggle_follow(it, b))
             row.append(fol)
+            self._follow_btns.setdefault(follow_key, []).append(fol)
         click = Gtk.GestureClick()
         click.set_button(1)
         click.connect("released", lambda g, n, x, y, it=item, r=row: self._activate(it, r))
@@ -476,6 +488,12 @@ class SourcePane(Gtk.Box):
             self._set_status("")
         return False
 
+    @staticmethod
+    def _buttons(index, key, button):
+        """The clicked button plus every row's twin for the same key."""
+        found = list(index.get(key, []))
+        return found if any(b is button for b in found) else found + [button]
+
     def _toggle_favorite(self, item, button):
         def done(result, err):
             resp = result or {}
@@ -487,7 +505,8 @@ class SourcePane(Gtk.Box):
                 self._fav_ids.add(item["id"])
             else:
                 self._fav_ids.discard(item["id"])
-            button.set_label("★" if resp["favorite"] else "☆")
+            for b in self._buttons(self._fav_btns, item["id"], button):
+                b.set_label("★" if resp["favorite"] else "☆")
             if (self._section == "favorites" and not self._stack
                     and not self._searching and not resp["favorite"]):
                 self._reload()
@@ -519,7 +538,8 @@ class SourcePane(Gtk.Box):
                 self._followed.discard(key)
             else:
                 self._followed.add(key)
-            button.set_label("Follow" if following else "Unfollow")
+            for b in self._buttons(self._follow_btns, key, button):
+                b.set_label("Follow" if following else "Unfollow")
             if following and self._section in ("channels", "following") \
                     and not self._stack and not self._searching:
                 self._reload()
