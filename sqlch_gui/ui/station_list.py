@@ -7,6 +7,7 @@ from gi.repository import Gtk, Gdk, GLib
 from .. import library, daemon, icyprobe, metadata
 from .banner import RibbonBanner, PennantTag
 from .eq_strip import EqStrip
+from .scroll_label import ScrollLabel
 from .tooltips import station_tooltip
 
 PROBE_STALE_SECS = 45
@@ -206,9 +207,8 @@ class StationListPanel(Gtk.Box):
         body.set_hexpand(True)
         name_lbl = Gtk.Label(label=s.get("name"), xalign=0.0)
         name_lbl.set_ellipsize(3)  # Pango.EllipsizeMode.END
-        live_lbl = Gtk.Label(xalign=0.0)
-        live_lbl.add_css_class("station-live")
-        live_lbl.set_ellipsize(3)
+        live_lbl = ScrollLabel()
+        live_lbl.label.add_css_class("station-live")
         live_lbl.set_visible(False)
         body.append(name_lbl)
         body.append(live_lbl)
