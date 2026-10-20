@@ -22,6 +22,9 @@ class ScrollLabel(Gtk.ScrolledWindow):
         self.connect("unmap", self._on_unmap)
 
     def set_text(self, text: str) -> None:
+        # callers re-set the same text on every daemon poll; don't restart the marquee
+        if text == self.label.get_text():
+            return
         self.label.set_text(text)
         self._t0 = None
         self.get_hadjustment().set_value(0)
