@@ -2,7 +2,9 @@
 their feed URL. Episodes come from the show's RSS feed and play in mpv."""
 
 import hashlib
+import html
 import os
+import re
 import tempfile
 import threading
 import xml.etree.ElementTree as ET
@@ -179,6 +181,16 @@ def _image(node) -> str | None:
     return href or (node.findtext("image/url") or "").strip() or None
 
 
+_TAGS = re.compile(r"<[^>]*>")
+
+
+def strip_html(text) -> str | None:
+    if not text:
+        return None
+    plain = " ".join(html.unescape(_TAGS.sub(" ", text)).split())
+    return plain or None
+
+
 def parse_feed(data: bytes, feed_url: str) -> list[dict]:
     try:
         root = ET.fromstring(data)
@@ -198,7 +210,9 @@ def parse_feed(data: bytes, feed_url: str) -> list[dict]:
         guid = (it.findtext("guid") or "").strip() or url
         ep = make_item(NAME, guid, (it.findtext("title") or "").strip() or "Untitled",
                        artist=show, date=_date(it.findtext("pubDate")),
-                       duration=parse_duration(it.findtext(f"{_ITUNES}duration")), url=url)
+                       duration=parse_duration(it.findtext(f"{_ITUNES}duration")), url=url,
+                       description=strip_html(it.findtext("description")
+                                              or it.findtext(f"{_ITUNES}summary")))
         ep["image"] = _image(it) or show_image
         episodes.append(ep)
     episodes.sort(key=lambda e: e["date"] or 0, reverse=True)

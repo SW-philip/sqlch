@@ -171,5 +171,23 @@ class TestJellyfin(unittest.TestCase):
         items.assert_called_once_with({"parentId": "abc"})
 
 
+class TestDescription(unittest.TestCase):
+    def test_overview_maps_to_description_and_is_requested(self):
+        seen = {}
+
+        def fake_get(path, params=None):
+            seen["params"] = params
+            return {"Items": [{"Id": "1", "Name": "Ep", "Type": "Episode",
+                               "Overview": "Plot here"},
+                              {"Id": "2", "Name": "Song", "Type": "Audio"}]}
+
+        with mock.patch.object(jellyfin, "_get", fake_get), \
+             mock.patch.object(jellyfin, "_user_id", return_value="U"):
+            items = jellyfin._items({"parentId": "L"})
+        self.assertEqual(items[0]["description"], "Plot here")
+        self.assertIsNone(items[1]["description"])
+        self.assertEqual(seen["params"]["Fields"], "Overview")
+
+
 if __name__ == "__main__":
     unittest.main()

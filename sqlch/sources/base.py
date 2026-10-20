@@ -13,7 +13,7 @@ class Target(NamedTuple):
 
 def make_item(source, id, title, *, kind="track", artist=None, album=None,
               art=None, duration=None, path=None, channel_id=None, date=None,
-              genre=None, providers=None, feed_url=None, url=None) -> dict:
+              genre=None, providers=None, feed_url=None, url=None, description=None) -> dict:
     if kind not in KINDS:
         raise ValueError(f"unknown item kind: {kind}")
     if kind == "folder" and path is None:
@@ -22,4 +22,4 @@ def make_item(source, id, title, *, kind="track", artist=None, album=None,
             "album": album, "art": art, "duration": duration, "kind": kind,
             "path": path, "channel_id": channel_id, "date": date,
             "genre": genre, "providers": providers, "feed_url": feed_url,
-            "url": url}
+            "url": url, "description": description}

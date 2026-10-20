@@ -170,6 +170,21 @@ class TestFeed(unittest.TestCase):
         f.assert_called_once_with("https://f/show")
         self.assertEqual(len(eps), 3)
 
+    def test_description_is_html_stripped(self):
+        feed = (b'<?xml version="1.0"?><rss version="2.0"><channel><title>S</title>'
+                b'<item><title>E</title><guid>g</guid><enclosure url="https://c/e.mp3"/>'
+                b'<description>&lt;p&gt;Hello &lt;b&gt;world&lt;/b&gt; &amp;amp; more&lt;/p&gt;</description>'
+                b'</item><item><title>N</title><guid>h</guid><enclosure url="https://c/n.mp3"/>'
+                b'</item></channel></rss>')
+        eps = {e["title"]: e for e in podcasts.parse_feed(feed, "https://f/s")}
+        self.assertEqual(eps["E"]["description"], "Hello world & more")
+        self.assertIsNone(eps["N"]["description"])
+
+    def test_strip_html(self):
+        self.assertEqual(podcasts.strip_html("<p>a</p>\n\n<p>b  c</p>"), "a b c")
+        self.assertIsNone(podcasts.strip_html("  <br/> "))
+        self.assertIsNone(podcasts.strip_html(None))
+
 
 class TestResolve(unittest.TestCase):
     def setUp(self):

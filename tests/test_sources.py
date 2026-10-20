@@ -13,7 +13,7 @@ class TestMakeItem(unittest.TestCase):
             "source": "local", "id": "a/b.mp3", "title": "B", "artist": None,
             "album": None, "art": None, "duration": None, "kind": "track",
             "path": None, "channel_id": None, "date": None, "genre": None,
-            "providers": None, "feed_url": None, "url": None})
+            "providers": None, "feed_url": None, "url": None, "description": None})
 
     def test_podcast_fields(self):
         item = make_item("podcasts", "f", "Show", kind="folder", path="feed:f",
@@ -36,6 +36,10 @@ class TestMakeItem(unittest.TestCase):
     def test_make_item_channel_id_defaults_to_none(self):
         self.assertIsNone(make_item("local", "a", "A")["channel_id"])
         self.assertEqual(make_item("youtube", "a", "A", channel_id="UC1")["channel_id"], "UC1")
+
+    def test_make_item_description_defaults_to_none(self):
+        self.assertIsNone(make_item("local", "a", "A")["description"])
+        self.assertEqual(make_item("local", "a", "A", description="d")["description"], "d")
 
 
 class TestTarget(unittest.TestCase):

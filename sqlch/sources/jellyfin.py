@@ -105,11 +105,12 @@ def _to_item(jf: dict) -> dict:
     return make_item(
         NAME, jf["Id"], title, kind=kind, artist=artist, album=album,
         duration=_duration(jf),
-        path=f"{t}:{jf['Id']}" if kind == "folder" else None)
+        path=f"{t}:{jf['Id']}" if kind == "folder" else None,
+        description=jf.get("Overview") or None)
 
 
 def _items(params: dict) -> list[dict]:
-    data = _get("/Items", {"userId": _user_id(), **params})
+    data = _get("/Items", {"userId": _user_id(), "Fields": "Overview", **params})
     return [_to_item(jf) for jf in data.get("Items", [])]
 
 
