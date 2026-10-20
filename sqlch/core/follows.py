@@ -82,9 +82,16 @@ def _write(name: str, rows: list) -> None:
 
 # ---- favorites ----
 
+_BOOKKEEPING = ("updated_at", "removed")  # sqlch-sync merges on these
+
+
+def _is_fav(r, source: str) -> bool:
+    return isinstance(r, dict) and r.get("source") == source and not r.get("removed")
+
+
 def list_favorites(source: str) -> list[dict]:
-    return [r for r in _read(FAVORITES)
-            if isinstance(r, dict) and r.get("source") == source]
+    return [{k: v for k, v in r.items() if k not in _BOOKKEEPING}
+            for r in _read(FAVORITES) if _is_fav(r, source)]
 
 
 def favorite_ids(source: str) -> set[str]:
@@ -95,14 +102,21 @@ def toggle_favorite(item: dict) -> bool:
     key = (item.get("source"), item.get("id"))
     if not all(key):
         raise ValueError("a favorite needs a source and an id")
+    now = time.time()
     with _lock:
         rows = _read_for_write(FAVORITES)
-        kept = [r for r in rows
-                if not (isinstance(r, dict) and (r.get("source"), r.get("id")) == key)]
-        added = len(kept) == len(rows)
-        if added:
-            kept.append(item)
-        _write(FAVORITES, kept)
+        for i, r in enumerate(rows):
+            if isinstance(r, dict) and (r.get("source"), r.get("id")) == key:
+                added = bool(r.get("removed"))
+                # a tombstone, not a delete: sqlch-sync can only propagate
+                # an un-favorite if the row survives
+                rows[i] = ({**item, "updated_at": now} if added
+                           else {**r, "removed": True, "updated_at": now})
+                break
+        else:
+            added = True
+            rows.append({**item, "updated_at": now})
+        _write(FAVORITES, rows)
     return added
 
 

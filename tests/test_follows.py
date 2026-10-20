@@ -94,6 +94,33 @@ class TestFavorites(Base):
         self.assertEqual(len(self.bad_files()), 2)
         self.assertEqual({p.read_text() for p in self.bad_files()}, {"{one", "{two"})
 
+    def test_unfavorite_leaves_tombstone(self):
+        follows.toggle_favorite(ITEM)
+        follows.toggle_favorite(ITEM)
+        rows = json.loads((self.dir / "favorites.json").read_text())
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]["removed"])
+        self.assertGreater(rows[0]["updated_at"], 0)
+
+    def test_refavorite_clears_tombstone(self):
+        follows.toggle_favorite(ITEM)
+        follows.toggle_favorite(ITEM)
+        self.assertTrue(follows.toggle_favorite(ITEM))
+        rows = json.loads((self.dir / "favorites.json").read_text())
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rows[0].get("removed"))
+        self.assertEqual(follows.favorite_ids("youtube"), {"abc"})
+
+    def test_listing_hides_bookkeeping_keys(self):
+        follows.toggle_favorite(ITEM)
+        self.assertEqual(follows.list_favorites("youtube"), [ITEM])
+
+    def test_legacy_row_without_updated_at_still_listed_and_toggles_off(self):
+        (self.dir / "favorites.json").write_text(json.dumps([ITEM]))
+        self.assertEqual(follows.list_favorites("youtube"), [ITEM])
+        self.assertFalse(follows.toggle_favorite(ITEM))
+        self.assertEqual(follows.list_favorites("youtube"), [])
+
 
 class TestFollows(Base):
     def test_follow_is_idempotent(self):
