@@ -7,6 +7,7 @@ from gi.repository import Gtk, Gdk, GLib
 from .. import library, daemon, icyprobe, metadata
 from .banner import RibbonBanner, PennantTag
 from .eq_strip import EqStrip
+from .tooltips import station_tooltip
 
 PROBE_STALE_SECS = 45
 PROBE_TICK_SECS = 60
@@ -153,8 +154,7 @@ class StationListPanel(Gtk.Box):
             text = self._probe_titles.get(s_id, "")
             for row, live_lbl, mini_eq in entries:
                 if text and s_id != self._active_id:
-                    live_lbl.set_text(text)
-                    live_lbl.set_visible(True)
+                    self._show_live(row, live_lbl, text)
                 if s_id == self._active_id:
                     row.add_css_class("active")
                     mini_eq.set_visible(True)
@@ -234,6 +234,8 @@ class StationListPanel(Gtk.Box):
         )
         row.add_controller(click_gesture)
 
+        row._station = s
+        row.set_tooltip_text(station_tooltip(s))
         return row, live_lbl, mini_eq
 
     def on_toggle_favorite(self, station_id: str, currently_favorite: bool):
@@ -323,8 +325,12 @@ class StationListPanel(Gtk.Box):
                     mini_eq.set_active(False)
                     mini_eq.set_visible(False)
                     text = self._probe_titles.get(s_id, "")
-                live_lbl.set_text(text)
-                live_lbl.set_visible(bool(text))
+                self._show_live(row, live_lbl, text)
+
+    def _show_live(self, row, live_lbl, text):
+        live_lbl.set_text(text)
+        live_lbl.set_visible(bool(text))
+        row.set_tooltip_text(station_tooltip(row._station, text))
 
     # --- Live track probing for non-playing stations ---
 
@@ -388,6 +394,5 @@ class StationListPanel(Gtk.Box):
             self._probe_titles.pop(s_id, None)
         for row, live_lbl, mini_eq in self._rows_map.get(s_id, []):
             if s_id != self._active_id:
-                live_lbl.set_text(text)
-                live_lbl.set_visible(bool(text))
+                self._show_live(row, live_lbl, text)
         return False

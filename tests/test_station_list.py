@@ -227,3 +227,16 @@ class TestFavoriteDualRows(_LibraryBackedTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestStationTooltips(_LibraryBackedTestCase):
+    def test_row_tooltip_includes_live_text_when_set(self):
+        library.add_url("Tip Station", "http://example.com/stream")
+        sid = library.get_station_list()[0]["id"]
+        panel = _make_panel()
+        row, live_lbl, mini_eq = panel._rows_map[sid][0]
+        self.assertTrue(row.get_tooltip_text().startswith("Tip Station\n"))
+        panel._apply_probe(sid, "♫ Band — Song")
+        self.assertTrue(row.get_tooltip_text().endswith("♫ Band — Song"))
+        panel._apply_probe(sid, "")
+        self.assertNotIn("Band", row.get_tooltip_text())

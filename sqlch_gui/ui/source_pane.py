@@ -12,6 +12,7 @@ from .. import daemon
 from .banner import RibbonBanner
 from .grouping import LABELS, group, next_mode
 from .timefmt import format_date, format_duration
+from .tooltips import item_tooltip
 
 _THUMBS = ThreadPoolExecutor(max_workers=4, thread_name_prefix="thumb")
 
@@ -396,6 +397,7 @@ class SourcePane(Gtk.Box):
         click.set_button(1)
         click.connect("released", lambda g, n, x, y, it=item, r=row: self._activate(it, r))
         row.add_controller(click)
+        row.set_tooltip_text(item_tooltip(item))
         return row
 
     def _build_thumb(self, item):
