@@ -13,6 +13,7 @@ from typing import Any
 
 from sqlch.core import enrich, handoff, library, notify
 from sqlch.core.paths import runtime_dir
+from sqlch.sources.base import make_item
 
 
 # ------------------------------------------------------------
@@ -480,12 +481,42 @@ def preview(url: str, duration: int = 10) -> None:
         _preview_timer.start()
 
 
+def _follow_handoff() -> None:
+    """An external player carries on by itself (autoplay, skips in its own UI);
+    re-resolve whatever track it reports so the state follows it."""
+    global _current
+    cur = _current
+    if not cur or not cur.get("handoff"):
+        return
+    item = cur["item"]
+    uri = handoff.track_uri(cur["handoff"])
+    tid = uri.rsplit(":", 1)[-1] if uri else None
+    if not tid or tid in (item.get("id"), cur.get("tried")):
+        return
+    from sqlch import sources
+    src = sources.REGISTRY.get(item.get("source"))
+    marked = _current = {**cur, "tried": tid}  # a failed lookup is not retried on every poll
+    if src is None:
+        return
+    try:
+        meta = src.resolve({**item, "id": tid}).meta or {}
+    except Exception:
+        return
+    if _current is not marked:
+        return  # playback changed while the lookup ran
+    new = make_item(item["source"], tid, meta.get("title") or tid, artist=meta.get("artist"),
+                    album=meta.get("album"), art=meta.get("art"))
+    _current = {**marked, "item": new}
+
+
 def current() -> dict[str, Any] | None:
+    _follow_handoff()
     return _current
 
 
 def now_playing_info() -> dict:
     """Return structured now-playing info pulled from live MPV ICY metadata."""
+    _follow_handoff()
     if not mpv_socket().exists() and not (_current and _current.get("handoff")):
         return {"status": "stopped"}
 

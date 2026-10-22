@@ -84,6 +84,12 @@ class TestLibrespot(unittest.TestCase):
         self.assertEqual(self.lib.progress(), (None, None))
         self.assertEqual(handoff.Librespot("http://127.0.0.1:1").progress(), (None, None))
 
+    def test_track_uri_from_status(self):
+        Api.status = (200, {"track": {"uri": "spotify:track:T9"}})
+        self.assertEqual(self.lib.track_uri(), "spotify:track:T9")
+        Api.status = (204, None)
+        self.assertIsNone(self.lib.track_uri())
+
     def test_play_failure_is_a_runtime_error(self):
         with self.assertRaisesRegex(RuntimeError, "go-librespot"):
             handoff.Librespot("http://127.0.0.1:1").play("x")

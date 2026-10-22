@@ -4,6 +4,7 @@ seek and progress. A new backend is another entry in HANDLERS."""
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -18,6 +19,14 @@ def _playerctl(*args: str, player: str) -> subprocess.CompletedProcess:
         raise RuntimeError("playerctl not found")
     return subprocess.run([exe, "-p", player, *args], capture_output=True,
                           text=True, timeout=5)
+
+
+_TRACK_ID = re.compile(r"track[:/]([A-Za-z0-9]+)")
+
+
+def _track_uri(raw: str | None) -> str | None:
+    m = _TRACK_ID.search(raw or "")
+    return f"spotify:track:{m.group(1)}" if m else None
 
 
 class Mpris:
@@ -68,6 +77,10 @@ class Mpris:
 
     def progress(self) -> tuple[float | None, float | None]:
         return None, None
+
+    def track_uri(self) -> str | None:
+        r = _playerctl("metadata", "mpris:trackid", player=self.player)
+        return _track_uri(r.stdout) if r.returncode == 0 else None
 
     def usable(self) -> bool:
         return True
@@ -128,6 +141,10 @@ class Librespot:
             return None, None
         return pos / 1000, dur / 1000
 
+    def track_uri(self) -> str | None:
+        track = (self._call("/status") or {}).get("track") or {}
+        return _track_uri(track.get("uri"))
+
 
 class Preferred:
     """Use the primary handler while it is usable, else the fallback. The one
@@ -159,6 +176,9 @@ class Preferred:
     def progress(self) -> tuple[float | None, float | None]:
         return self.active.progress()
 
+    def track_uri(self) -> str | None:
+        return self.active.track_uri()
+
     def usable(self) -> bool:
         return True
 
@@ -186,3 +206,12 @@ def seek(name: str, pos: float) -> None:
 
 def progress(name: str) -> tuple[float | None, float | None]:
     return HANDLERS[name].progress()
+
+
+def track_uri(name: str) -> str | None:
+    """The track the external player is on now, which differs from the one
+    sqlch started once it autoplays or the user skips in the app."""
+    try:
+        return HANDLERS[name].track_uri()
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+        return None

@@ -93,5 +93,53 @@ class TestPlayerHandoff(unittest.TestCase):
                          ("playing", "SPOTIFY", "S"))
 
 
+class TestFollowHandoff(unittest.TestCase):
+    def setUp(self):
+        player._current = {"type": "item", "handoff": "spotify",
+                           "item": {"source": "spotify", "id": "T1", "title": "S"}}
+        self.addCleanup(setattr, player, "_current", None)
+        src = mock.Mock()
+        src.resolve.return_value = Target("spotify:track:T2", False,
+                                          {"title": "Next", "artist": "A", "album": "Al",
+                                           "art": "/c/n.jpg"}, handoff="spotify")
+        p = mock.patch.dict("sqlch.sources.REGISTRY", {"spotify": src})
+        p.start()
+        self.addCleanup(p.stop)
+        self.src = src
+
+    def test_autoplayed_track_replaces_the_item(self):
+        with mock.patch.object(player.handoff, "track_uri", return_value="spotify:track:T2"):
+            cur = player.current()
+        self.assertEqual((cur["item"]["id"], cur["item"]["title"], cur["item"]["artist"],
+                          cur["item"]["art"], cur["handoff"]),
+                         ("T2", "Next", "A", "/c/n.jpg", "spotify"))
+
+    def test_same_track_does_not_resolve(self):
+        with mock.patch.object(player.handoff, "track_uri", return_value="spotify:track:T1"):
+            player.current()
+        self.src.resolve.assert_not_called()
+
+    def test_failed_lookup_keeps_item_and_is_not_retried(self):
+        self.src.resolve.side_effect = OSError("offline")
+        with mock.patch.object(player.handoff, "track_uri", return_value="spotify:track:T2"):
+            self.assertEqual(player.current()["item"]["id"], "T1")
+            player.current()
+        self.assertEqual(self.src.resolve.call_count, 1)
+
+    def test_unknown_uri_is_ignored(self):
+        with mock.patch.object(player.handoff, "track_uri", return_value=None):
+            self.assertEqual(player.current()["item"]["id"], "T1")
+
+
+class TestTrackUri(unittest.TestCase):
+    def test_mpris_parses_spotify_trackid(self):
+        h = handoff.Mpris("spotify", "spotify")
+        with mock.patch.object(handoff, "_playerctl",
+                               return_value=cp(0, "/com/spotify/track/4uLU6hMCjMI75M1A2tKUQC\n")):
+            self.assertEqual(h.track_uri(), "spotify:track:4uLU6hMCjMI75M1A2tKUQC")
+        with mock.patch.object(handoff, "_playerctl", return_value=cp(1)):
+            self.assertIsNone(h.track_uri())
+
+
 if __name__ == "__main__":
     unittest.main()
