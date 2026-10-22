@@ -192,6 +192,9 @@ def strip_html(text) -> str | None:
 
 
 def parse_feed(data: bytes, feed_url: str) -> list[dict]:
+    # A real feed never declares a DTD; refusing one rules out entity expansion.
+    if b"<!DOCTYPE" in data[:4096].upper() or b"<!ENTITY" in data.upper():
+        raise ValueError("feed declares a DTD")
     try:
         root = ET.fromstring(data)
     except ET.ParseError:

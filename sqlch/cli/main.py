@@ -403,6 +403,11 @@ def preview_cmd(args: list[str]) -> None:
         if not results or idx < 0 or idx >= len(results):
             print('Preview index out of range.', file=sys.stderr)
             sys.exit(1)
-        player.preview(results[idx]['url'])
+        url = results[idx]['url']
     else:
-        player.preview(arg)
+        url = arg
+    try:
+        player.preview(url)
+    except ValueError as e:
+        print(f'sqlch: {e}', file=sys.stderr)
+        sys.exit(1)

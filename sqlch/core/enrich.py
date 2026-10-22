@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -118,13 +119,16 @@ def _enrich_musicbrainz(artist: str, track: str) -> dict[str, Any]:
     return result
 
 
+_UUID = re.compile(r"^[0-9a-fA-F-]{36}$")
+
+
 def _mb_base_url() -> str:
     return os.environ.get("SQLCH_MUSICBRAINZ_BASE", "https://musicbrainz.org/ws/2")
 
 
 def _mb_genres_for_recording(recording_id: str | None) -> list:
     """Fetch MusicBrainz tags for a recording and return the top genre tags."""
-    if not recording_id:
+    if not recording_id or not _UUID.match(recording_id):
         return []
     try:
         base = _mb_base_url()

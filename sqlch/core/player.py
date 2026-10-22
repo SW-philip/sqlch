@@ -13,6 +13,7 @@ from typing import Any
 
 from sqlch.core import enrich, handoff, library, notify
 from sqlch.core.paths import runtime_dir
+from sqlch.core.urlcheck import is_stream_url, require_stream_url
 from sqlch.sources.base import make_item
 
 
@@ -278,6 +279,7 @@ def _mpv_args(url: str, *, video: bool = False, preview: bool = False,
               start: float | None = None) -> list[str]:
     args: list[str] = [
         mpv_bin(),
+        "--load-unsafe-playlists=no",
         f"--input-ipc-server={mpv_socket()}",
         "--idle=yes",
         "--keep-open=yes",
@@ -298,6 +300,9 @@ def _mpv_args(url: str, *, video: bool = False, preview: bool = False,
         args.append(f"--start={float(start):.1f}")
     args += [f"--http-header-fields-append={h}" for h in headers]
     ytdl = _ytdl_path(url)
+    if not ytdl:
+        # only youtube links need yt-dlp; don't let it chew on arbitrary hosts
+        args.append("--ytdl=no")
     if ytdl:
         # mpv's ytdl hook only searches its own PATH, which the daemon's may lack
         args.append(f"--script-opts=ytdl_hook-ytdl_path={ytdl}")
@@ -305,7 +310,7 @@ def _mpv_args(url: str, *, video: bool = False, preview: bool = False,
         args += [f"--cache-secs={TIMESHIFT_SECS}",
                  f"--demuxer-max-bytes={TIMESHIFT_BYTES}",
                  f"--demuxer-max-back-bytes={TIMESHIFT_BYTES}"]
-    args.append(url)
+    args += ["--", url]
     return args
 
 
@@ -361,6 +366,9 @@ def play_station(station: dict[str, Any]) -> None:
     url = station.get("url")
     if not url:
         notify.notify("sqlch error", "Station missing URL")
+        return
+    if not is_stream_url(url):
+        notify.notify("sqlch error", "Station URL is not a stream address")
         return
 
     stop(notify_user=False)
@@ -441,6 +449,7 @@ def item_progress() -> tuple[float | None, float | None]:
 def preview(url: str, duration: int = 10) -> None:
     global _preview_timer
 
+    url = require_stream_url(url)
     if _preview_timer:
         _preview_timer.cancel()
         _preview_timer = None
@@ -458,7 +467,7 @@ def preview(url: str, duration: int = 10) -> None:
                     "-autoexit",
                     "-loglevel", "quiet",
                     "-t", str(duration),
-                    url,
+                    "-i", url,
                 ],
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,

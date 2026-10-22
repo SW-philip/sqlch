@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from sqlch.core.paths import cache_dir
@@ -32,8 +32,21 @@ def _cfg() -> dict:
     return cfg if isinstance(cfg, dict) else {}
 
 
+_LOOPBACK = {"localhost", "127.0.0.1", "::1"}
+
+
 def _server() -> str:
-    return (_cfg().get("server") or DEFAULT_SERVER).rstrip("/")
+    server = (_cfg().get("server") or DEFAULT_SERVER).rstrip("/")
+    u = urlparse(server)
+    if u.scheme not in ("http", "https"):
+        raise ValueError("jellyfin server must be an http(s) url")
+    # the API key travels in every request; keep it off the wire in clear text
+    # unless the server is local or the user opted in
+    if u.scheme == "http" and u.hostname not in _LOOPBACK and not _cfg().get("allow_http"):
+        raise ValueError(
+            f"jellyfin server {server} is plain http; use https or set "
+            'sources.jellyfin.allow_http = true (the API key is sent unencrypted)')
+    return server
 
 
 def _token() -> str | None:

@@ -26,5 +26,18 @@ def config_dir() -> Path:
 def runtime_dir() -> Path:
     base = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
     p = Path(base) / "sqlch"
-    p.mkdir(parents=True, exist_ok=True)
+    p.mkdir(mode=0o700, parents=True, exist_ok=True)
+    # /tmp fallback: the dir may pre-exist (or be planted) with looser modes
+    if p.stat().st_uid != os.getuid():
+        raise PermissionError(f"{p} is owned by another user")
+    os.chmod(p, 0o700)
     return p
+
+
+def write_private(path: Path, text: str) -> None:
+    """Atomically write a 0600 file (tokens, credentials)."""
+    tmp = path.with_name(path.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+    os.replace(tmp, path)

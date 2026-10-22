@@ -12,7 +12,7 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from sqlch.core.paths import cache_dir
+from sqlch.core.paths import cache_dir, write_private
 from sqlch.core import spotify_auth
 from sqlch.sources import source_config
 from sqlch.sources.base import Target, make_item
@@ -93,7 +93,7 @@ def _token() -> str:
     with urlopen(req, timeout=TIMEOUT) as r:
         tok = json.loads(r.read())
     tok["expires_at"] = time.time() + tok["expires_in"] - 30
-    cache.write_text(json.dumps(tok))
+    write_private(cache, json.dumps(tok))
     return tok["access_token"]
 
 

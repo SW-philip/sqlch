@@ -32,7 +32,7 @@ class TestOpen(unittest.TestCase):
             seen["url"], seen["tok"] = req.full_url, req.get_header("Authorization")
             return Resp()
 
-        with _cfg(server="http://j:8096/", token_file="/nonexistent"), \
+        with _cfg(server="http://j:8096/", allow_http=True, token_file="/nonexistent"), \
              mock.patch.object(jellyfin, "_token", return_value="KEY"), \
              mock.patch.object(jellyfin, "urlopen", fake):
             self.assertEqual(jellyfin._get("/Items", {"a": "b c"}), {"ok": 1})
@@ -46,7 +46,7 @@ class TestJellyfin(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.tok = Path(self._tmp.name) / "tok"
         self.tok.write_text("KEY\n")
-        for p in (_cfg(server="http://j:8096/", token_file=str(self.tok)),
+        for p in (_cfg(server="http://j:8096/", allow_http=True, token_file=str(self.tok)),
                   mock.patch.object(jellyfin, "cache_dir",
                                     lambda: Path(self._tmp.name))):
             p.start()
@@ -116,7 +116,7 @@ class TestJellyfin(unittest.TestCase):
         jellyfin.search("a")
         jellyfin.search("b")
         self.assertEqual([c[0] for c in fake.calls].count("/Users"), 1)
-        with _cfg(server="http://j", token_file=str(self.tok), user_id="CFG"):
+        with _cfg(server="http://j", allow_http=True, token_file=str(self.tok), user_id="CFG"):
             self.assertEqual(jellyfin._user_id(), "CFG")
 
     def test_resolve_audio_downloads_cover(self):
