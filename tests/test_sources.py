@@ -13,7 +13,8 @@ class TestMakeItem(unittest.TestCase):
             "source": "local", "id": "a/b.mp3", "title": "B", "artist": None,
             "album": None, "art": None, "duration": None, "kind": "track",
             "path": None, "channel_id": None, "date": None, "genre": None,
-            "providers": None, "feed_url": None, "url": None, "description": None})
+            "providers": None, "feed_url": None, "url": None, "description": None,
+            "info": None, "group": None})
 
     def test_podcast_fields(self):
         item = make_item("podcasts", "f", "Show", kind="folder", path="feed:f",

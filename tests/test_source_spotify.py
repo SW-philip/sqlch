@@ -77,23 +77,113 @@ class TestSpotify(unittest.TestCase):
             json.dumps({"access_token": "TOK", "expires_at": 9e12}))
         self.assertEqual(spotify._token(), "TOK")
 
-    def test_search_orders_artists_albums_tracks(self):
+    def test_search_lists_songs_artists_albums_playlists_under_headings(self):
         fake = self.api(**{"/search": {
             "artists": {"items": [{"id": "AR", "name": "Band"}]},
             "albums": {"items": [{"id": "AL", "name": "Rec", "artists": [{"name": "Band"}]}]},
             "playlists": {"items": [None, {"id": "PL", "name": "Mix"}]},
             "tracks": {"items": [TRACK, {"name": "no id"}]}}})
         out = spotify.search("band")
-        self.assertEqual([(i["kind"], i["title"]) for i in out],
-                         [("folder", "Band"), ("folder", "Rec"), ("folder", "Mix"),
-                          ("track", "Song")])
-        self.assertEqual(out[1]["path"], "album:AL")
-        self.assertEqual(out[2]["path"], "playlist:PL")
-        self.assertEqual(out[1]["artist"], "Band")
-        self.assertEqual((out[3]["artist"], out[3]["album"], out[3]["duration"]),
+        self.assertEqual([(i["group"], i["kind"], i["title"]) for i in out],
+                         [("SONGS", "track", "Song"), ("ARTISTS", "folder", "Band"),
+                          ("ALBUMS", "folder", "Rec"), ("PLAYLISTS", "folder", "Mix")])
+        self.assertEqual(out[2]["path"], "album:AL")
+        self.assertEqual(out[3]["path"], "playlist:PL")
+        self.assertEqual(out[2]["artist"], "Band")
+        self.assertEqual((out[0]["artist"], out[0]["album"], out[0]["duration"]),
                          ("A, B", "Album", 200.0))
         self.assertEqual(fake.calls[0][1]["q"], "band")
         self.assertEqual(spotify.search("  "), [])
+
+    def test_hover_info(self):
+        t = {**TRACK, "track_number": 3, "explicit": True,
+             "album": {**TRACK["album"], "release_date": "2019-05-01", "total_tracks": 12}}
+        self.assertEqual(spotify._track(t)["info"],
+                         "Song\nA, B\nAlbum · 2019\nTrack 3 of 12 · 3:20 · Explicit")
+        album = spotify._folder("album", {"id": "AL", "name": "Rec", "album_type": "single",
+                                          "release_date": "2020", "total_tracks": 2,
+                                          "artists": [{"name": "Band"}]})
+        self.assertEqual(album["info"], "Rec\nBand\nSingle · 2020 · 2 tracks")
+        pl = spotify._folder("playlist", {"id": "PL", "name": "Mix",
+                                          "owner": {"display_name": "me"},
+                                          "items": {"total": 40},
+                                          "description": "Loud &amp; <a href=x>fast</a>"})
+        self.assertEqual(pl["info"], "Mix\nPlaylist by me · 40 tracks\nLoud & fast")
+        self.assertEqual(spotify._folder("artist", {"id": "AR", "name": "Band"})["info"],
+                         "Band\nArtist")
+
+    def test_artist_page_lists_albums_before_singles(self):
+        self.api(**{"/artists/AR/albums": {"items": [
+            {"id": "S1", "name": "Hit", "album_type": "single"},
+            {"id": "A1", "name": "LP", "album_type": "album"}, None]}})
+        self.assertEqual([(i["group"], i["title"]) for i in spotify.browse("artist:AR")],
+                         [("ALBUMS", "LP"), ("SINGLES & EPS", "Hit")])
+
+    def test_menu_for_a_track_when_logged_in(self):
+        self.logged_in()
+        self.api(**{"/tracks/T1": {**TRACK, "artists": [{"id": "AR", "name": "A"}]},
+                    "/me/library/contains": [True]})
+        entries = spotify.menu({"kind": "track", "id": "T1", "title": "Song"})
+        self.assertEqual(entries, [
+            {"label": "Go to album: Album", "path": "album:AL1", "title": "Album"},
+            {"label": "Go to artist: A", "path": "artist:AR", "title": "A"},
+            {"label": "Remove from your library", "action": "remove"},
+            {"label": "Add to queue", "action": "queue"},
+            {"label": "Copy Spotify link", "copy": "https://open.spotify.com/track/T1"}])
+
+    def test_menu_for_an_artist_follows(self):
+        self.logged_in()
+        fake = self.api(**{"/me/library/contains": [False]})
+        entries = spotify.menu({"kind": "folder", "id": "AR", "path": "artist:AR"})
+        self.assertEqual(entries[0], {"label": "Follow", "action": "save"})
+        self.assertEqual(fake.calls, [("/me/library/contains", {"uris": "spotify:artist:AR"})])
+
+    def test_menu_logged_out_only_offers_navigation_and_link(self):
+        self.logged_in(False)
+        self.api(**{"/albums/AL": {"artists": [{"id": "AR", "name": "Band"}, {"name": "x"}]}})
+        entries = spotify.menu({"kind": "folder", "id": "AL", "path": "album:AL"})
+        self.assertEqual([e.get("path") or e.get("copy") or "note" for e in entries],
+                         ["artist:AR", "note", "https://open.spotify.com/album/AL"])
+
+    def test_menu_without_library_scope_says_to_log_in_again(self):
+        self.logged_in()
+        with mock.patch.object(spotify, "_get", side_effect=OSError):
+            entries = spotify.menu({"kind": "folder", "id": "PL", "path": "playlist:PL"})
+        self.assertEqual(entries[0], {"label": spotify.RELOGIN, "note": True})
+
+    def test_menu_rejects_bad_items(self):
+        for bad in ({"kind": "track", "id": "a/b"}, {"kind": "folder", "path": "nope:X"},
+                    {"kind": "folder", "path": "section:playlists"}):
+            with self.assertRaises(ValueError):
+                spotify.menu(bad)
+
+    def test_act_saves_removes_and_queues_by_uri(self):
+        self.logged_in()
+        with mock.patch.object(spotify, "_send") as send:
+            self.assertEqual(spotify.act({"kind": "track", "id": "T1", "title": "Song"},
+                                         "save"), "Saved Song")
+            self.assertEqual(spotify.act({"kind": "folder", "path": "artist:AR",
+                                          "title": "Band"}, "remove"), "Unfollowed Band")
+            self.assertEqual(spotify.act({"kind": "track", "id": "T1", "title": "Song"},
+                                         "queue"), "Queued Song")
+        self.assertEqual([c.args for c in send.call_args_list], [
+            ("PUT", "/me/library", {"uris": "spotify:track:T1"}),
+            ("DELETE", "/me/library", {"uris": "spotify:artist:AR"}),
+            ("POST", "/me/player/queue", {"uri": "spotify:track:T1"})])
+        with self.assertRaises(ValueError):
+            spotify.act({"kind": "folder", "path": "album:AL"}, "queue")
+
+    def test_act_needs_login(self):
+        self.logged_in(False)
+        with self.assertRaisesRegex(RuntimeError, "spotify-login"):
+            spotify.act({"kind": "track", "id": "T1"}, "save")
+
+    def test_send_maps_scope_errors_to_relogin(self):
+        err = spotify.HTTPError("u", 403, "no", {}, None)
+        with mock.patch.object(spotify, "_bearer", return_value="X"), \
+             mock.patch.object(spotify, "urlopen", side_effect=err):
+            with self.assertRaisesRegex(RuntimeError, "again"):
+                spotify._send("PUT", "/me/library", {"uris": "spotify:track:T1"})
 
     def test_browse_artist_album_playlist(self):
         fake = self.api(**{

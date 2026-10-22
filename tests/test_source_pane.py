@@ -570,6 +570,93 @@ class TestWatchedUi(unittest.TestCase):
         self.assertTrue(send.call_args[0][0]["resume"])
 
 
+class TestSearchHistory(unittest.TestCase):
+    def test_back_from_a_result_returns_to_the_results(self):
+        s = Fake()
+        s.search = lambda q: (s.searched.append(q), [FOLDER])[1]
+        p = make(s)
+        p.on_shown()
+        p._search("x")
+        p._activate(FOLDER)
+        self.assertFalse(p._searching)
+        self.assertEqual(p._items, [TRACK])
+        p.entry.set_text("")
+        p.back()
+        self.assertTrue(p._searching)
+        self.assertEqual(p.entry.get_text(), "x")
+        self.assertEqual(s.searched, ["x", "x"])
+        self.assertEqual(p.crumb.get_text(), "Search “x”")
+        p.back()
+        self.assertFalse(p.nav.get_visible())
+        self.assertEqual(p._items, [FOLDER])
+
+    def test_a_new_query_replaces_the_results_page(self):
+        p = make(Fake())
+        p.on_shown()
+        p._search("x")
+        p._search("y")
+        self.assertEqual(len(p._stack), 1)
+        p.back()
+        self.assertEqual(p._stack, [])
+
+
+GROUPED = [{**TRACK, "group": "SONGS"},
+           {**FOLDER, "group": "ARTISTS", "info": "Dir\nArtist"},
+           {**TRACK, "id": "t2", "title": "Two", "group": "SONGS"}]
+
+
+class MenuFake(Fake):
+    def __init__(self):
+        super().__init__(tree={None: GROUPED, "/d": [TRACK], "/e": [FOLDER]})
+        self.acted = []
+
+    def menu(self, item):
+        return [{"label": "Go to E", "path": "/e", "title": "E"},
+                {"label": "note", "note": True},
+                {"label": "Save", "action": "save"}]
+
+    def act(self, item, action):
+        self.acted.append((item["id"], action))
+        return "Saved"
+
+
+class TestSourceHeadingsAndMenu(unittest.TestCase):
+    def test_items_with_groups_list_under_their_headings(self):
+        p = make(MenuFake())
+        p.on_shown()
+        self.assertEqual(list_texts(p), [("H", "SONGS"), ("R", "Song"), ("R", "Two"),
+                                         ("H", "ARTISTS"), ("R", "Dir")])
+
+    def test_info_is_the_row_tooltip(self):
+        p = make(MenuFake())
+        p.on_shown()
+        (row,) = rows_titled(p, "Dir")
+        self.assertEqual(row.get_tooltip_text(), "Dir\nArtist")
+
+    def test_menu_entries_navigate_and_act(self):
+        s = MenuFake()
+        p = make(s)
+        p.on_shown()
+        (row,) = rows_titled(p, "Dir")
+        with mock.patch.object(Gtk.Popover, "popup"):
+            p._open_menu(FOLDER, row)
+        pop = row.get_last_child()
+        while not isinstance(pop, Gtk.Popover):
+            pop = pop.get_prev_sibling()
+        self.assertEqual(button_labels(pop.get_child()), ["Go to E", "Save"])
+        p._menu_pick(FOLDER, {"label": "Save", "action": "save"}, pop)
+        self.assertEqual(s.acted, [("d", "save")])
+        self.assertEqual(p.status.get_text(), "Saved")
+        p._menu_pick(FOLDER, {"label": "Go to E", "path": "/e", "title": "E"}, pop)
+        self.assertEqual(p._stack, [("/e", "E")])
+        self.assertEqual(s.browsed[-1], "/e")
+
+    def test_sources_without_a_menu_open_nothing(self):
+        p = make(Fake())
+        p.on_shown()
+        p._open_menu(FOLDER, p.list)
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -3,18 +3,26 @@
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-from gi.repository import Gtk, GLib
+from gi.repository import Gdk, Gtk, GLib
 
 from sqlch.core import follows, progress as watch_progress
 from sqlch.sources import safe_available, sections_for
 
 from .. import daemon
 from .banner import RibbonBanner
-from .grouping import LABELS, group, next_mode
+from .grouping import LABELS, group, next_mode, sectioned
 from .timefmt import format_date, format_duration
 from .tooltips import item_tooltip
 
 _THUMBS = ThreadPoolExecutor(max_workers=4, thread_name_prefix="thumb")
+SEARCH = "search"
+# Super+click as well as right-click opens a row's menu (Meta is how some
+# compositors report Super).
+_MENU_MODS = Gdk.ModifierType.SUPER_MASK | Gdk.ModifierType.META_MASK
+
+
+def _is_search(path):
+    return isinstance(path, tuple) and path[:1] == (SEARCH,)
 
 
 def _thread_run(work, done):
@@ -41,8 +49,7 @@ class SourcePane(Gtk.Box):
         self._run = run_async
         self._play = play or self._daemon_play
         self._items: list[dict] = []
-        self._stack: list[tuple] = []
-        self._searching = False
+        self._stack: list[tuple] = []  # (path, title); a search is a (SEARCH, query) path
         self._gen = 0
         self._loaded = False
         self._pending = None
@@ -173,15 +180,20 @@ class SourcePane(Gtk.Box):
             else:
                 pill.remove_css_class("active")
 
+    @property
+    def _searching(self):
+        return bool(self._stack) and _is_search(self._stack[-1][0])
+
     def _select_section(self, sid):
         self._section = sid
         self._stack = []
-        self._searching = False
         self.entry.set_text("")
         self._mark_pills()
         self._reload()
 
     def _browse(self, path):
+        if _is_search(path):
+            return self.source.search(path[1])
         if path == "section:favorites":
             return self._store.list_favorites(self.source.NAME)
         return self.source.browse(path)
@@ -240,12 +252,17 @@ class SourcePane(Gtk.Box):
         if self.btn_order is not None:
             self.btn_order.set_visible(not grouped)
         if grouped:
-            self._fill_grouped()
+            providers = getattr(self.source, "PROVIDERS", None) or {}
+            self._fill_rows(group(self._items, self._group_mode, providers))
             return
         items = self._items
         if self._oldest_first:
             # Stable: undated rows (folders) keep their place after the dated ones.
             items = sorted(items, key=lambda i: (i.get("date") is None, i.get("date") or 0))
+        rows = sectioned(items)
+        if rows:
+            self._fill_rows(rows)
+            return
         for item in items:
             self.list.append(self._build_row(item))
 
@@ -253,10 +270,9 @@ class SourcePane(Gtk.Box):
         return bool(self._groupings) and (
             self._searching or (not self._stack and self._section != "favorites"))
 
-    def _fill_grouped(self):
+    def _fill_rows(self, rows):
         path: list[str] = []
-        providers = getattr(self.source, "PROVIDERS", None) or {}
-        for kind, value, extra in group(self._items, self._group_mode, providers):
+        for kind, value, extra in rows:
             if kind == "header":
                 del path[extra:]
                 path.append(value)
@@ -327,11 +343,8 @@ class SourcePane(Gtk.Box):
         refs["toggle"].set_label("✓" if watched else "○")
 
     def _update_nav(self):
-        self.nav.set_visible(bool(self._stack) or self._searching)
-        if self._searching:
-            self.crumb.set_text("Search results")
-        else:
-            self.crumb.set_text(" / ".join(t for _, t in self._stack))
+        self.nav.set_visible(bool(self._stack))
+        self.crumb.set_text(" / ".join(t for _, t in self._stack))
 
     def _build_row(self, item, tag=None):
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
@@ -394,11 +407,22 @@ class SourcePane(Gtk.Box):
             row.append(fol)
             self._follow_btns.setdefault(follow_key, []).append(fol)
         click = Gtk.GestureClick()
-        click.set_button(1)
-        click.connect("released", lambda g, n, x, y, it=item, r=row: self._activate(it, r))
+        click.set_button(0)
+        click.connect("released", lambda g, n, x, y, it=item, r=row: self._clicked(g, it, r))
         row.add_controller(click)
-        row.set_tooltip_text(item_tooltip(item))
+        # A source's own hover text beats the generic one.
+        info = item.get("info")
+        row.set_tooltip_text(info if isinstance(info, str) else item_tooltip(item))
         return row
+
+    def _clicked(self, gesture, item, row):
+        button = gesture.get_current_button()
+        state = gesture.get_current_event_state()
+        if button == Gdk.BUTTON_SECONDARY or (
+                button == Gdk.BUTTON_PRIMARY and state & _MENU_MODS):
+            self._open_menu(item, row)
+        elif button == Gdk.BUTTON_PRIMARY:
+            self._activate(item, row)
 
     def _build_thumb(self, item):
         pic = Gtk.Picture()
@@ -433,9 +457,7 @@ class SourcePane(Gtk.Box):
 
     def _activate(self, item, anchor=None):
         if item.get("kind") == "folder":
-            self._stack.append((item["path"], item["title"]))
-            self._searching = False
-            self._reload()
+            self._open(item["path"], item["title"])
             return
         point = None
         if item.get("kind") == "video":
@@ -444,6 +466,53 @@ class SourcePane(Gtk.Box):
             self._offer_resume(item, point, anchor)
         else:
             self._run(lambda: self._play(item), self._played)
+
+    def _open_menu(self, item, anchor):
+        """The source's actions for an item: go to (path/title), copy (text to
+        the clipboard) or action (an id for source.act, run off the main thread)."""
+        menu = getattr(self.source, "menu", None)
+        if menu is None:
+            return
+        pop = Gtk.Popover()
+        pop.add_css_class("context-menu")
+        pop.set_parent(anchor)
+        pop.connect("closed", lambda p: GLib.idle_add(p.unparent))
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.append(Gtk.Label(label="…"))
+        pop.set_child(box)
+        pop.popup()
+
+        def done(entries, err):
+            while child := box.get_first_child():
+                box.remove(child)
+            if err is not None:
+                box.append(Gtk.Label(label=f"Couldn't load: {err}", wrap=True))
+            for entry in entries or []:
+                if entry.get("note"):
+                    note = Gtk.Label(label=entry["label"], xalign=0.0, wrap=True)
+                    note.add_css_class("meta-genre")
+                    box.append(note)
+                    continue
+                btn = Gtk.Button(label=entry["label"])
+                btn.add_css_class("menu-btn")
+                btn.connect("clicked", lambda b, e=entry: self._menu_pick(item, e, pop))
+                box.append(btn)
+            return False
+
+        self._run(lambda: menu(item), done)
+
+    def _menu_pick(self, item, entry, pop):
+        pop.popdown()
+        if "path" in entry:
+            self._open(entry["path"], entry.get("title") or entry["label"])
+        elif "copy" in entry:
+            self.get_clipboard().set(entry["copy"])
+            self._set_status("Link copied")
+        elif "action" in entry:
+            def done(msg, err):
+                self._set_status(f"Couldn't do that: {err}" if err is not None else msg or "")
+                return False
+            self._run(lambda: self.source.act(item, entry["action"]), done)
 
     def _offer_resume(self, item, point, anchor):
         pop = Gtk.Popover()
@@ -549,19 +618,22 @@ class SourcePane(Gtk.Box):
 
         self._run(lambda: self._send(msg), done)
 
+    def _open(self, path, title):
+        self._stack.append((path, title))
+        self._reload()
+
     def back(self):
-        if self._searching:
-            self.entry.set_text("")
-            self._searching = False
-        elif self._stack:
+        if self._stack:
             self._stack.pop()
+        # Stepping back onto a results page shows its query again.
+        self.entry.set_text(self._stack[-1][0][1] if self._searching else "")
         self._reload()
 
     def _search(self, query):
+        if self._searching:
+            self._stack.pop()  # a new query replaces the results page, not stacks on it
         if not query:
             self.entry.set_text("")
-            self._searching = False
-            self._reload()
-            return
-        self._searching = True
-        self._load(lambda: self.source.search(query))
+        else:
+            self._stack.append(((SEARCH, query), f"Search “{query}”"))
+        self._reload()

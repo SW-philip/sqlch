@@ -36,6 +36,19 @@ def _by_genre(items, depth, tag) -> list:
     return rows
 
 
+def sectioned(items) -> list:
+    """The source's own headings (item["group"]) in first-seen order, or no
+    rows when no item has one."""
+    order = list(dict.fromkeys(_str(i.get("group")) for i in items))
+    if order == [""]:
+        return []
+    rows = []
+    for g in order:
+        rows.append(("header", g or OTHER.upper(), 0))
+        rows += [("item", i, "") for i in items if _str(i.get("group")) == g]
+    return rows
+
+
 def group(items, mode, providers=None) -> list:
     providers = providers or {}
 

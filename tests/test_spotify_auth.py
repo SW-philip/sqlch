@@ -57,10 +57,12 @@ class TestPkce(unittest.TestCase):
         self.assertEqual(q["code_challenge_method"], ["S256"])
         self.assertEqual(q["code_challenge"], [auth.challenge("ver")])
 
-    def test_scopes_are_exactly_the_read_scopes(self):
+    def test_scopes_cover_reading_saving_following_and_queueing(self):
         self.assertEqual(auth.SCOPES.split(),
                          ["playlist-read-private", "playlist-read-collaborative",
-                          "user-follow-read"])
+                          "user-follow-read", "user-library-read", "user-library-modify",
+                          "user-follow-modify", "playlist-modify-public",
+                          "playlist-modify-private", "user-modify-playback-state"])
 
     def test_auth_base_override(self):
         with mock.patch.dict(os.environ, {"SQLCH_SPOTIFY_AUTH_BASE": "http://fake"}):

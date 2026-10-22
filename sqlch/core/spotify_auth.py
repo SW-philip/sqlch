@@ -20,7 +20,9 @@ from urllib.request import Request, urlopen
 
 from sqlch.core.paths import data_dir
 
-SCOPES = "playlist-read-private playlist-read-collaborative user-follow-read"
+SCOPES = ("playlist-read-private playlist-read-collaborative user-follow-read "
+          "user-library-read user-library-modify user-follow-modify "
+          "playlist-modify-public playlist-modify-private user-modify-playback-state")
 DEFAULT_PORT = 8888
 LOGIN_WAIT = 180
 TIMEOUT = 8
