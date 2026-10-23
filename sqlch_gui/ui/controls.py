@@ -1,4 +1,4 @@
-"""Custom GTK 4 tactile controls: pop-it bubble, VU-meter volume, spool nav rail."""
+"""Custom GTK 4 tactile controls: pop-it bubble, volume ramp, spool nav rail."""
 
 import math
 import time
@@ -17,18 +17,27 @@ def _hex_to_rgb_floats(hex_val: str) -> tuple[float, float, float]:
     return r, g, b
 
 
-class VolumeMeter(Gtk.DrawingArea):
-    """Segmented volume VU meter: pips fill left-to-right with the current
-    volume level, colored on a green-to-red gradient. Click a pip to jump
-    the volume to that segment; scroll to nudge. Reads as a level meter,
-    not a scrubber -- unlike the ThreadSlider it replaces, there is no
-    drag gesture at all.
+def _rounded_rect(cr, x, y, w, h, r):
+    r = min(w / 2.0, h / 2.0, r)
+    cr.new_sub_path()
+    cr.arc(x + w - r, y + r, r, -math.pi / 2, 0)
+    cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
+    cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi)
+    cr.arc(x + r, y + r, r, math.pi, 3 * math.pi / 2)
+    cr.close_path()
 
-    Scrolling up while already at 100% engages the same 120% boost
-    ThreadSlider had: an extra hot-colored overflow pip lights up past the
-    N_SEGMENTS regular pips. The adjustment itself is never changed by
-    boosting; only NowPlayingPanel's boost-toggled handler drives the
-    actual wpctl volume change.
+
+class VolumeRamp(Gtk.DrawingArea):
+    """Volume as a rising wedge of thin bars -- the shape of the universal
+    volume glyph. Bars light in ROOT up to the current level, with the edge
+    clipped mid-bar so the fill tracks the real value instead of snapping to
+    a segment; unlit bars are faint ticks. Click or drag to scrub, scroll to
+    nudge. No trough: the wedge sits straight on the card.
+
+    Scrolling up while already at 100% engages the 120% boost: the extra
+    full-height bar past the ramp lights in FORTE. The adjustment itself is
+    never changed by boosting; only NowPlayingPanel's boost-toggled handler
+    drives the actual wpctl volume change.
     """
 
     __gsignals__ = {
@@ -36,10 +45,10 @@ class VolumeMeter(Gtk.DrawingArea):
         'boost-toggled': (GObject.SignalFlags.RUN_LAST, None, (bool,)),
     }
 
-    N_SEGMENTS = 10
-    _GAP = 2.0
-    _MARGIN = 2.0
-    _BOOST_ZONE = 16.0
+    N_BARS = 16
+    _FILL = 0.5       # bar width as a fraction of the bar pitch
+    _MIN_FRAC = 0.45  # first bar's height as a fraction of the tallest
+    _BOOST_GAP = 6.0  # extra space before the boost bar sets it apart
 
     def __init__(self, adjustment: Gtk.Adjustment):
         super().__init__()
@@ -47,26 +56,35 @@ class VolumeMeter(Gtk.DrawingArea):
         self.boosted = False
         self.set_focusable(True)
         self.set_hexpand(True)
-        self.set_size_request(-1, 18)
+        self.set_size_request(-1, 22)
 
-        self.adj.connect("value-changed", lambda _: self.queue_draw())
+        self.adj.connect("value-changed", lambda _: self._refresh())
         self.set_draw_func(self._on_draw)
         self._update_tooltip()
 
         click_gest = Gtk.GestureClick.new()
         click_gest.set_button(1)
-        click_gest.connect("released", self._on_click)
+        click_gest.connect("pressed", lambda _g, _n, x, _y: self._scrub(x))
         self.add_controller(click_gest)
+
+        drag_gest = Gtk.GestureDrag.new()
+        drag_gest.connect("drag-update", self._on_drag_update)
+        self.add_controller(drag_gest)
 
         scroll_gest = Gtk.EventControllerScroll.new(Gtk.EventControllerScrollFlags.VERTICAL)
         scroll_gest.connect("scroll", self._on_scroll)
         self.add_controller(scroll_gest)
 
+    def _refresh(self):
+        self._update_tooltip()
+        self.queue_draw()
+
     def _update_tooltip(self):
-        self.set_tooltip_text(
-            "Scroll down to restore volume" if self.boosted
-            else "Scroll up at max volume for a 120% boost"
-        )
+        if self.boosted:
+            self.set_tooltip_text("Volume 120% · scroll down to restore")
+        else:
+            self.set_tooltip_text(
+                f"Volume {round(self._norm() * 100)}% · scroll up at max for a 120% boost")
 
     def _norm(self) -> float:
         return (self.adj.get_value() - self.adj.get_lower()) / (self.adj.get_upper() - self.adj.get_lower())
@@ -74,100 +92,102 @@ class VolumeMeter(Gtk.DrawingArea):
     def _set_from_norm(self, norm: float):
         norm = max(0.0, min(1.0, norm))
         new_val = self.adj.get_lower() + norm * (self.adj.get_upper() - self.adj.get_lower())
+        if abs(new_val - self.adj.get_value()) < 0.005:
+            return  # drag jitter -- don't spam wpctl with no-op changes
         self.adj.set_value(new_val)
         self.emit('value-changed', new_val)
 
-    def _segment_rects(self, width: float, height: float) -> list[tuple[float, float, float, float]]:
-        """(x, y, w, h) for each of the N_SEGMENTS regular pips, evenly
-        spaced across the widget width, with _BOOST_ZONE reserved past
-        the last pip for the boost overflow indicator."""
-        usable = width - 2.0 * self._MARGIN - self._BOOST_ZONE
-        seg_w = (usable - self._GAP * (self.N_SEGMENTS - 1)) / self.N_SEGMENTS
+    def _pitch(self, width: float) -> float:
+        """Bar-to-bar spacing; the boost bar takes one more pitch past the ramp."""
+        return (width - self._BOOST_GAP) / (self.N_BARS + 1)
+
+    def _ramp_width(self, width: float) -> float:
+        """Width of the regular ramp; the boost bar and its gap sit past it."""
+        pitch = self._pitch(width)
+        return (self.N_BARS - 1) * pitch + pitch * self._FILL
+
+    def _bar_rects(self, width: float, height: float) -> list[tuple[float, float, float, float]]:
+        """(x, y, w, h) for each regular bar, bottom-aligned, rising linearly
+        from _MIN_FRAC of the height to full height."""
+        pitch = self._pitch(width)
         rects = []
-        for i in range(self.N_SEGMENTS):
-            x = self._MARGIN + i * (seg_w + self._GAP)
-            rects.append((x, 0.0, seg_w, height))
+        for i in range(self.N_BARS):
+            t = i / (self.N_BARS - 1)
+            h = height * (self._MIN_FRAC + (1.0 - self._MIN_FRAC) * t)
+            rects.append((i * pitch, height - h, pitch * self._FILL, h))
         return rects
+
+    def _norm_at(self, x: float) -> float:
+        ramp = self._ramp_width(self.get_width())
+        return 0.0 if ramp <= 0 else max(0.0, min(1.0, x / ramp))
 
     @staticmethod
     def _rounded_bar(cr, x, y, w, h):
-        r = min(w / 2.0, h / 2.0, 3.0)
-        cr.new_sub_path()
-        cr.arc(x + w - r, y + r, r, -math.pi / 2, 0)
-        cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
-        cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi)
-        cr.arc(x + r, y + r, r, math.pi, 3 * math.pi / 2)
-        cr.close_path()
+        _rounded_rect(cr, x, y, w, h, 2.0)
 
     def _on_draw(self, area, cr, width, height, user_data=None):
         colors = palette.load()
-        trough = _hex_to_rgb_floats(colors.get('DIM', '#1a1828'))
         score = _hex_to_rgb_floats(colors.get('SCORE', '#e0def4'))
-        low_rgb = _hex_to_rgb_floats(colors.get('SEVENTH', '#79a383'))
-        hot_rgb = _hex_to_rgb_floats(colors.get('FORTE', '#eb6f92'))
+        lit = _hex_to_rgb_floats(colors.get('ROOT', '#c4a7e7'))
+        hot = _hex_to_rgb_floats(colors.get('FORTE', '#eb6f92'))
 
-        norm = self._norm()
-        filled = round(norm * self.N_SEGMENTS)
-        rects = self._segment_rects(width, height)
-
-        # Recessed trough behind the whole pip strip (matches the CSS
-        # slider-trough idiom -- DIM well, pips sit proud of it).
-        cr.set_source_rgba(*trough, 1.0)
-        self._rounded_bar(cr, 0.0, 1.0, width, max(0.0, height - 2.0))
-        cr.fill()
-
-        for i, (x, y, w, h) in enumerate(rects):
-            t = i / (self.N_SEGMENTS - 1)
-            r = low_rgb[0] + (hot_rgb[0] - low_rgb[0]) * t
-            g = low_rgb[1] + (hot_rgb[1] - low_rgb[1]) * t
-            b = low_rgb[2] + (hot_rgb[2] - low_rgb[2]) * t
-            if i < filled:
-                cr.set_source_rgba(r, g, b, 1.0)
-            else:
-                cr.set_source_rgba(*score, 0.12)
-            self._rounded_bar(cr, x, y + 2.0, w, h - 4.0)
+        rects = self._bar_rects(width, height)
+        for x, y, w, h in rects:
+            cr.set_source_rgba(*score, 0.12)
+            self._rounded_bar(cr, x, y, w, h)
             cr.fill()
 
-        if self.boosted:
-            last_x = rects[-1][0] + rects[-1][2]
-            overflow_w = width - self._MARGIN - last_x - self._GAP
-            if overflow_w > 0:
-                cr.set_source_rgba(*hot_rgb, 1.0)
-                self._rounded_bar(cr, last_x + self._GAP, 2.0, overflow_w, height - 4.0)
-                cr.fill()
+        # Lit overlay clipped at the exact level, so a bar can be part-lit.
+        level_x = 1.0 if self.boosted else self._norm()
+        level_x *= self._ramp_width(width)
+        if level_x > 0:
+            cr.save()
+            cr.rectangle(0, 0, level_x, height)
+            cr.clip()
+            cr.set_source_rgba(*lit, 1.0)
+            for x, y, w, h in rects:
+                self._rounded_bar(cr, x, y, w, h)
+            cr.fill()
+            cr.restore()
 
-    def _on_click(self, gesture, n_press, x, y):
-        width = self.get_width()
-        usable = width - 2.0 * self._MARGIN - self._BOOST_ZONE
-        if usable <= 0:
-            return
+        bw = rects[-1][2]
+        bx = width - bw
+        if bw > 0:
+            if self.boosted:
+                cr.set_source_rgba(*hot, 1.0)
+            else:
+                cr.set_source_rgba(*score, 0.06)
+            self._rounded_bar(cr, bx, 0.0, bw, height)
+            cr.fill()
+
+    def _unboost(self):
         if self.boosted:
             self.boosted = False
-            self._update_tooltip()
             self.emit('boost-toggled', False)
-        seg_w = usable / self.N_SEGMENTS
-        idx = int((x - self._MARGIN) / seg_w)
-        idx = max(0, min(self.N_SEGMENTS - 1, idx))
-        self._set_from_norm((idx + 1) / self.N_SEGMENTS)
+            self._refresh()
+
+    def _scrub(self, x: float):
+        self.grab_focus()
+        self._unboost()
+        self._set_from_norm(self._norm_at(x))
+
+    def _on_drag_update(self, gesture, dx, _dy):
+        ok, sx, _sy = gesture.get_start_point()
+        if ok:
+            self._scrub(sx + dx)
 
     def _on_scroll(self, controller, dx, dy):
         increasing = dy < 0
         if self.boosted:
-            if increasing:
-                return  # already at the 120% cap, nothing more to do
-            self.boosted = False
-            self._update_tooltip()
-            self.emit('boost-toggled', False)
-            self.queue_draw()
-            return
+            if not increasing:
+                self._unboost()
+            return  # already at the 120% cap when increasing
         if increasing and self.adj.get_value() >= self.adj.get_upper() - 1e-6:
             self.boosted = True
-            self._update_tooltip()
             self.emit('boost-toggled', True)
-            self.queue_draw()
+            self._refresh()
             return
-        total_range = self.adj.get_upper() - self.adj.get_lower()
-        step = total_range * 0.05
+        step = (self.adj.get_upper() - self.adj.get_lower()) * 0.05
         new_val = self.adj.get_value() + (step if increasing else -step)
         new_val = max(self.adj.get_lower(), min(self.adj.get_upper(), new_val))
         self.adj.set_value(new_val)
@@ -175,7 +195,7 @@ class VolumeMeter(Gtk.DrawingArea):
 
 
 class RecordBubble(Gtk.DrawingArea):
-    """Two-mode record button drawn as a pop-it silicone bubble.
+    """Two-mode record button, drawn as a keycap matching .control-btn.
 
     Right-click cycles the FULL/TRACK mode (emits 'mode-changed' so the
     mode can be displayed outside this widget, e.g. a corner badge);
@@ -191,19 +211,25 @@ class RecordBubble(Gtk.DrawingArea):
     }
 
     MODES = ("full", "track")
+    _DX, _DY = 3.0, 4.0  # hard-offset shadow, matches .control-btn
+    _RADIUS = 7.0
 
     def __init__(self):
         super().__init__()
         self.mode = "full"
         self.recording = False
-        self.set_size_request(34, 34)
+        self._pressed = False
+        self.set_size_request(44 + int(self._DX), 26 + int(self._DY))
+        self.set_valign(Gtk.Align.CENTER)
         self.set_focusable(True)
         self.set_draw_func(self._on_draw)
         self._update_tooltip()
 
         left = Gtk.GestureClick.new()
         left.set_button(1)
+        left.connect("pressed", lambda *_: self._set_pressed(True))
         left.connect("released", self._on_left_click)
+        left.connect("stopped", lambda *_: self._set_pressed(False))
         self.add_controller(left)
 
         right = Gtk.GestureClick.new()
@@ -228,7 +254,13 @@ class RecordBubble(Gtk.DrawingArea):
             f"REC {self.mode.upper()} · {action} · right-click: mode"
         )
 
+    def _set_pressed(self, pressed: bool):
+        if pressed != self._pressed:
+            self._pressed = pressed
+            self.queue_draw()
+
     def _on_left_click(self, gesture, n_press, x, y):
+        self._set_pressed(False)
         self.emit('record-toggled', self.mode)
 
     def _on_right_click(self, gesture, n_press, x, y):
@@ -250,21 +282,32 @@ class RecordBubble(Gtk.DrawingArea):
             glyph = _hex_to_rgb_floats(colors.get('LYRIC', '#c9c5da'))
         ring = _hex_to_rgb_floats(colors.get('SCORE', '#e0def4'))
 
-        cx, cy = width / 2.0, height / 2.0
-        radius = min(width, height) / 2.0 - 3.0
+        staff = tuple(int(c) / 255.0 for c in colors.get('STAFF', '15,14,23').split(','))
+        a_drop = float(colors.get('STAFF_A_DROP', '0.55'))
 
-        # Flat disc + hairline ring, same vocabulary as the CSS .control-btn.
+        # A keycap shaped like .control-btn, with the same hard offset as it
+        # and the window shell; pressing slides the cap into its shadow.
+        w, h = width - self._DX, height - self._DY
+        x = y = 0.0
+        if self._pressed:
+            x, y = self._DX, self._DY
+        else:
+            cr.set_source_rgba(*staff, a_drop)
+            _rounded_rect(cr, self._DX, self._DY, w, h, self._RADIUS)
+            cr.fill()
+
         cr.set_source_rgba(*face, 1.0)
-        cr.arc(cx, cy, radius, 0, 2 * math.pi)
+        _rounded_rect(cr, x, y, w, h, self._RADIUS)
         cr.fill()
 
-        cr.set_line_width(1.0)
-        cr.set_source_rgba(*ring, 0.15)
-        cr.arc(cx, cy, radius, 0, 2 * math.pi)
+        cr.set_line_width(2.0)
+        cr.set_source_rgba(*ring, 0.32)
+        _rounded_rect(cr, x + 1.0, y + 1.0, w - 2.0, h - 2.0, self._RADIUS - 1.0)
         cr.stroke()
 
         # Centered record glyph: a small filled square.
-        s = radius * 0.5
+        cx, cy = x + w / 2.0, y + h / 2.0
+        s = h * 0.32
         cr.set_source_rgba(*glyph, 1.0)
         cr.rectangle(cx - s / 2.0, cy - s / 2.0, s, s)
         cr.fill()

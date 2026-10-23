@@ -162,16 +162,61 @@ class TestControlWidgetsFlat(unittest.TestCase):
         b.set_state(True, "track")
         b._on_draw(b, self._ctx(34, 34), 34, 34)
 
-    def test_volume_meter_draw_flat_no_raise(self):
+    def test_record_bubble_pressed_draw_no_raise(self):
+        from sqlch_gui.ui.controls import RecordBubble
+        b = RecordBubble()
+        b._set_pressed(True)
+        b._on_draw(b, self._ctx(47, 30), 47, 30)
+        b._on_left_click(None, 1, 0, 0)
+        self.assertFalse(b._pressed)
+
+    def _ramp(self, value=0.6):
         import gi
         gi.require_version("Gtk", "4.0")
         from gi.repository import Gtk
-        from sqlch_gui.ui.controls import VolumeMeter
-        adj = Gtk.Adjustment(value=0.6, lower=0.0, upper=1.0, step_increment=0.05)
-        m = VolumeMeter(adj)
+        from sqlch_gui.ui.controls import VolumeRamp
+        adj = Gtk.Adjustment(value=value, lower=0.0, upper=1.0, step_increment=0.05)
+        return VolumeRamp(adj)
+
+    def test_volume_ramp_draw_flat_no_raise(self):
+        m = self._ramp()
         m._on_draw(m, self._ctx(160, 18), 160, 18)
         m.boosted = True
         m._on_draw(m, self._ctx(160, 18), 160, 18)
+
+    def test_volume_ramp_bars_rise_and_stay_inside(self):
+        m = self._ramp()
+        rects = m._bar_rects(160, 18)
+        self.assertEqual(len(rects), m.N_BARS)
+        heights = [h for _x, _y, _w, h in rects]
+        self.assertEqual(heights, sorted(heights))
+        self.assertAlmostEqual(heights[-1], 18)
+        last_x, _y, last_w, _h = rects[-1]
+        self.assertAlmostEqual(last_x + last_w, m._ramp_width(160))
+        self.assertLess(m._ramp_width(160), 160)
+
+    def test_volume_ramp_scrub_is_continuous(self):
+        m = self._ramp(0.0)
+        m._ramp_width = lambda _w: 100.0
+        got = []
+        m.connect("value-changed", lambda _m, v: got.append(v))
+        m._scrub(37.0)
+        self.assertAlmostEqual(m.adj.get_value(), 0.37)
+        m._scrub(500.0)
+        self.assertAlmostEqual(m.adj.get_value(), 1.0)
+        self.assertEqual(len(got), 2)
+        m._scrub(100.2)  # sub-0.5% jitter is not re-emitted
+        self.assertEqual(len(got), 2)
+
+    def test_volume_ramp_scroll_boosts_at_max_and_scrub_unboosts(self):
+        m = self._ramp(1.0)
+        boosts = []
+        m.connect("boost-toggled", lambda _m, on: boosts.append(on))
+        m._on_scroll(None, 0, -1)
+        self.assertTrue(m.boosted)
+        m._scrub(0.0)
+        self.assertFalse(m.boosted)
+        self.assertEqual(boosts, [True, False])
 
     def test_controls_source_has_no_hardcoded_rgb_literals(self):
         src = (_REPO_ROOT / "sqlch_gui/ui/controls.py").read_text()
@@ -205,6 +250,16 @@ class TestDepthPass(unittest.TestCase):
         css = common._build_css(dict(palette._DEFAULTS))
         self.assertIn("inset 0 2px 4px", css)
         self.assertNotIn("inset 0 1px 2px", css)
+
+    def test_control_btn_uses_shell_hard_offset_and_presses_into_it(self):
+        from sqlch_gui.ui import common
+        css = common._build_css(dict(palette._DEFAULTS))
+        rest = css.split(".control-btn {")[1].split("}")[0]
+        active = css.split(".control-btn:active {")[1].split("}")[0]
+        self.assertIn("box-shadow: 3px 4px 0 0", rest)
+        self.assertIn("margin: 0 3px 4px 0", rest)
+        self.assertIn("box-shadow: none", active)
+        self.assertIn("margin: 4px 0 0 3px", active)
 
     def test_cover_art_uses_recess_not_drop(self):
         from sqlch_gui.ui import common

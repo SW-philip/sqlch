@@ -43,8 +43,15 @@ def _build_css(colors: dict) -> str:
     a_drop = colors.get('STAFF_A_DROP', '0.55')
     a_inset = colors.get('STAFF_A_INSET_BOT', '0.30')
 
-    mono = '"JetBrains Mono", "Courier New", monospace'
-    prop = '"Inter", "system-ui", sans-serif'
+    # Installed family names: plain "JetBrains Mono" / "Inter" aren't on the
+    # system and silently fell back to DejaVu. Propo is the same design with
+    # proportional advance, for titles that need to fit more per line.
+    mono = '"JetBrainsMono Nerd Font", "JetBrains Mono", monospace'
+    prop = '"JetBrainsMono Nerd Font Propo", "JetBrainsMono Nerd Font", sans-serif'
+    # Smallest label size. Below ~10px logical, glyphs land on fractional
+    # device pixels at 1.25x scale and strokes look broken; hierarchy below
+    # body text comes from caps, weight, spacing and color instead.
+    small = "0.85em"
 
     hairline = f"1px solid rgba({score_rgb}, 0.14)"
     # Now Playing card only: the plain hairline barely registers between
@@ -105,7 +112,7 @@ def _build_css(colors: dict) -> str:
         border-bottom-width: 0;
         box-shadow: none;
         font-family: {mono};
-        font-size: 0.68em;
+        font-size: {small};
         font-weight: 700;
         letter-spacing: 0.12em;
     }}
@@ -145,7 +152,7 @@ def _build_css(colors: dict) -> str:
     .corner-tag {{
         font-family: {mono};
         font-weight: 700;
-        font-size: 0.6em;
+        font-size: {small};
         padding: 2px 6px;
         border-radius: 7px;
         border: {hairline};
@@ -167,7 +174,7 @@ def _build_css(colors: dict) -> str:
     .thumb-tag {{
         margin: 3px;
         padding: 1px 4px;
-        font-size: 0.5em;
+        font-size: {small};
     }}
     .watch-bar trough {{
         background-color: {wing};
@@ -183,7 +190,7 @@ def _build_css(colors: dict) -> str:
     .toast {{
         font-family: {mono};
         font-weight: 700;
-        font-size: 0.75em;
+        font-size: {small};
         padding: 5px 10px;
         margin: 8px;
         border-radius: 9px;
@@ -194,7 +201,7 @@ def _build_css(colors: dict) -> str:
 
     .section-pill {{
         font-family: {mono};
-        font-size: 0.7em;
+        font-size: {small};
         font-weight: 700;
         padding: 2px 8px;
         border-radius: 9px;
@@ -208,7 +215,7 @@ def _build_css(colors: dict) -> str:
     }}
     .row-btn {{
         font-family: {mono};
-        font-size: 0.7em;
+        font-size: {small};
         padding: 1px 6px;
         min-height: 0;
         border: {hairline};
@@ -268,7 +275,7 @@ def _build_css(colors: dict) -> str:
         color: {hall};
     }}
     .station-live {{
-        font-size: 0.8em;
+        font-size: {small};
         color: {seventh};
     }}
     .station-row.active .station-live {{
@@ -287,18 +294,25 @@ def _build_css(colors: dict) -> str:
         background-image: none;
         color: {score};
         border: {edge};
-        box-shadow: {drop};
+        /* The shell's hard offset (same as waybar / lock / greeter), with
+           margin reserving its footprint. Pressing trades the right/bottom
+           margin for left/top so the button lands on its shadow without
+           neighbors reflowing. */
+        box-shadow: {shell_shadow};
+        margin: 0 3px 4px 0;
+        transition: margin 60ms ease-out, box-shadow 60ms ease-out;
     }}
     .control-btn:hover {{
         background-color: {stage};
+        border-color: rgba({score_rgb}, 0.55);
     }}
     .control-btn:active {{
-        box-shadow: {press};
+        box-shadow: none;
+        margin: 4px 0 0 3px;
     }}
     .control-btn.primary {{
-        min-width: 36px;
-        min-height: 36px;
-        border-radius: 9px;
+        min-width: 52px;
+        min-height: 22px;
         background-color: {piano};
         background-image: none;
         color: {hall};
@@ -327,7 +341,7 @@ def _build_css(colors: dict) -> str:
 
     .thread-label {{
         font-family: {mono};
-        font-size: 0.75em;
+        font-size: {small};
         color: rgba({score_rgb}, 0.28);
     }}
     .thread-label.lit {{
@@ -338,7 +352,7 @@ def _build_css(colors: dict) -> str:
     .tech-badge, .tag-chip {{
         font-family: {mono};
         font-weight: 700;
-        font-size: 0.72em;
+        font-size: {small};
         background-color: {wing};
         background-image: none;
         color: {lyric};
@@ -361,7 +375,7 @@ def _build_css(colors: dict) -> str:
     .small-badge {{
         font-family: {mono};
         font-weight: 700;
-        font-size: 0.65em;
+        font-size: {small};
         background-color: {dim};
         color: {root};
         padding: 2px 6px;
@@ -377,7 +391,7 @@ def _build_css(colors: dict) -> str:
         color: {lyric};
         font-family: {mono};
         font-weight: 700;
-        font-size: 10px;
+        font-size: {small};
         letter-spacing: 0.14em;
     }}
     .section-rule.gold label {{
@@ -397,7 +411,7 @@ def _build_css(colors: dict) -> str:
     .knob-tag {{
         font-family: {mono};
         font-weight: 700;
-        font-size: 0.58em;
+        font-size: {small};
         color: {rest};
         letter-spacing: 0.05em;
     }}
@@ -407,7 +421,7 @@ def _build_css(colors: dict) -> str:
     }}
     .sq-nameplate {{
         font-family: {mono};
-        font-size: 0.6em;
+        font-size: {small};
         font-weight: 700;
         letter-spacing: 0.24em;
         color: {rest};
@@ -421,7 +435,7 @@ def _build_css(colors: dict) -> str:
     }}
     .dock-title {{
         font-family: {mono};
-        font-size: 0.6em;
+        font-size: {small};
         font-weight: 700;
         letter-spacing: 0.24em;
         color: {rest};
@@ -440,7 +454,7 @@ def _build_css(colors: dict) -> str:
     }}
     .dock-grip {{
         font-family: {mono};
-        font-size: 0.8em;
+        font-size: {small};
         color: {rest};
         opacity: 0.5;
     }}
@@ -486,7 +500,7 @@ def _build_css(colors: dict) -> str:
     }}
     .sq-station {{
         font-family: {mono};
-        font-size: 0.72em;
+        font-size: {small};
         font-style: italic;
         color: {lyric};
     }}
@@ -495,7 +509,7 @@ def _build_css(colors: dict) -> str:
     }}
     .sq-source-row {{
         font-family: {mono};
-        font-size: 0.7em;
+        font-size: {small};
         letter-spacing: 0.1em;
         color: {lyric};
     }}
@@ -604,7 +618,7 @@ def _build_css(colors: dict) -> str:
         color: {lyric};
         font-family: {mono};
         font-weight: 700;
-        font-size: 0.8em;
+        font-size: {small};
     }}
     .load-more-row:hover {{
         background-color: {stage};
@@ -626,7 +640,7 @@ def _build_css(colors: dict) -> str:
     }}
     .info-line {{
         font-family: {mono};
-        font-size: 0.72em;
+        font-size: {small};
         font-weight: 700;
         color: {lyric};
     }}
@@ -648,14 +662,14 @@ def _build_css(colors: dict) -> str:
         min-width: 0;
         padding: 0 5px;
         font-family: {mono};
-        font-size: 0.65em;
+        font-size: {small};
         color: {rest};
         background: transparent;
         box-shadow: none;
     }}
     .seek-time {{
         font-family: {mono};
-        font-size: 0.65em;
+        font-size: {small};
         color: {rest};
     }}
     """

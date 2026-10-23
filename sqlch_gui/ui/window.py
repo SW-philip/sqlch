@@ -159,7 +159,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         self._pal_reload_pending = False
         load_custom_css()
         self.station_list.refresh()  # group headers bake palette hex into markup
-        self.now_playing.vol_meter.queue_draw()  # VU meter re-reads palette on next draw
+        self.now_playing.vol_meter.queue_draw()  # volume ramp re-reads palette on next draw
         return False
 
     def on_close_request(self, win):

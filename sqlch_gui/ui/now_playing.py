@@ -10,7 +10,7 @@ from gi.repository import Gtk, GLib, GdkPixbuf, GObject, Pango
 
 from sqlch.core import progress
 from .. import XDG_CACHE, daemon, metadata
-from .controls import VolumeMeter, RecordBubble, NavColumn, SeekBar, TimelineBar
+from .controls import VolumeRamp, RecordBubble, NavColumn, SeekBar, TimelineBar
 from .header import Header
 from .toast import Toast
 
@@ -162,7 +162,7 @@ class NowPlayingPanel(Gtk.Box):
         self.timeline.connect("go-live", lambda _b: self._send_async({"cmd": "go_live"}))
         card.append(self.timeline)
 
-        # --- Row 4: RecordBubble / stop-play toggle | speaker + volume meter ---
+        # --- Row 4: RecordBubble / stop-play toggle | speaker + volume ramp ---
         control_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
 
         self.rec_bubble = RecordBubble()
@@ -177,16 +177,21 @@ class NowPlayingPanel(Gtk.Box):
 
         control_row.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
 
+        # The buttons reserve 4px under their faces for the offset shadow;
+        # the same bottom margin centers the volume side on the faces.
         self.speaker_icon = Gtk.Image(icon_name="audio-volume-high-symbolic")
         self.speaker_icon.set_valign(Gtk.Align.CENTER)
+        self.speaker_icon.set_margin_bottom(4)
         control_row.append(self.speaker_icon)
 
         self.vol_adj = Gtk.Adjustment(value=0.0, lower=0.0, upper=1.0, step_increment=0.05)
-        self.vol_meter = VolumeMeter(self.vol_adj)
+        self.vol_meter = VolumeRamp(self.vol_adj)
         self._vol_handler = self.vol_meter.connect("value-changed", self.on_vol_changed)
         self._pre_boost_vol: float | None = None
         self.vol_meter.connect("boost-toggled", self.on_boost_toggled)
         self.vol_meter.set_hexpand(True)
+        self.vol_meter.set_valign(Gtk.Align.CENTER)
+        self.vol_meter.set_margin_bottom(4)
         control_row.append(self.vol_meter)
 
         card.append(control_row)
