@@ -137,8 +137,11 @@ class SourcePane(Gtk.Box):
         self.append(scroll)
 
     @staticmethod
-    def _daemon_play(item, resume=False):
-        resp = daemon.send({"cmd": "play_item", "item": item, "resume": resume})
+    def _daemon_play(item, resume=False, mode=None):
+        msg = {"cmd": "play_item", "item": item, "resume": resume}
+        if mode:
+            msg["mode"] = mode
+        resp = daemon.send(msg)
         if resp is None:
             raise RuntimeError("daemon not running")
         if not resp.get("ok", True):
@@ -462,8 +465,11 @@ class SourcePane(Gtk.Box):
         point = None
         if item.get("kind") == "video":
             point = watch_progress.resume_point(self._watch.get(item["source"], item["id"]))
+        modes = getattr(self.source, "PLAY_MODES", None)
         if point is not None and anchor is not None:
             self._offer_resume(item, point, anchor)
+        elif modes and item.get("kind") == "track" and anchor is not None:
+            self._offer_modes(item, modes, anchor)
         else:
             self._run(lambda: self._play(item), self._played)
 
@@ -527,6 +533,23 @@ class SourcePane(Gtk.Box):
             box.append(btn)
         pop.set_child(box)
         pop.popup()
+
+    def _offer_modes(self, item, modes, anchor):
+        pop = Gtk.Popover()
+        pop.set_parent(anchor)
+        pop.connect("closed", lambda p: GLib.idle_add(p.unparent))
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        for label, mode in modes:
+            btn = Gtk.Button(label=label)
+            btn.add_css_class("row-btn")
+            btn.connect("clicked", lambda b, m=mode, p=pop: self._start_mode(item, m, p))
+            box.append(btn)
+        pop.set_child(box)
+        pop.popup()
+
+    def _start_mode(self, item, mode, pop):
+        pop.popdown()
+        self._run(lambda: self._play(item, mode=mode), self._played)
 
     def _start(self, item, resume, pop):
         pop.popdown()

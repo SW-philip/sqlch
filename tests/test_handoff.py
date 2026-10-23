@@ -65,7 +65,7 @@ class TestPlayerHandoff(unittest.TestCase):
              mock.patch.object(player.handoff, "play") as play:
             player.play_target(self.t, self.item)
         spawn.assert_not_called()
-        play.assert_called_once_with("spotify", "spotify:track:T1")
+        play.assert_called_once_with("spotify", "spotify:track:T1", None)
         cur = player.current()
         self.assertEqual((cur["handoff"], cur["item"]["art"]), ("spotify", "/c/a.jpg"))
 

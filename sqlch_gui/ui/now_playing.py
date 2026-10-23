@@ -153,6 +153,10 @@ class NowPlayingPanel(Gtk.Box):
 
         self.seek_bar = SeekBar()
         self.seek_bar.connect("seek-requested", self._on_seek_requested)
+        self.seek_bar.connect(
+            "seek-relative", lambda _b, d: self._send_async({"cmd": "seek_rel", "delta": d}))
+        self.seek_bar.connect(
+            "skip", lambda _b, fwd: self._send_async({"cmd": "next" if fwd else "prev"}))
         card.append(self.seek_bar)
 
         self.timeline = TimelineBar()
@@ -426,7 +430,8 @@ class NowPlayingPanel(Gtk.Box):
             else:
                 self.clear_cover()
 
-        self.seek_bar.set_state(resp.get("position"), resp.get("duration"))
+        self.seek_bar.set_state(resp.get("position"), resp.get("duration"),
+                                bool(resp.get("can_skip")))
         row = progress.get(item.get("source", ""), item.get("id", "")) \
             if item.get("kind") == "video" else None
         self.lbl_watched_tag.set_visible(bool(row and row.get("watched")))

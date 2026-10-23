@@ -34,6 +34,9 @@ LOGIN_NEEDED = f"Not logged in to Spotify: {spotify_auth.LOGIN_HINT}"
 RELOGIN = f"Spotify didn't allow it: {spotify_auth.LOGIN_HINT} again to grant library access"
 WEB = "https://open.spotify.com"
 KINDS = ("artist", "album", "playlist")
+# Asked on every track click: the album from this track on, or the track
+# alone with Spotify's autoplay carrying on into similar songs.
+PLAY_MODES = (("Play album", "album"), ("Play radio", "radio"))
 _ID = re.compile(r"^[A-Za-z0-9]+$")
 
 
@@ -375,11 +378,15 @@ def _cover(t: dict) -> str | None:
     return str(dest)
 
 
-def resolve(item: dict) -> Target:
+def resolve(item: dict, mode: str | None = None) -> Target:
     tid = item.get("id") or ""
     if not _ID.match(tid):
         raise ValueError("bad spotify id")
     t = _get(f"/tracks/{tid}")
+    album = t.get("album") or {}
     meta = {"title": t.get("name"), "artist": _names(t.get("artists")),
-            "album": (t.get("album") or {}).get("name"), "art": _cover(t)}
-    return Target(f"spotify:track:{tid}", False, meta, handoff="spotify")
+            "album": album.get("name"), "art": _cover(t)}
+    context = None
+    if mode == "album" and _ID.match(album.get("id") or ""):
+        context = f"spotify:album:{album['id']}"
+    return Target(f"spotify:track:{tid}", False, meta, handoff="spotify", context=context)

@@ -213,6 +213,14 @@ class TestSpotify(unittest.TestCase):
                          ("Song", "A, B", "Album"))
         self.assertEqual(Path(t.meta["art"]).read_bytes(), b"img")
 
+    def test_resolve_album_mode_plays_the_album_from_the_track(self):
+        self.api(**{"/tracks/T1": TRACK})
+        with mock.patch.object(spotify, "urlopen", side_effect=OSError):
+            album = spotify.resolve({"id": "T1"}, mode="album")
+            radio = spotify.resolve({"id": "T1"}, mode="radio")
+        self.assertEqual((album.url, album.context), ("spotify:track:T1", "spotify:album:AL1"))
+        self.assertIsNone(radio.context)
+
     def test_resolve_rejects_bad_ids_and_survives_cover_failure(self):
         for bad in ("", "a b", "x/../y"):
             with self.assertRaises(ValueError):

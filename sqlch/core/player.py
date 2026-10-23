@@ -398,7 +398,7 @@ def play_target(target, item: dict[str, Any], start: float | None = None) -> Non
     if meta.get("art") and not item.get("art"):
         item = {**item, "art": meta["art"]}
     if target.handoff:
-        handoff.play(target.handoff, target.url)
+        handoff.play(target.handoff, target.url, target.context)
         _current = {"type": "item", "item": item, "handoff": target.handoff}
         return
     extra = {"headers": target.headers} if target.headers else {}
@@ -427,11 +427,26 @@ def timeshift() -> dict[str, float] | None:
 
 
 def seek_relative(delta: float) -> None:
+    if _current and _current.get("type") == "item":
+        pos, dur = item_progress()
+        if pos is not None and dur:
+            seek(min(max(pos + delta, 0.0), dur))
+        return
     ts = timeshift()
     if ts is None:
         return
     target = min(max(ts["pos"] + delta, ts["start"]), ts["end"] - LIVE_MARGIN)
     seek(target)
+
+
+def can_skip() -> bool:
+    """Whether the playing item has an external player with its own queue."""
+    return bool(_current and _current.get("handoff"))
+
+
+def skip(forward: bool) -> None:
+    if can_skip():
+        handoff.skip(_current["handoff"], forward)
 
 
 def go_live() -> None:

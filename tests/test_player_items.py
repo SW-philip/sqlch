@@ -94,6 +94,16 @@ class TestDaemonItems(unittest.TestCase):
         self.assertEqual(resp, {"ok": True})
         play.assert_called_once_with(Target("/m/a.mp3"), item, start=None)
 
+    def test_play_item_passes_a_known_mode_and_refuses_others(self):
+        self.src.PLAY_MODES = (("Play album", "album"),)
+        item = {"source": "fake", "id": "1", "title": "T"}
+        with mock.patch.object(player, "play_target"):
+            self.assertTrue(daemon._handle(
+                {"cmd": "play_item", "item": item, "mode": "album"})["ok"])
+            self.src.resolve.assert_called_once_with(item, mode="album")
+            self.assertFalse(daemon._handle(
+                {"cmd": "play_item", "item": item, "mode": "bogus"})["ok"])
+
     def test_play_item_errors(self):
         self.assertFalse(daemon._handle({"cmd": "play_item"})["ok"])
         r = daemon._handle({"cmd": "play_item", "item": {"source": "nope"}})
@@ -122,6 +132,27 @@ class TestDaemonItems(unittest.TestCase):
                                    return_value={"type": "station", "item": {}}):
                 r = daemon._handle({"cmd": "status"})
             self.assertNotIn("position", r)
+
+
+class TestItemTransport(unittest.TestCase):
+    def test_item_seek_relative_clamps_to_item(self):
+        with mock.patch.object(player, "_current", {"type": "item", "item": {}}), \
+             mock.patch.object(player, "item_progress", return_value=(10.0, 100.0)), \
+             mock.patch.object(player, "seek") as seek:
+            player.seek_relative(-15)
+            player.seek_relative(30)
+        self.assertEqual([c.args[0] for c in seek.call_args_list], [0.0, 40.0])
+
+    def test_next_skips_the_handoff_track_not_the_station(self):
+        cur = {"type": "item", "item": {"id": "T"}, "handoff": "spotify"}
+        with mock.patch.object(player, "_current", cur), \
+             mock.patch.object(player.handoff, "skip") as skip, \
+             mock.patch.object(player, "play_station") as play:
+            self.assertTrue(daemon._handle({"cmd": "next"})["ok"])
+            self.assertTrue(daemon._handle({"cmd": "prev"})["ok"])
+        self.assertEqual(skip.call_args_list,
+                         [mock.call("spotify", True), mock.call("spotify", False)])
+        play.assert_not_called()
 
 
 if __name__ == "__main__":

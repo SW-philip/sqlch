@@ -115,6 +115,21 @@ class TestPane(unittest.TestCase):
         self.assertEqual(played, [TRACK])
         self.assertEqual(p._stack, [])
 
+    def test_track_with_play_modes_asks_first(self):
+        played = []
+        src = Fake()
+        src.PLAY_MODES = (("Play album", "album"), ("Play radio", "radio"))
+        p = make(src, play=lambda i, **kw: played.append((i, kw)))
+        p.on_shown()
+        row = Gtk.Box()
+        p.append(row)
+        with mock.patch.object(p, "_offer_modes") as offer:
+            p._activate(TRACK, row)
+        offer.assert_called_once_with(TRACK, src.PLAY_MODES, row)
+        self.assertEqual(played, [])
+        p._start_mode(TRACK, "album", Gtk.Popover())
+        self.assertEqual(played, [(TRACK, {"mode": "album"})])
+
     def test_search_and_back(self):
         s = Fake()
         p = make(s)

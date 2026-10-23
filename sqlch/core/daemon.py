@@ -66,6 +66,7 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
                 'recording': recorder.status()}
         if cur and cur.get('type') == 'item':
             resp['position'], resp['duration'] = player.item_progress()
+            resp['can_skip'] = player.can_skip()
         elif cur:
             resp['timeshift'] = player.timeshift()
             shown = player.displayed_title()
@@ -112,8 +113,11 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
         src = sources.REGISTRY.get(item.get('source'))
         if src is None:
             return {'ok': False, 'error': f"unknown source: {item.get('source')}"}
+        mode = msg.get('mode')
+        if mode is not None and mode not in dict(getattr(src, 'PLAY_MODES', ())).values():
+            return {'ok': False, 'error': f'unknown play mode: {mode}'}
         try:
-            target = src.resolve(item)
+            target = src.resolve(item, mode=mode) if mode else src.resolve(item)
         except Exception as e:
             return {'ok': False, 'error': f'resolve failed: {e}'}
         start = None
@@ -146,6 +150,9 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
         player.preview(url, duration=dur)
         return {'ok': True}
     if cmd == 'next':
+        if player.can_skip():
+            player.skip(True)
+            return {'ok': True}
         current = player.current()
         if current:
             sid = current.get('item', {}).get('id')
@@ -157,6 +164,9 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
             player.play_station(st)
         return {'ok': True}
     if cmd == 'prev':
+        if player.can_skip():
+            player.skip(False)
+            return {'ok': True}
         current = player.current()
         if current:
             sid = current.get('item', {}).get('id')

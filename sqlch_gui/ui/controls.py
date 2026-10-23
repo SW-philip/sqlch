@@ -279,7 +279,7 @@ class RecordBubble(Gtk.DrawingArea):
             glyph = _hex_to_rgb_floats(colors.get('SCORE', '#e0def4'))
         else:
             face = _hex_to_rgb_floats(colors.get('WING', '#393552'))
-            glyph = _hex_to_rgb_floats(colors.get('LYRIC', '#c9c5da'))
+            glyph = _hex_to_rgb_floats(colors.get('FORTE', '#eb6f92'))
         ring = _hex_to_rgb_floats(colors.get('SCORE', '#e0def4'))
 
         staff = tuple(int(c) / 255.0 for c in colors.get('STAFF', '15,14,23').split(','))
@@ -305,11 +305,10 @@ class RecordBubble(Gtk.DrawingArea):
         _rounded_rect(cr, x + 1.0, y + 1.0, w - 2.0, h - 2.0, self._RADIUS - 1.0)
         cr.stroke()
 
-        # Centered record glyph: a small filled square.
+        # Centered record glyph: a filled dot, never the stop button's square.
         cx, cy = x + w / 2.0, y + h / 2.0
-        s = h * 0.32
         cr.set_source_rgba(*glyph, 1.0)
-        cr.rectangle(cx - s / 2.0, cy - s / 2.0, s, s)
+        cr.arc(cx, cy, h * 0.2, 0, 2 * math.pi)
         cr.fill()
 
 
@@ -405,25 +404,45 @@ class NavColumn(Gtk.Box):
 
 
 class SeekBar(Gtk.Box):
-    """Position scale for items with a known duration. The user's own moves
-    are not overwritten by the 1 Hz status poll for HOLD seconds."""
+    """Position scale and transport for items: back 15 s / forward 30 s
+    around the scale, and previous/next track when the item's player has a
+    queue of its own (Spotify). The user's own moves are not overwritten by
+    the 1 Hz status poll for HOLD seconds."""
 
     __gsignals__ = {
         'seek-requested': (GObject.SignalFlags.RUN_LAST, None, (float,)),
+        'seek-relative': (GObject.SignalFlags.RUN_LAST, None, (float,)),
+        'skip': (GObject.SignalFlags.RUN_LAST, None, (bool,)),
     }
     HOLD = 1.5
+    BACK, FORWARD = 15.0, 30.0
 
     def __init__(self):
-        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         self.add_css_class("seek-bar")
         self._hold_until = 0.0
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self._prev = Gtk.Button(icon_name="media-skip-backward-symbolic")
+        self._next = Gtk.Button(icon_name="media-skip-forward-symbolic")
+        self._back = Gtk.Button(label=f"−{self.BACK:.0f}")
+        self._fwd = Gtk.Button(label=f"+{self.FORWARD:.0f}")
+        self._prev.set_tooltip_text("Previous track")
+        self._next.set_tooltip_text("Next track")
+        for b in (self._prev, self._back, self._fwd, self._next):
+            b.add_css_class("timeline-btn")
+        self._prev.connect("clicked", lambda _b: self.emit("skip", False))
+        self._next.connect("clicked", lambda _b: self.emit("skip", True))
+        self._back.connect("clicked", lambda _b: self.emit("seek-relative", -self.BACK))
+        self._fwd.connect("clicked", lambda _b: self.emit("seek-relative", self.FORWARD))
         self._scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 1, 1)
         self._scale.set_draw_value(False)
         self._scale.set_hexpand(True)
         self._scale.connect("change-value", self._on_change_value)
+        for w in (self._prev, self._back, self._scale, self._fwd, self._next):
+            row.append(w)
         self._time = Gtk.Label(label="")
         self._time.add_css_class("seek-time")
-        self.append(self._scale)
+        self.append(row)
         self.append(self._time)
         self.set_visible(False)
 
@@ -432,11 +451,15 @@ class SeekBar(Gtk.Box):
         self.emit("seek-requested", float(value))
         return False
 
-    def set_state(self, position, duration):
-        if not duration or duration <= 0 or position is None:
-            self.set_visible(False)
+    def set_state(self, position, duration, can_skip: bool = False):
+        seekable = bool(duration and duration > 0 and position is not None)
+        self.set_visible(seekable or can_skip)
+        self._prev.set_visible(can_skip)
+        self._next.set_visible(can_skip)
+        for w in (self._back, self._scale, self._fwd, self._time):
+            w.set_visible(seekable)
+        if not seekable:
             return
-        self.set_visible(True)
         self._time.set_text(
             f"{format_duration(position) or '0:00'} / {format_duration(duration)}")
         if time.monotonic() < self._hold_until:

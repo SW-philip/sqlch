@@ -1,6 +1,6 @@
 """Playback delegated to an external player instead of mpv. Each handler takes
 the Target url (a URI the player understands) and offers play, toggle, stop,
-seek and progress. A new backend is another entry in HANDLERS."""
+seek, skip and progress. A new backend is another entry in HANDLERS."""
 
 import json
 import os
@@ -57,9 +57,10 @@ class Mpris:
             time.sleep(0.5)
         raise RuntimeError(f"{self.launch} did not start")
 
-    def play(self, uri: str) -> None:
+    def play(self, uri: str, context: str | None = None) -> None:
+        # MPRIS can't start a context at a track; the album plays from the top.
         self._ensure_running()
-        r = _playerctl("open", uri, player=self.player)
+        r = _playerctl("open", context or uri, player=self.player)
         if r.returncode != 0:
             raise RuntimeError(r.stderr.strip() or f"{self.player} refused the uri")
 
@@ -74,6 +75,9 @@ class Mpris:
 
     def seek(self, pos: float) -> None:
         pass  # the external app owns its own position
+
+    def skip(self, forward: bool) -> None:
+        _playerctl("next" if forward else "previous", player=self.player)
 
     def progress(self) -> tuple[float | None, float | None]:
         return None, None
@@ -113,9 +117,10 @@ class Librespot:
             return False
         return bool(root and root.get("playback_ready"))
 
-    def play(self, uri: str) -> None:
+    def play(self, uri: str, context: str | None = None) -> None:
+        body = {"uri": context, "skip_to_uri": uri} if context else {"uri": uri}
         try:
-            self._call("/player/play", {"uri": uri})
+            self._call("/player/play", body)
         except OSError as e:
             raise RuntimeError(f"go-librespot: {e}") from e
 
@@ -130,6 +135,9 @@ class Librespot:
 
     def seek(self, pos: float) -> None:
         self._call("/player/seek", {"position": int(pos * 1000)})
+
+    def skip(self, forward: bool) -> None:
+        self._call("/player/next" if forward else "/player/prev")
 
     def progress(self) -> tuple[float | None, float | None]:
         try:
@@ -153,16 +161,16 @@ class Preferred:
     def __init__(self, primary, fallback):
         self.primary, self.fallback, self.active = primary, fallback, fallback
 
-    def play(self, uri: str) -> None:
+    def play(self, uri: str, context: str | None = None) -> None:
         if self.primary.usable():
             try:
-                self.primary.play(uri)
+                self.primary.play(uri, context)
                 self.active = self.primary
                 return
             except RuntimeError:
                 pass
         self.active = self.fallback
-        self.fallback.play(uri)
+        self.fallback.play(uri, context)
 
     def toggle(self) -> None:
         self.active.toggle()
@@ -172,6 +180,9 @@ class Preferred:
 
     def seek(self, pos: float) -> None:
         self.active.seek(pos)
+
+    def skip(self, forward: bool) -> None:
+        self.active.skip(forward)
 
     def progress(self) -> tuple[float | None, float | None]:
         return self.active.progress()
@@ -186,8 +197,8 @@ class Preferred:
 HANDLERS = {"spotify": Preferred(Librespot(), Mpris("spotify", "spotify"))}
 
 
-def play(name: str, uri: str) -> None:
-    HANDLERS[name].play(uri)
+def play(name: str, uri: str, context: str | None = None) -> None:
+    HANDLERS[name].play(uri, context)
 
 
 def toggle(name: str) -> None:
@@ -202,6 +213,10 @@ def stop(name: str) -> None:
 
 def seek(name: str, pos: float) -> None:
     HANDLERS[name].seek(pos)
+
+
+def skip(name: str, forward: bool) -> None:
+    HANDLERS[name].skip(forward)
 
 
 def progress(name: str) -> tuple[float | None, float | None]:
