@@ -214,6 +214,12 @@ class NowPlayingPanel(Gtk.Box):
         self.reset_ui()
         self._load_history()
 
+    def set_collapsed(self, collapsed: bool):
+        """Hide the album art and Previous list, leaving the header, pills
+        and transport."""
+        self.cover_overlay.set_visible(not collapsed)
+        self.lbl_previous.set_visible(not collapsed)
+
     def clear_cover(self):
         self.cover_stack.set_visible_child_name("placeholder")
 

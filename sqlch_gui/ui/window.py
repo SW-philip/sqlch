@@ -88,6 +88,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
             on_drag=lambda r: self.docks.np_drag(r),
             on_drop=lambda r: self.docks.np_drop(r),
             on_drag_start=lambda: self.docks.np_drag_started(),
+            on_double_click=lambda: self.docks.toggle_np_collapsed(),
             exclude=(self.now_playing.nav_column,),
             sized=False)
 

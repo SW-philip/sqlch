@@ -1,6 +1,7 @@
 """Persisted open/placement state for the docked Radio and source windows,
 plus Now Playing's position ("np": None = default top-right, else {"x","y"}
-in overlay coordinates)."""
+in overlay coordinates), whether it is collapsed, and the docked windows'
+height ("pane_h"), which stays at NP's expanded height while it is collapsed."""
 
 import json
 from pathlib import Path
@@ -14,6 +15,8 @@ NAMES = ("radio",)
 def default_state(names=NAMES) -> dict:
     state = {n: {"open": False, "placed": None} for n in names}
     state["np"] = None
+    state["np_collapsed"] = False
+    state["pane_h"] = None
     return state
 
 
@@ -58,6 +61,9 @@ def load(path: Path = STATE_PATH, names=NAMES) -> dict:
             state["radio"] = {"open": any(o.get("open") is True for o in old),
                               "placed": _placed(old[0].get("placed"))}
     state["np"] = _np(raw.get("np"))
+    state["np_collapsed"] = raw.get("np_collapsed") is True
+    pane_h = raw.get("pane_h")
+    state["pane_h"] = pane_h if _int(pane_h) and pane_h > 0 else None
     return state
 
 

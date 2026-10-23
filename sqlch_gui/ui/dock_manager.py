@@ -39,6 +39,7 @@ class DockManager:
         self._np_start = None
         self._np_before = None
         self._np_room = 0
+        np_win.now_playing.set_collapsed(self.state["np_collapsed"])
         np_win.connect("map", self._on_np_map)
         for n in self.names:
             nav.set_open(n, self.state[n]["open"])
@@ -84,6 +85,10 @@ class DockManager:
 
     def _slot_rects(self, np):
         """Target rect for every open window."""
+        # Windows keep NP's expanded height while NP is collapsed.
+        if not self.state["np_collapsed"]:
+            self.state["pane_h"] = np.h
+        np = np._replace(h=self.state["pane_h"] or np.h)
         rects = {}
         for n in self._open_names():
             p = self.state[n]["placed"]
@@ -172,6 +177,12 @@ class DockManager:
         self.np.add_tick_callback(tick)
 
     # --- toggle ---
+
+    def toggle_np_collapsed(self):
+        collapsed = not self.state["np_collapsed"]
+        self.state["np_collapsed"] = collapsed
+        self.np.now_playing.set_collapsed(collapsed)
+        dock_state.save(self.state)
 
     def toggle(self, name):
         opening = not self.state[name]["open"]
@@ -287,7 +298,7 @@ class DockManager:
         if clicked:
             self.np.overlay.flash()
         # Back at the start (e.g. a plain click) keeps a default None position.
-        self.state["np"] = (self._np_before if rect == self._np_start
+        self.state["np"] = (self._np_before if rect[:2] == self._np_start[:2]
                             else {"x": rect.x, "y": rect.y})
         self.relayout()
         return rect

@@ -90,6 +90,19 @@ class TestNowPlayingPosition(unittest.TestCase):
         self.assertEqual(self._load_raw({"np": {"x": 1, "y": 2, "z": 3}})["np"],
                          {"x": 1, "y": 2})
 
+    def test_collapsed_round_trip(self):
+        s = dock_state.default_state()
+        s["np_collapsed"], s["pane_h"] = True, 640
+        dock_state.save(s, self.path)
+        loaded = dock_state.load(self.path)
+        self.assertTrue(loaded["np_collapsed"])
+        self.assertEqual(loaded["pane_h"], 640)
+
+    def test_corrupt_collapse_fields_default(self):
+        s = self._load_raw({"np_collapsed": "yes", "pane_h": -5})
+        self.assertFalse(s["np_collapsed"])
+        self.assertIsNone(s["pane_h"])
+
 
 class TestExtraNames(unittest.TestCase):
     def setUp(self):
