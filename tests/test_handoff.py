@@ -141,10 +141,6 @@ class TestTrackUri(unittest.TestCase):
             self.assertIsNone(h.track_uri())
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestHandoffState(unittest.TestCase):
     def test_mpris_status_words(self):
         h = handoff.Mpris("spotify", "spotify")
@@ -191,3 +187,26 @@ class TestHandoffState(unittest.TestCase):
         h.state.return_value = "stopped"
         with mock.patch.dict(handoff.HANDLERS, {"t": h}):
             self.assertEqual(handoff.state("t"), "stopped")
+
+
+    def test_librespot_snapshot_fetches_status_once(self):
+        h = handoff.Librespot()
+        status = {"paused": False, "track": {"uri": "spotify:track:T1",
+                                            "position": 5000, "duration": 200000}}
+        with mock.patch.object(h, "_call", return_value=status) as call:
+            self.assertEqual(h.snapshot(), (5.0, 200.0, "playing"))
+        call.assert_called_once_with("/status")
+
+    def test_librespot_snapshot_down_is_unknown(self):
+        h = handoff.Librespot()
+        with mock.patch.object(h, "_call", side_effect=OSError("down")):
+            self.assertEqual(h.snapshot(), (None, None, None))
+
+    def test_preferred_snapshot_falls_back_to_progress_and_state(self):
+        a = mock.Mock(spec=["progress", "state"])
+        a.progress.return_value, a.state.return_value = (1.0, 2.0), "paused"
+        self.assertEqual(handoff.Preferred(a, a).snapshot(), (1.0, 2.0, "paused"))
+
+
+if __name__ == "__main__":
+    unittest.main()

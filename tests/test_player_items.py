@@ -97,8 +97,7 @@ class TestPlaybackEnded(unittest.TestCase):
         with mock.patch.object(player, "_current", cur), \
              mock.patch.object(player, "_handoff_seen_playing", seen), \
              mock.patch("sqlch.sources.source_config", return_value=cfg or {}), \
-             mock.patch.object(player.handoff, "progress", return_value=prog), \
-             mock.patch.object(player.handoff, "state", return_value=state):
+             mock.patch.object(player.handoff, "snapshot", return_value=(*prog, state)):
             return player.playback_ended()
 
     def test_handoff_ends_at_the_last_second(self):
@@ -121,8 +120,8 @@ class TestPlaybackEnded(unittest.TestCase):
         with mock.patch.object(player, "_current", cur), \
              mock.patch.object(player, "_handoff_seen_playing", False), \
              mock.patch("sqlch.sources.source_config", return_value={}), \
-             mock.patch.object(player.handoff, "progress", return_value=(None, None)), \
-             mock.patch.object(player.handoff, "state", side_effect=lambda n: next(states)):
+             mock.patch.object(player.handoff, "snapshot",
+                               side_effect=lambda n: (None, None, next(states))):
             self.assertFalse(player.playback_ended())
             self.assertFalse(player.playback_ended())
             self.assertTrue(player.playback_ended())
@@ -134,8 +133,8 @@ class TestPlaybackEnded(unittest.TestCase):
         with mock.patch.object(player, "_current", cur), \
              mock.patch.object(player, "_handoff_seen_playing", False), \
              mock.patch("sqlch.sources.source_config", return_value={}), \
-             mock.patch.object(player.handoff, "progress", side_effect=lambda n: next(progs)), \
-             mock.patch.object(player.handoff, "state", side_effect=lambda n: next(states)):
+             mock.patch.object(player.handoff, "snapshot",
+                               side_effect=lambda n: (*next(progs), next(states))):
             self.assertFalse(player.playback_ended())
             self.assertTrue(player.playback_ended())
 

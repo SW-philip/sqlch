@@ -483,9 +483,8 @@ def playback_ended() -> bool:
         name = _current["handoff"]
         if not _advance_queue(name):
             return False
-        pos, dur = handoff.progress(name)
+        pos, dur, state = handoff.snapshot(name)
         num = isinstance(pos, (int, float)) and isinstance(dur, (int, float))
-        state = handoff.state(name)
         # Stopped right after play() is a startup race, not an end.
         if state == "playing" or (num and pos > 0):
             _handoff_seen_playing = True

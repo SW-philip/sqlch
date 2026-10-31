@@ -145,15 +145,27 @@ class Librespot:
     def skip(self, forward: bool) -> None:
         self._call("/player/next" if forward else "/player/prev")
 
-    def progress(self) -> tuple[float | None, float | None]:
-        try:
-            track = (self._call("/status") or {}).get("track") or {}
-        except (OSError, ValueError):
-            return None, None
+    @staticmethod
+    def _progress_of(status: dict) -> tuple[float | None, float | None]:
+        track = status.get("track") or {}
         pos, dur = track.get("position"), track.get("duration")
         if pos is None or not dur:
             return None, None
         return pos / 1000, dur / 1000
+
+    @staticmethod
+    def _state_of(status: dict) -> str | None:
+        if status.get("stopped"):
+            return "stopped"
+        if status.get("paused"):
+            return "paused"
+        return "playing" if status.get("track") else None
+
+    def progress(self) -> tuple[float | None, float | None]:
+        try:
+            return self._progress_of(self._call("/status") or {})
+        except (OSError, ValueError):
+            return None, None
 
     def track_uri(self) -> str | None:
         track = (self._call("/status") or {}).get("track") or {}
@@ -161,14 +173,17 @@ class Librespot:
 
     def state(self) -> str | None:
         try:
-            status = self._call("/status") or {}
+            return self._state_of(self._call("/status") or {})
         except (OSError, ValueError):
             return None
-        if status.get("stopped"):
-            return "stopped"
-        if status.get("paused"):
-            return "paused"
-        return "playing" if status.get("track") else None
+
+    def snapshot(self) -> tuple[float | None, float | None, str | None]:
+        """Position, duration and state from a single /status fetch."""
+        try:
+            status = self._call("/status") or {}
+        except (OSError, ValueError):
+            return None, None, None
+        return (*self._progress_of(status), self._state_of(status))
 
 
 class Preferred:
@@ -209,6 +224,12 @@ class Preferred:
 
     def state(self) -> str | None:
         return self.active.state()
+
+    def snapshot(self) -> tuple[float | None, float | None, str | None]:
+        snap = getattr(self.active, "snapshot", None)
+        if snap:
+            return snap()
+        return (*self.active.progress(), self.active.state())
 
     def usable(self) -> bool:
         return True
@@ -258,3 +279,11 @@ def state(name: str) -> str | None:
         return HANDLERS[name].state()
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
         return None
+
+
+def snapshot(name: str) -> tuple[float | None, float | None, str | None]:
+    """(position, duration, state) in one go; (None, None, None) on error."""
+    try:
+        return HANDLERS[name].snapshot()
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+        return None, None, None
