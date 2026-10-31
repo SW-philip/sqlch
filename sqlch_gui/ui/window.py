@@ -14,6 +14,7 @@ from .now_playing import NowPlayingPanel
 from .station_list import StationListPanel
 from .discover import DiscoverPanel
 from .radio_pane import RadioPane
+from .playlist_pane import PlaylistPane
 from .dock_manager import DockManager
 from .overlay_card import OverlayCard
 from .source_pane import SourcePane
@@ -92,7 +93,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
             exclude=(self.now_playing.nav_column,),
             sized=False)
 
-        panels = {"radio": self.radio}
+        panels = {"radio": self.radio, "playlist": lambda: PlaylistPane(self)}
         titles = {}
         for name, src in SOURCES.items():
             panels[name] = lambda s=src: SourcePane(self, s)

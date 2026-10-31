@@ -325,6 +325,7 @@ class NavColumn(Gtk.Box):
 
     _TABS = (
         ("radio", "RADIO", "Radio: station library and discover"),
+        ("playlist", "PLAYLIST", "Playlist: the queue and the radio/media mode"),
     )
 
     def __init__(self):

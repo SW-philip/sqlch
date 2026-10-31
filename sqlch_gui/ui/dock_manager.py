@@ -9,7 +9,7 @@ from gi.repository import Gtk4LayerShell
 from . import dock, dock_state
 from .dock_window import DockedWindow, PANEL_WIDTH
 
-_TITLES = {"radio": "RADIO"}
+_TITLES = {"radio": "RADIO", "playlist": "PLAYLIST"}
 NP_EDGE = 12   # default right clearance, and the screen-edge magnet margin
 NP_TOP = 48
 

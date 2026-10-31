@@ -90,7 +90,7 @@ class TestNavTabs(unittest.TestCase):
         from sqlch_gui.ui.controls import NavColumn
         nav = NavColumn()
         labels = {name: b.get_label() for name, b in nav._buttons.items()}
-        self.assertEqual(labels, {"radio": "RADIO"})
+        self.assertEqual(labels, {"radio": "RADIO", "playlist": "PLAYLIST"})
         for b in nav._buttons.values():
             self.assertTrue(b.has_css_class("sq-tab"))
             self.assertFalse(b.has_css_class("active"))

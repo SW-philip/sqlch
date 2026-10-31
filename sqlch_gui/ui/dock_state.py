@@ -9,7 +9,7 @@ from pathlib import Path
 from .. import XDG_STATE
 
 STATE_PATH = XDG_STATE / "sqlch-gui" / "windows.json"
-NAMES = ("radio",)
+NAMES = ("radio", "playlist")
 
 
 def default_state(names=NAMES) -> dict:
