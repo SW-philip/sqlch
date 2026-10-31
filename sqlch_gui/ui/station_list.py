@@ -307,7 +307,9 @@ class StationListPanel(Gtk.Box):
 
     def _queue_station(self, popover, station, play_next):
         popover.popdown()
-        daemon.send(dnd.queue_msg("station", dnd.station_payload(station), play_next))
+        msg = dnd.queue_msg("station", dnd.station_payload(station), play_next)
+        # an idle queue_add starts playback and can block for ~2 s
+        threading.Thread(target=lambda: daemon.send(msg), daemon=True).start()
 
     def on_delete_station(self, popover, station_id):
         library.remove(station_id)

@@ -248,8 +248,15 @@ class TestStationQueueActions(_LibraryBackedTestCase):
         station = library.get_station_list()[0]
         panel = _make_panel()
         popover = Mock()
-        with patch("sqlch_gui.ui.station_list.daemon.send") as send:
+        with patch("sqlch_gui.ui.station_list.daemon.send") as send, \
+             patch("sqlch_gui.ui.station_list.threading.Thread") as thread:
             panel._queue_station(popover, station, True)
+            # the send may block ~2 s on an idle queue_add: off the GTK thread
+            send.assert_not_called()
+            kw = thread.call_args.kwargs
+            self.assertTrue(kw["daemon"])
+            thread.return_value.start.assert_called_once_with()
+            kw["target"]()
         popover.popdown.assert_called_once_with()
         send.assert_called_once_with({
             "cmd": "queue_add", "kind": "station", "play_next": True,
