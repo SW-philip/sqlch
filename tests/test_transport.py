@@ -19,6 +19,7 @@ class Base(unittest.TestCase):
         self.patch(mock.patch.object(playqueue, "data_dir", lambda: Path(tmp.name)))
         self.player = self.patch(mock.patch.object(transport, "player"))
         self.player.current.return_value = None
+        self.player.can_skip.return_value = False
         self.player.item_progress.return_value = (None, None)
         self.library = self.patch(mock.patch.object(transport, "library"))
         self.notify = self.patch(mock.patch.object(transport, "notify"))
@@ -81,6 +82,18 @@ class TestStartItem(Base):
         self.src.resolve.side_effect = FileNotFoundError("gone")
         with self.assertRaisesRegex(transport.PlayError, "resolve failed: gone"):
             transport.start_item(A)
+        self.player.play_target.assert_not_called()
+
+    def test_play_mode_reaches_resolve(self):
+        self.src.PLAY_MODES = (("Album", "album"), ("Track", "track"))
+        self.src.resolve.side_effect = lambda item, mode=None: f"target:{item['id']}:{mode}"
+        transport.start_item(A, mode="album")
+        self.player.play_target.assert_called_once_with("target:a:album", A, start=None)
+
+    def test_unknown_play_mode_is_refused(self):
+        self.src.PLAY_MODES = (("Album", "album"),)
+        with self.assertRaisesRegex(transport.PlayError, "unknown play mode: bogus"):
+            transport.start_item(A, mode="bogus")
         self.player.play_target.assert_not_called()
 
     def test_item_without_id_still_plays_but_is_not_recorded(self):
@@ -540,6 +553,30 @@ class TestStop(Base):
         self.player.stop.assert_called_once_with()
         s = self.state()
         self.assertEqual((s["now"], s["resume"]["pos"]), (None, 80.0))
+
+
+class TestExternalQueue(Base):
+    """An item handed off to an external player (Spotify) has its own queue,
+    so next and prev skip there instead of walking ours."""
+
+    def setUp(self):
+        super().setUp()
+        self.player.can_skip.return_value = True
+        playqueue.add(self.item(B))
+
+    def test_next_skips_in_the_external_player(self):
+        transport.next_cmd()
+        self.player.skip.assert_called_once_with(True)
+        self.assertEqual(len(self.state()["entries"]), 1)
+
+    def test_prev_skips_in_the_external_player(self):
+        transport.prev_cmd()
+        self.player.skip.assert_called_once_with(False)
+
+    def test_mpris_can_always_go_both_ways(self):
+        playqueue.clear()
+        self.assertTrue(transport.can_go_next())
+        self.assertTrue(transport.can_go_previous())
 
 
 class TestCanGo(Base):

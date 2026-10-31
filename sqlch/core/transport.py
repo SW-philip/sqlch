@@ -46,6 +46,8 @@ def _play_item(item: dict, start: float | None = None, mode: str | None = None) 
     src = sources.REGISTRY.get(item.get("source"))
     if src is None:
         raise PlayError(f"unknown source: {item.get('source')}")
+    if mode is not None and mode not in dict(getattr(src, "PLAY_MODES", ())).values():
+        raise PlayError(f"unknown play mode: {mode}")
     try:
         target = src.resolve(item, mode=mode) if mode else src.resolve(item)
     except Exception as e:
@@ -197,6 +199,9 @@ def _cycle_station(forward: bool) -> None:
 
 @_locked
 def next_cmd() -> None:
+    if player.can_skip():
+        player.skip(True)  # an external player keeps its own queue
+        return
     if playqueue.read()["mode"] == "radio":
         _cycle_station(True)
     else:
@@ -205,6 +210,9 @@ def next_cmd() -> None:
 
 @_locked
 def prev_cmd() -> None:
+    if player.can_skip():
+        player.skip(False)
+        return
     state = playqueue.read()
     if state["mode"] == "radio":
         _cycle_station(False)
@@ -296,6 +304,8 @@ def _stop_quietly() -> None:
 # ---- for MPRIS ----
 
 def can_go_next() -> bool:
+    if player.can_skip():
+        return True
     s = playqueue.read()
     if s["mode"] == "radio":
         return bool(library.list_stations())
@@ -304,6 +314,8 @@ def can_go_next() -> bool:
 
 
 def can_go_previous() -> bool:
+    if player.can_skip():
+        return True
     s = playqueue.read()
     if s["mode"] == "radio":
         return bool(library.list_stations())

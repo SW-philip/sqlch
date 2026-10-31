@@ -156,6 +156,12 @@ class TestRouting(Base):
             self.call(cmd="play_item", item=TRACK, context="junk")
         self.transport.start_item.assert_called_once_with(TRACK, context=None, resume=False)
 
+    def test_play_item_passes_the_source_play_mode(self):
+        with mock.patch.object(daemon, "track_once"):
+            self.call(cmd="play_item", item=TRACK, mode="album")
+        self.transport.start_item.assert_called_once_with(
+            TRACK, context=None, resume=False, mode="album")
+
     def test_play_item_error_is_returned(self):
         self.transport.PlayError = Exception
         self.transport.start_item.side_effect = Exception("resolve failed: x")

@@ -130,16 +130,11 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
         item = msg.get('item')
         if not isinstance(item, dict):
             return {'ok': False, 'error': 'missing item'}
-        src = sources.REGISTRY.get(item.get('source'))
-        if src is None:
-            return {'ok': False, 'error': f"unknown source: {item.get('source')}"}
-        mode = msg.get('mode')
-        if mode is not None and mode not in dict(getattr(src, 'PLAY_MODES', ())).values():
-            return {'ok': False, 'error': f'unknown play mode: {mode}'}
         context = msg.get('context')
+        opts = {'mode': msg['mode']} if msg.get('mode') is not None else {}
         try:
             transport.start_item(item, context=context if isinstance(context, list) else None,
-                                 resume=bool(msg.get('resume')), mode=mode)
+                                 resume=bool(msg.get('resume')), **opts)
         except transport.PlayError as e:
             return {'ok': False, 'error': str(e)}
         return {'ok': True}
@@ -168,15 +163,9 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
         player.preview(url, duration=dur)
         return {'ok': True}
     if cmd == 'next':
-        if player.can_skip():
-            player.skip(True)
-            return {'ok': True}
         transport.next_cmd()
         return {'ok': True}
     if cmd == 'prev':
-        if player.can_skip():
-            player.skip(False)
-            return {'ok': True}
         transport.prev_cmd()
         return {'ok': True}
     if cmd == 'record':
