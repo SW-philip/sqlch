@@ -42,6 +42,12 @@ class Base(unittest.TestCase):
         playqueue.set_mode(mode)
         playqueue.set_now(entry)
 
+    def stations_start(self):
+        """play_station succeeds: current becomes that very station object."""
+        def started(st):
+            self.player.current.return_value = {"type": "station", "item": st}
+        self.player.play_station.side_effect = started
+
     def played_ids(self):
         return [c.args[1]["id"] for c in self.player.play_target.call_args_list]
 
@@ -84,7 +90,7 @@ class TestStartItem(Base):
 
 class TestStartStation(Base):
     def test_sets_radio_and_now(self):
-        self.player.current.return_value = {"type": "station"}
+        self.stations_start()
         transport.start_station(KEXP)
         self.player.play_station.assert_called_once_with(KEXP)
         s = self.state()
@@ -102,6 +108,15 @@ class TestStartStation(Base):
         transport.start_station(KEXP)
         self.assertEqual(self.state()["mode"], "radio")
         self.assertIsNone(self.state()["now"])
+
+
+    def test_refused_station_while_media_plays_changes_nothing(self):
+        a = self.item(A)
+        self.playing(a)
+        self.player.current.return_value = {"type": "item", "item": A}  # refusal leaves it
+        transport.start_station(KEXP)
+        s = self.state()
+        self.assertEqual((s["mode"], s["now"]["uid"]), ("media", a["uid"]))
 
 
 class TestPark(Base):
@@ -152,7 +167,7 @@ class TestAdvance(Base):
         st, b = self.station(), self.item(B)
         playqueue.add(st)
         playqueue.add(b)
-        self.player.current.return_value = {"type": "station"}
+        self.stations_start()
         self.assertTrue(transport.advance())
         self.player.play_station.assert_called_once_with(st["station"])
         s = self.state()
@@ -163,9 +178,19 @@ class TestAdvance(Base):
     def test_station_entry_with_nothing_after_clears_resume(self):
         playqueue.set_resume(self.item(A), 50.0, 100.0)
         playqueue.add(self.station())
-        self.player.current.return_value = {"type": "station"}
+        self.stations_start()
         transport.advance()
         self.assertIsNone(self.state()["resume"])
+
+    def test_refused_station_entry_is_a_failure(self):
+        a = self.item(A)
+        self.playing(a)
+        self.player.current.return_value = {"type": "item", "item": A}
+        playqueue.add(self.station())
+        self.assertFalse(transport.advance())
+        s = self.state()
+        self.assertEqual((s["mode"], s["now"]["uid"], s["history"]), ("media", a["uid"], []))
+        self.notify.notify.assert_called()
 
     def test_unplayable_entries_are_skipped_with_a_notice(self):
         self.playing(self.item(A))
@@ -257,10 +282,7 @@ class TestNextPrev(Base):
         playqueue.push_history(st)
         self.player.current.return_value = {"type": "item", "item": A}
         self.player.item_progress.return_value = (2.0, 100.0)
-
-        def started(station):
-            self.player.current.return_value = {"type": "station"}
-        self.player.play_station.side_effect = started
+        self.stations_start()
         transport.prev_cmd()
         s = self.state()
         self.assertEqual(s["mode"], "radio")
@@ -315,10 +337,7 @@ class TestSetMode(Base):
         self.player.current.return_value = {"type": "item", "item": A}
         self.player.item_progress.return_value = (60.0, 200.0)
         self.library.last_played_station.return_value = KEXP
-
-        def started(st):
-            self.player.current.return_value = {"type": "station"}
-        self.player.play_station.side_effect = started
+        self.stations_start()
         transport.set_mode("radio")
         self.player.play_station.assert_called_once_with(KEXP)
         s = self.state()

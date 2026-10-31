@@ -64,6 +64,13 @@ class TestQueueAdd(Base):
         self.call(cmd="queue_add", kind="item", payload={**TRACK, "id": "z"}, play_next=True)
         self.assertEqual(playqueue.read()["entries"][0]["item"]["id"], "z")
 
+    def test_station_with_a_bad_url_is_refused(self):
+        r = self.call(cmd="queue_add", kind="station",
+                      payload={"id": "x", "name": "X", "url": "file:///etc/passwd"})
+        self.assertEqual((r["ok"], r["error"]), (False, "not a stream address"))
+        self.assertEqual(self.uids(), [])
+        self.transport.play_entry.assert_not_called()
+
     def test_bad_payload(self):
         self.assertFalse(self.call(cmd="queue_add", kind="item", payload={})["ok"])
         self.assertFalse(self.call(cmd="queue_add")["ok"])

@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlch import sources
 from sqlch.core import discover, follows, library, notify, player, playqueue, progress, transport, watcher
+from sqlch.core.urlcheck import is_stream_url
 from sqlch.sources import youtube
 from sqlch.core.paths import runtime_dir
 
@@ -240,6 +241,8 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
             entry = playqueue.make_entry(msg.get('kind'), msg.get('payload'))
         except ValueError as e:
             return {'ok': False, 'error': str(e)}
+        if entry['kind'] == 'station' and not is_stream_url(entry['station']['url']):
+            return {'ok': False, 'error': 'not a stream address'}
         if not playqueue.read()['entries'] and player.current() is None:
             # nothing waiting and nothing playing: a drop starts right away
             ok = transport.play_entry(entry)

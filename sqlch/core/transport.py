@@ -62,6 +62,13 @@ def _park_head() -> None:
         playqueue.clear_resume()
 
 
+def _station_started(station: dict) -> bool:
+    """play_station can refuse (bad url) and leave the old item playing, so
+    only that very station being current proves it started."""
+    cur = player.current()
+    return bool(cur) and cur.get("type") == "station" and cur.get("item") is station
+
+
 def _start_entry(entry: dict, start: float | None = None) -> bool:
     """Play one queue entry and record it as now playing. A failure is
     counted, announced and reported as False."""
@@ -69,7 +76,7 @@ def _start_entry(entry: dict, start: float | None = None) -> bool:
     try:
         if entry["kind"] == "station":
             player.play_station(entry["station"])
-            if player.current() is None:
+            if not _station_started(entry["station"]):
                 raise PlayError("station would not start")
             mode = "radio"
         else:
@@ -108,7 +115,7 @@ def start_item(item: dict, *, context: list | None = None, resume: bool = False,
 def start_station(station: dict) -> None:
     park()
     player.play_station(station)
-    if player.current() is None:
+    if not _station_started(station):
         return  # play_station refused (missing or bad url); it already said so
     playqueue.set_mode("radio")
     try:
