@@ -50,6 +50,7 @@ class SourcePane(Gtk.Box):
         self._run = run_async
         self._play = play or self._daemon_play
         self._items: list[dict] = []
+        self._shown: list[dict] = []
         self._stack: list[tuple] = []  # (path, title); a search is a (SEARCH, query) path
         self._gen = 0
         self._loaded = False
@@ -138,7 +139,7 @@ class SourcePane(Gtk.Box):
         self.append(scroll)
 
     def _daemon_play(self, item, resume=False, mode=None):
-        context = [i for i in self._items if i.get("kind") != "folder"]
+        context = self._shown  # as listed, so next follows what the user sees
         msg = {"cmd": "play_item", "item": item, "resume": resume, "context": context}
         if mode:
             msg["mode"] = mode
@@ -250,6 +251,7 @@ class SourcePane(Gtk.Box):
         self._fav_btns = {}
         self._follow_btns = {}
         self._group_rows = []
+        self._shown = []
         grouped = self._grouped()
         if self.btn_group is not None:
             self.btn_group.set_visible(grouped)
@@ -268,7 +270,12 @@ class SourcePane(Gtk.Box):
             self._fill_rows(rows)
             return
         for item in items:
+            self._shown_add(item)
             self.list.append(self._build_row(item))
+
+    def _shown_add(self, item):
+        if item.get("kind") != "folder":
+            self._shown.append(item)
 
     def _grouped(self):
         return bool(self._groupings) and (
@@ -289,6 +296,7 @@ class SourcePane(Gtk.Box):
                 self.list.append(banner)
                 self._group_rows.append((banner, extra, key))
             else:
+                self._shown_add(value)
                 row = self._build_row(value, tag=extra)
                 self.list.append(row)
                 self._group_rows.append((row, None, None))

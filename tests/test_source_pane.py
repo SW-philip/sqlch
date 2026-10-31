@@ -988,3 +988,31 @@ class TestPlayContext(unittest.TestCase):
         msg = sent[-1]
         self.assertEqual(msg["cmd"], "play_item")
         self.assertEqual([i["id"] for i in msg["context"]], ["t", "t2"])
+
+    def sent_context(self, src, before=None):
+        sent = []
+        p = make(src, play=None, send=lambda m: (sent.append(m), {"ok": True})[1])
+        p.on_shown()
+        if before:
+            before(p)
+        p._daemon_play(TRACK)
+        return [i["id"] for i in sent[-1]["context"]]
+
+    def test_context_follows_the_oldest_first_order(self):
+        src = Fake(tree={None: [vid("n", "Newest", 300 * 86400), vid("u", "Undated"),
+                                vid("o", "Oldest", 100 * 86400)]})
+        src.HAS_DATES = True
+        self.assertEqual(self.sent_context(src), ["n", "u", "o"])
+        self.assertEqual(self.sent_context(src, lambda p: p.btn_order.set_active(True)),
+                         ["o", "n", "u"])
+
+    def test_context_follows_the_section_order(self):
+        items = [{**TRACK, "id": "x", "group": "A"}, {**TRACK, "id": "y", "group": "B"},
+                 {**TRACK, "id": "z", "group": "A"}, FOLDER]
+        self.assertEqual(self.sent_context(Fake(tree={None: items})), ["x", "z", "y"])
+
+    def test_context_follows_the_grouped_order(self):
+        src = grouped_fake(tree={"section:following": [{**TRACK, "id": "b", "title": "Bee"},
+                                                       {**TRACK, "id": "a", "title": "Ay"}]})
+        src.GROUPINGS = ("az",)
+        self.assertEqual(self.sent_context(src), ["a", "b"])
