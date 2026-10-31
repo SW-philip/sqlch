@@ -296,6 +296,22 @@ class TestNextPrev(Base):
         transport.prev_cmd()
         self.player.seek.assert_called_once_with(0.0)
 
+    def test_media_prev_on_a_station_never_seeks(self):
+        self.playing(self.station())
+        self.player.current.return_value = {"type": "station", "item": KEXP}
+        self.player.item_progress.return_value = (500.0, None)
+        transport.prev_cmd()
+        self.player.seek.assert_not_called()
+
+    def test_media_prev_on_a_station_steps_back_through_history(self):
+        self.playing(self.station())
+        playqueue.push_history(self.item(B))
+        self.player.current.return_value = {"type": "station", "item": KEXP}
+        self.player.item_progress.return_value = (500.0, None)
+        transport.prev_cmd()
+        self.player.seek.assert_not_called()
+        self.assertEqual(self.played_ids(), ["b"])
+
     def test_media_prev_when_idle_does_nothing(self):
         self.playing(None)
         transport.prev_cmd()

@@ -212,12 +212,16 @@ def prev_cmd() -> None:
     if state["mode"] == "radio":
         _cycle_station(False)
         return
-    if player.current() is None:
+    cur = player.current()
+    if cur is None:
         return
-    pos, _ = player.item_progress()
-    if (isinstance(pos, (int, float)) and pos > RESTART_AFTER) or not state["history"]:
-        player.seek(0.0)
-        return
+    if cur.get("type") == "item":
+        pos, _ = player.item_progress()
+        if (isinstance(pos, (int, float)) and pos > RESTART_AFTER) or not state["history"]:
+            player.seek(0.0)
+            return
+    elif not state["history"]:
+        return  # a station's position is the timeshift buffer, not a track
     entry = playqueue.pop_history()
     if _start_entry(entry):
         if state["now"]:
