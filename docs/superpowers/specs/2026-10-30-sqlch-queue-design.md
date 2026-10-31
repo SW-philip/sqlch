@@ -169,3 +169,32 @@ A new dockable window registered like the source panes, titled PLAYLIST.
 - Drop rule: empty queue and idle player plays; otherwise queues.
 - GUI tests for the toggle and drop-position math where the existing GUI tests
   make that practical.
+
+## 8. Implementation notes
+
+Where the implementation plan (`docs/superpowers/plans/2026-10-30-sqlch-queue.md`)
+refines the sections above:
+
+- **Modules.** State is `sqlch/core/playqueue.py` (not `queue.py`, which would
+  shadow the stdlib module for anyone running from `sqlch/core`). Playback
+  logic is `sqlch/core/transport.py`.
+- **End detection polls, it does not hook `end-file`.** mpv runs with
+  `--keep-open=yes`, so it parks at EOF instead of exiting and the daemon has
+  only request/response IPC. A 1 s daemon tick reads `eof-reached`
+  (`player.playback_ended()`); Spotify handoff counts as ended within 1 s of
+  the end. When nothing is left to play, an mpv item is stopped; a handoff item
+  is left to the external player's own autoplay.
+- **`now`.** `queue.json` also stores `now` (the playing entry). The playing
+  entry is popped from `entries` when it starts, so `play_next` inserts at
+  index 0 and the pane shows `now` as its first row.
+- **`context` carries the sibling items** (`{"items": [...], "index": n}`), sent
+  by the pane with `play_item`, instead of a path to re-browse. It works for
+  search results and podcast feeds, and advancing needs no network call.
+- **`resume` also stores `dur`**, so the near-end rule (within 10 s of the end
+  restarts from the top; before 15 s in, also from the top) needs no lookup.
+- **Wire format.** `queue_add` takes `{kind, payload, at?, play_next?}`; the
+  daemon builds the entry and its `uid`.
+- **Default mode is `radio`**, so behavior before first use is unchanged.
+- **Playlist rows have no art thumbnails**; they are text rows like the Library
+  pane. Thumbnails are a follow-up.
+- Stopping (`stop` command) parks the playing item and clears `now`.
