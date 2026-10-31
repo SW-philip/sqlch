@@ -250,6 +250,23 @@ class TestNextPrev(Base):
         self.assertEqual(s["entries"], [])
         self.assertEqual(s["now"]["uid"], a["uid"])
 
+    def test_media_prev_into_a_station_parks_the_requeued_item(self):
+        a, b, st = self.item(A), self.item(B), self.station()
+        self.playing(a)
+        playqueue.add(b)
+        playqueue.push_history(st)
+        self.player.current.return_value = {"type": "item", "item": A}
+        self.player.item_progress.return_value = (2.0, 100.0)
+
+        def started(station):
+            self.player.current.return_value = {"type": "station"}
+        self.player.play_station.side_effect = started
+        transport.prev_cmd()
+        s = self.state()
+        self.assertEqual(s["mode"], "radio")
+        self.assertEqual([e["uid"] for e in s["entries"]], [a["uid"], b["uid"]])
+        self.assertEqual((s["resume"]["entry"]["uid"], s["resume"]["pos"]), (a["uid"], 0.0))
+
     def test_media_prev_with_no_history_restarts(self):
         self.playing(self.item(A))
         self.player.current.return_value = {"type": "item", "item": A}

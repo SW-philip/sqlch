@@ -53,6 +53,15 @@ def _play_item(item: dict, start: float | None = None) -> None:
     player.play_target(target, item, start=start)
 
 
+def _park_head() -> None:
+    """A radio entry never ends, so the next queued item is what media picks up."""
+    waiting = [e for e in playqueue.read()["entries"] if e["kind"] == "item"]
+    if waiting:
+        playqueue.set_resume(waiting[0], 0.0, None)
+    else:
+        playqueue.clear_resume()
+
+
 def _start_entry(entry: dict, start: float | None = None) -> bool:
     """Play one queue entry and record it as now playing. A failure is
     counted, announced and reported as False."""
@@ -74,12 +83,7 @@ def _start_entry(entry: dict, start: float | None = None) -> bool:
     playqueue.set_mode(mode)
     playqueue.set_now(entry)
     if mode == "radio":
-        # a radio entry never ends, so the next queued item is what media picks up
-        waiting = [e for e in playqueue.read()["entries"] if e["kind"] == "item"]
-        if waiting:
-            playqueue.set_resume(waiting[0], 0.0, None)
-        else:
-            playqueue.clear_resume()
+        _park_head()
     return True
 
 
@@ -210,6 +214,8 @@ def prev_cmd() -> None:
     if _start_entry(entry):
         if state["now"]:
             playqueue.add(state["now"], play_next=True)  # next goes forward again
+        if entry["kind"] == "station":
+            _park_head()
     else:
         playqueue.push_history(entry)
 
