@@ -265,8 +265,12 @@ sqlch mode [radio|media]         # show or set what next/prev walk
 
 Items from the GUI sources are queued from the Playlist pane or a row's menu.
 A queued station starts when the item before it finishes and flips the mode to
-RADIO; flip back to MEDIA and the interrupted item resumes where it left off.
-Dropping onto an empty, idle playlist plays right away.
+RADIO; flip back to MEDIA and the next queued item plays. Playing a station over
+media (or switching to RADIO) parks the item; flip back to MEDIA and it resumes
+where it left off. Dropping onto an empty, idle playlist plays right away.
+
+Spotify items advance best-effort: sqlch cannot always tell when Spotify's own
+player finished a track, so the queue may not move on after one.
 
 ### Library
 
