@@ -79,6 +79,28 @@ class TestPlayTarget(unittest.TestCase):
             self.assertEqual(player.item_progress(), (12.5, 200.0))
 
 
+class TestPlaybackEnded(unittest.TestCase):
+    def test_mpv_parked_at_eof(self):
+        with mock.patch.object(player, "_current", {"type": "item"}), \
+             mock.patch.object(player, "mpv_get", return_value=True) as get:
+            self.assertTrue(player.playback_ended())
+        get.assert_called_once_with("eof-reached")
+
+    def test_mpv_still_playing_or_not_loaded(self):
+        for val in (False, None):
+            with mock.patch.object(player, "_current", {"type": "item"}), \
+                 mock.patch.object(player, "mpv_get", return_value=val):
+                self.assertFalse(player.playback_ended())
+
+    def test_handoff_ends_at_the_last_second(self):
+        cur = {"type": "item", "handoff": "spotify"}
+        for prog, ended in (((299.5, 300.0), True), ((120.0, 300.0), False),
+                            ((None, None), False), ((10.0, 0), False)):
+            with mock.patch.object(player, "_current", cur), \
+                 mock.patch.object(player.handoff, "progress", return_value=prog):
+                self.assertEqual(player.playback_ended(), ended, prog)
+
+
 class TestDaemonItems(unittest.TestCase):
     def setUp(self):
         self.src = mock.Mock()

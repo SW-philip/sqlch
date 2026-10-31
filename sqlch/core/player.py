@@ -266,6 +266,7 @@ def _kill_existing() -> None:
 TIMESHIFT_SECS = 3600
 TIMESHIFT_BYTES = 160 * 1024 * 1024
 LIVE_MARGIN = 1.0  # seeking exactly to the edge stalls on a live stream
+HANDOFF_END_MARGIN = 1.0  # an external player this close to the end counts as finished
 
 
 def _ytdl_path(url: str) -> str | None:
@@ -459,6 +460,17 @@ def item_progress() -> tuple[float | None, float | None]:
     if _current and _current.get("handoff"):
         return handoff.progress(_current["handoff"])
     return mpv_get("time-pos"), mpv_get("duration")
+
+
+def playback_ended() -> bool:
+    """True once the playing item has reached its end. mpv runs with
+    keep-open, so it parks at EOF rather than exiting; an external player
+    is judged by its progress."""
+    if _current and _current.get("handoff"):
+        pos, dur = handoff.progress(_current["handoff"])
+        return (isinstance(pos, (int, float)) and isinstance(dur, (int, float))
+                and dur > 0 and pos >= dur - HANDOFF_END_MARGIN)
+    return mpv_get("eof-reached") is True
 
 
 def preview(url: str, duration: int = 10) -> None:
