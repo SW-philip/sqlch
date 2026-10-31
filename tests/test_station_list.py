@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import gi
 gi.require_version("Gtk", "4.0")
@@ -240,3 +240,18 @@ class TestStationTooltips(_LibraryBackedTestCase):
         self.assertTrue(row.get_tooltip_text().endswith("♫ Band — Song"))
         panel._apply_probe(sid, "")
         self.assertNotIn("Band", row.get_tooltip_text())
+
+
+class TestStationQueueActions(_LibraryBackedTestCase):
+    def test_queue_station_sends_the_station(self):
+        library.add_url("Test Station", "http://example.com/stream")
+        station = library.get_station_list()[0]
+        panel = _make_panel()
+        popover = Mock()
+        with patch("sqlch_gui.ui.station_list.daemon.send") as send:
+            panel._queue_station(popover, station, True)
+        popover.popdown.assert_called_once_with()
+        send.assert_called_once_with({
+            "cmd": "queue_add", "kind": "station", "play_next": True,
+            "payload": {"id": station["id"], "name": "Test Station",
+                        "url": "http://example.com/stream"}})

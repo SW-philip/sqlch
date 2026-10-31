@@ -251,11 +251,10 @@ class TestPane(unittest.TestCase):
 class TestPlayErrors(unittest.TestCase):
     def _play_with(self, resp):
         from unittest import mock
-        p = make(Fake(), play=None)
+        p = make(Fake(), play=None, send=lambda m: resp)
         p._play = p._daemon_play
         p.on_shown()
-        with mock.patch("sqlch_gui.ui.source_pane.daemon.send", return_value=resp):
-            p._activate(TRACK)
+        p._activate(TRACK)
         return p
 
     def test_failures(self):
@@ -579,10 +578,10 @@ class TestWatchedUi(unittest.TestCase):
         self.assertFalse(sent[1]["watched"])
 
     def test_resume_reaches_the_daemon_message(self):
-        with mock.patch("sqlch_gui.ui.source_pane.daemon.send",
-                        return_value={"ok": True}) as send:
-            SourcePane._daemon_play({"source": "fake", "id": "a"}, resume=True)
-        self.assertTrue(send.call_args[0][0]["resume"])
+        sent = []
+        p = make(Fake(), send=lambda m: (sent.append(m), {"ok": True})[1])
+        p._daemon_play({"source": "fake", "id": "a"}, resume=True)
+        self.assertTrue(sent[0]["resume"])
 
 
 class TestSearchHistory(unittest.TestCase):
@@ -940,3 +939,52 @@ class TestGroupedFixes(unittest.TestCase):
         p.back()
         self.assertEqual(list_texts(p), full)
         self.assertEqual(p._collapsed, set())
+
+
+class TestQueueActions(unittest.TestCase):
+    def test_track_menu_offers_the_queue_actions(self):
+        p = make(Fake())
+        p.on_shown()
+        with mock.patch.object(Gtk.Popover, "popup"):
+            p._open_menu(TRACK, p.list)
+        pop = p.list.get_last_child()
+        while not isinstance(pop, Gtk.Popover):
+            pop = pop.get_prev_sibling()
+        self.assertEqual(button_labels(pop.get_child()), ["Add to queue", "Play next"])
+
+    def test_queue_sends_the_item(self):
+        sent = []
+        p = make(Fake(), send=lambda m: (sent.append(m), {"ok": True})[1])
+        pop = mock.Mock()
+        p._queue(TRACK, True, pop)
+        pop.popdown.assert_called_once_with()
+        self.assertEqual(sent, [{"cmd": "queue_add", "kind": "item", "payload": TRACK,
+                                 "play_next": True}])
+
+    def test_queue_failure_shows_in_the_status_line(self):
+        p = make(Fake(), send=lambda m: {"ok": False, "error": "boom"})
+        p._queue(TRACK, False, mock.Mock())
+        self.assertIn("boom", p.status.get_text())
+
+    def test_folders_get_no_queue_actions(self):
+        s = MenuFake()
+        p = make(s)
+        p.on_shown()
+        with mock.patch.object(Gtk.Popover, "popup"):
+            p._open_menu(FOLDER, p.list)
+        pop = p.list.get_last_child()
+        while not isinstance(pop, Gtk.Popover):
+            pop = pop.get_prev_sibling()
+        self.assertEqual(button_labels(pop.get_child()), ["Go to E", "Save"])
+
+
+class TestPlayContext(unittest.TestCase):
+    def test_play_sends_the_playable_items_as_context(self):
+        sent = []
+        p = make(Fake(tree={None: [FOLDER, TRACK, {**TRACK, "id": "t2"}]}),
+                 play=None, send=lambda m: (sent.append(m), {"ok": True})[1])
+        p.on_shown()
+        p._daemon_play(TRACK)
+        msg = sent[-1]
+        self.assertEqual(msg["cmd"], "play_item")
+        self.assertEqual([i["id"] for i in msg["context"]], ["t", "t2"])

@@ -9,6 +9,7 @@ from sqlch.core import follows, progress as watch_progress
 from sqlch.sources import safe_available, sections_for
 
 from .. import daemon
+from . import dnd
 from .banner import RibbonBanner
 from .grouping import LABELS, group, next_mode, sectioned
 from .timefmt import format_date, format_duration
@@ -136,12 +137,12 @@ class SourcePane(Gtk.Box):
         scroll.set_child(self.list)
         self.append(scroll)
 
-    @staticmethod
-    def _daemon_play(item, resume=False, mode=None):
-        msg = {"cmd": "play_item", "item": item, "resume": resume}
+    def _daemon_play(self, item, resume=False, mode=None):
+        context = [i for i in self._items if i.get("kind") != "folder"]
+        msg = {"cmd": "play_item", "item": item, "resume": resume, "context": context}
         if mode:
             msg["mode"] = mode
-        resp = daemon.send(msg)
+        resp = self._send(msg)
         if resp is None:
             raise RuntimeError("daemon not running")
         if not resp.get("ok", True):
@@ -413,6 +414,8 @@ class SourcePane(Gtk.Box):
         click.set_button(0)
         click.connect("released", lambda g, n, x, y, it=item, r=row: self._clicked(g, it, r))
         row.add_controller(click)
+        if item.get("kind") != "folder":
+            dnd.attach_drag(row, {"kind": "item", "payload": item})
         # A source's own hover text beats the generic one.
         info = item.get("info")
         row.set_tooltip_text(info if isinstance(info, str) else item_tooltip(item))
@@ -475,9 +478,11 @@ class SourcePane(Gtk.Box):
 
     def _open_menu(self, item, anchor):
         """The source's actions for an item: go to (path/title), copy (text to
-        the clipboard) or action (an id for source.act, run off the main thread)."""
+        the clipboard) or action (an id for source.act, run off the main thread);
+        playable items also get the queue actions."""
         menu = getattr(self.source, "menu", None)
-        if menu is None:
+        queueable = item.get("kind") != "folder"
+        if menu is None and not queueable:
             return
         pop = Gtk.Popover()
         pop.add_css_class("context-menu")
@@ -503,9 +508,15 @@ class SourcePane(Gtk.Box):
                 btn.add_css_class("menu-btn")
                 btn.connect("clicked", lambda b, e=entry: self._menu_pick(item, e, pop))
                 box.append(btn)
+            if queueable:
+                for label, play_next in (("Add to queue", False), ("Play next", True)):
+                    btn = Gtk.Button(label=label)
+                    btn.add_css_class("menu-btn")
+                    btn.connect("clicked", lambda b, n=play_next: self._queue(item, n, pop))
+                    box.append(btn)
             return False
 
-        self._run(lambda: menu(item), done)
+        self._run(lambda: menu(item) if menu else [], done)
 
     def _menu_pick(self, item, entry, pop):
         pop.popdown()
@@ -519,6 +530,18 @@ class SourcePane(Gtk.Box):
                 self._set_status(f"Couldn't do that: {err}" if err is not None else msg or "")
                 return False
             self._run(lambda: self.source.act(item, entry["action"]), done)
+
+    def _queue(self, item, play_next, pop):
+        pop.popdown()
+
+        def done(resp, err):
+            problem = err if err is not None else (
+                "daemon not running" if resp is None
+                else None if resp.get("ok", True) else resp.get("error") or "daemon refused")
+            self._set_status(f"Couldn't queue it: {problem}" if problem is not None
+                             else "Playing" if resp.get("played") else "Queued")
+            return False
+        self._run(lambda: self._send(dnd.queue_msg("item", item, play_next)), done)
 
     def _offer_resume(self, item, point, anchor):
         pop = Gtk.Popover()
