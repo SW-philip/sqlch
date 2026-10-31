@@ -113,29 +113,22 @@ class NowPlayingPanel(Gtk.Box):
             self._prev_rows.append(row)
         info_panel.append(self.lbl_previous)
 
-        # FlowBox (not a plain Box) so pills that don't fit on one line at
-        # the pinned width wrap onto a second line instead of being clipped.
-        pills_row = Gtk.FlowBox()
-        pills_row.set_selection_mode(Gtk.SelectionMode.NONE)
-        pills_row.set_max_children_per_line(3)
-        pills_row.set_row_spacing(4)
-        pills_row.set_column_spacing(4)
-        # Homogeneous (the default) sizes every cell to match the widest
-        # pill, which can waste enough space to force an awkward 2-then-1
-        # wrap even when all three would fit at their actual widths.
-        pills_row.set_homogeneous(False)
+        # One fixed line: a wrapping row made the card (and every pane docked
+        # to its height) jump when "--" placeholders became real values.
+        # Short texts, ellipsized as a backstop, so nothing can push it wider.
+        pills_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         self.pill_codec = Gtk.Label()
-        self.pill_codec.add_css_class("tech-badge")
-        self.pill_codec.set_visible(False)
+        self.pill_codec.set_tooltip_text("Codec")
         self.pill_bitrate = Gtk.Label()
-        self.pill_bitrate.add_css_class("tech-badge")
-        self.pill_bitrate.set_visible(False)
+        self.pill_bitrate.set_tooltip_text("Bitrate")
         self.pill_buffer = Gtk.Label()
-        self.pill_buffer.add_css_class("tech-badge")
-        self.pill_buffer.set_visible(False)
-        pills_row.append(self.pill_codec)
-        pills_row.append(self.pill_bitrate)
-        pills_row.append(self.pill_buffer)
+        self.pill_buffer.set_tooltip_text("Buffer")
+        for pill in (self.pill_codec, self.pill_bitrate, self.pill_buffer):
+            pill.add_css_class("tech-badge")
+            pill.set_hexpand(True)
+            pill.set_ellipsize(Pango.EllipsizeMode.END)
+            pill.set_width_chars(1)
+            pills_row.append(pill)
         info_panel.append(pills_row)
 
         self.info_scroll = Gtk.ScrolledWindow()
@@ -151,20 +144,28 @@ class NowPlayingPanel(Gtk.Box):
         self.info_scroll.set_margin_top(4)
         card.append(self.info_scroll)
 
+        # The seek bar and timeshift strip come and go with what's playing;
+        # their slot keeps the tallest one's height so the card (and the
+        # panes docked to its height) never resizes when they appear.
+        transport = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        transport.set_valign(Gtk.Align.START)
+        transport.connect("realize", self._reserve_transport)
+
         self.seek_bar = SeekBar()
         self.seek_bar.connect("seek-requested", self._on_seek_requested)
         self.seek_bar.connect(
             "seek-relative", lambda _b, d: self._send_async({"cmd": "seek_rel", "delta": d}))
         self.seek_bar.connect(
             "skip", lambda _b, fwd: self._send_async({"cmd": "next" if fwd else "prev"}))
-        card.append(self.seek_bar)
+        transport.append(self.seek_bar)
 
         self.timeline = TimelineBar()
         self.timeline.connect("seek-requested", self._on_seek_requested)
         self.timeline.connect(
             "seek-relative", lambda _b, d: self._send_async({"cmd": "seek_rel", "delta": d}))
         self.timeline.connect("go-live", lambda _b: self._send_async({"cmd": "go_live"}))
-        card.append(self.timeline)
+        transport.append(self.timeline)
+        card.append(transport)
 
         # --- Row 4: RecordBubble / stop-play toggle | speaker + volume ramp ---
         control_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -214,6 +215,17 @@ class NowPlayingPanel(Gtk.Box):
         self.reset_ui()
         self._load_history()
 
+    def _reserve_transport(self, slot):
+        # Measured fully shown, then hidden again; the next status poll
+        # puts back whichever one is in use.
+        self.seek_bar.set_state(0, 1, True)
+        self.timeline.set_visible(True)
+        tallest = max(bar.measure(Gtk.Orientation.VERTICAL, -1)[1]
+                      for bar in (self.seek_bar, self.timeline))
+        self.seek_bar.set_state(None, None)
+        self.timeline.set_visible(False)
+        slot.set_size_request(-1, tallest)
+
     def set_collapsed(self, collapsed: bool):
         """Hide the album art and Previous list, leaving the header, pills
         and transport."""
@@ -238,12 +250,9 @@ class NowPlayingPanel(Gtk.Box):
         self.header.set_connected(connected)
 
     def _set_pills_placeholder(self):
-        self.pill_codec.set_text("Codec: --")
-        self.pill_codec.set_visible(True)
-        self.pill_bitrate.set_text("Bitrate: --")
-        self.pill_bitrate.set_visible(True)
-        self.pill_buffer.set_text("Buffer: --")
-        self.pill_buffer.set_visible(True)
+        self.pill_codec.set_text("Codec --")
+        self.pill_bitrate.set_text("-- kbps")
+        self.pill_buffer.set_text("Buf --")
 
     def reset_ui(self):
         """Initial, never-played state -- same dimmed/idle look as stopping
@@ -499,23 +508,9 @@ class NowPlayingPanel(Gtk.Box):
         if not playing:
             self._set_pills_placeholder()
         else:
-            if fmt:
-                self.pill_codec.set_text(f"Codec: {fmt}")
-                self.pill_codec.set_visible(True)
-            else:
-                self.pill_codec.set_visible(False)
-
-            if bitrate:
-                self.pill_bitrate.set_text(f"Bitrate: {bitrate}k")
-                self.pill_bitrate.set_visible(True)
-            else:
-                self.pill_bitrate.set_visible(False)
-
-            if buffer is not None:
-                self.pill_buffer.set_text(f"Buffer: {buffer}%")
-                self.pill_buffer.set_visible(True)
-            else:
-                self.pill_buffer.set_visible(False)
+            self.pill_codec.set_text(fmt if fmt else "Codec --")
+            self.pill_bitrate.set_text(f"{bitrate} kbps" if bitrate else "-- kbps")
+            self.pill_buffer.set_text(f"Buf {buffer}%" if buffer is not None else "Buf --")
 
         rec = recording or {}
         mode = rec.get("mode")

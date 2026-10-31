@@ -200,7 +200,8 @@ class StationListPanel(Gtk.Box):
             lambda b, sid=s["id"], fav=s.get("favorite", False): self.on_toggle_favorite(sid, fav),
         )
 
-        freq_lbl = Gtk.Label()
+        # fixed width so 96.1 and 106.1 line the names up
+        freq_lbl = Gtk.Label(xalign=1.0, width_chars=5)
         freq_lbl.add_css_class("station-freq")
         freq_lbl.set_text(f"{_parse_freq(s.get('frequency')):.1f}")
 

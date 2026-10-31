@@ -15,7 +15,7 @@ LABEL = "Jellyfin"
 HINT = ("Create an API key in Jellyfin (Dashboard > API Keys) and put it in "
         "/run/secrets/jellyfin_api_key, or set sources.jellyfin.token_file")
 
-DEFAULT_SERVER = "https://desktop:8096"
+DEFAULT_SERVER = "https://swphil.tail6e0780.ts.net"
 DEFAULT_TOKEN_FILE = "/run/secrets/jellyfin_api_key"
 TIMEOUT = 8
 SEARCH_LIMIT = 50
