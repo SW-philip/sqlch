@@ -11,6 +11,7 @@ import time
 from urllib.request import Request, urlopen
 
 STARTUP_WAIT = 12.0
+STATES = ("playing", "paused", "stopped")
 
 
 def _playerctl(*args: str, player: str) -> subprocess.CompletedProcess:
@@ -86,6 +87,11 @@ class Mpris:
         r = _playerctl("metadata", "mpris:trackid", player=self.player)
         return _track_uri(r.stdout) if r.returncode == 0 else None
 
+    def state(self) -> str | None:
+        r = _playerctl("status", player=self.player)
+        word = r.stdout.strip().lower() if r.returncode == 0 else ""
+        return word if word in STATES else None
+
     def usable(self) -> bool:
         return True
 
@@ -153,6 +159,17 @@ class Librespot:
         track = (self._call("/status") or {}).get("track") or {}
         return _track_uri(track.get("uri"))
 
+    def state(self) -> str | None:
+        try:
+            status = self._call("/status") or {}
+        except (OSError, ValueError):
+            return None
+        if status.get("stopped"):
+            return "stopped"
+        if status.get("paused"):
+            return "paused"
+        return "playing" if status.get("track") else None
+
 
 class Preferred:
     """Use the primary handler while it is usable, else the fallback. The one
@@ -189,6 +206,9 @@ class Preferred:
 
     def track_uri(self) -> str | None:
         return self.active.track_uri()
+
+    def state(self) -> str | None:
+        return self.active.state()
 
     def usable(self) -> bool:
         return True
@@ -228,5 +248,13 @@ def track_uri(name: str) -> str | None:
     sqlch started once it autoplays or the user skips in the app."""
     try:
         return HANDLERS[name].track_uri()
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+        return None
+
+
+def state(name: str) -> str | None:
+    """"playing", "paused", "stopped", or None when the player can't say."""
+    try:
+        return HANDLERS[name].state()
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
         return None

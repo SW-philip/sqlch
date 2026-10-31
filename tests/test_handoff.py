@@ -143,3 +143,51 @@ class TestTrackUri(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestHandoffState(unittest.TestCase):
+    def test_mpris_status_words(self):
+        h = handoff.Mpris("spotify", "spotify")
+        for out, want in (("Playing\n", "playing"), ("Paused\n", "paused"),
+                          ("Stopped\n", "stopped"), ("wat\n", None), ("", None)):
+            with mock.patch.object(handoff, "_playerctl", return_value=cp(0, out)):
+                self.assertEqual(h.state(), want, out)
+
+    def test_mpris_nonzero_is_unknown(self):
+        with mock.patch.object(handoff, "_playerctl", return_value=cp(1, "Playing\n")):
+            self.assertIsNone(handoff.Mpris("spotify", "spotify").state())
+
+    def test_librespot_status(self):
+        h = handoff.Librespot()
+        trk = {"uri": "spotify:track:T1"}
+        for status, want in (({"stopped": True, "track": trk}, "stopped"),
+                             ({"stopped": False, "paused": True, "track": trk}, "paused"),
+                             ({"stopped": False, "paused": False, "track": trk}, "playing"),
+                             ({"track": trk}, "playing"),
+                             ({}, None), (None, None)):
+            with mock.patch.object(h, "_call", return_value=status):
+                self.assertEqual(h.state(), want, status)
+
+    def test_librespot_down_is_unknown(self):
+        h = handoff.Librespot()
+        with mock.patch.object(h, "_call", side_effect=OSError("down")):
+            self.assertIsNone(h.state())
+
+    def test_preferred_delegates_to_active(self):
+        a, b = mock.Mock(), mock.Mock()
+        a.state.return_value, b.state.return_value = "paused", "playing"
+        pref = handoff.Preferred(a, b)
+        self.assertEqual(pref.state(), "playing")
+        pref.active = a
+        self.assertEqual(pref.state(), "paused")
+
+    def test_module_state_swallows_errors(self):
+        for exc in (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+            h = mock.Mock()
+            h.state.side_effect = exc("x")
+            with mock.patch.dict(handoff.HANDLERS, {"t": h}):
+                self.assertIsNone(handoff.state("t"))
+        h.state.side_effect = None
+        h.state.return_value = "stopped"
+        with mock.patch.dict(handoff.HANDLERS, {"t": h}):
+            self.assertEqual(handoff.state("t"), "stopped")

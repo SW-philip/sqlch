@@ -269,8 +269,11 @@ RADIO; flip back to MEDIA and the next queued item plays. Playing a station over
 media (or switching to RADIO) parks the item; flip back to MEDIA and it resumes
 where it left off. Dropping onto an empty, idle playlist plays right away.
 
-Spotify items advance best-effort: sqlch cannot always tell when Spotify's own
-player finished a track, so the queue may not move on after one.
+Turn off autoplay in Spotify so it stops at the end of a track; sqlch then
+advances the queue when Spotify stops after playing. Set
+`sources.spotify.advance_queue` to `false` in `~/.config/sqlch/sqlch.json` to
+leave Spotify alone. With autoplay on, Spotify moves on by itself and the queue
+may not follow.
 
 ### Library
 

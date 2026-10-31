@@ -44,6 +44,7 @@ def _need_env(name: str, value: str | None) -> str:
 # ------------------------------------------------------------
 
 _current: dict[str, Any] | None = None
+_handoff_seen_playing = False  # the current handoff item was observed playing
 _item_started: float | None = None  # monotonic time play_target last started an mpv item
 _preview_timer: threading.Timer | None = None
 _metadata_thread: threading.Thread | None = None
@@ -394,13 +395,14 @@ def play_station(station: dict[str, Any]) -> None:
 
 
 def play_target(target, item: dict[str, Any], start: float | None = None) -> None:
-    global _current, _item_started
+    global _current, _item_started, _handoff_seen_playing
     stop(notify_user=False)
     meta = target.meta or {}
     notify.notify("sqlch", f"NOW PLAYING\n{meta.get('title') or item.get('title', '')}")
     if meta.get("art") and not item.get("art"):
         item = {**item, "art": meta["art"]}
     if target.handoff:
+        _handoff_seen_playing = False
         handoff.play(target.handoff, target.url, target.context)
         _current = {"type": "item", "item": item, "handoff": target.handoff}
         return
@@ -465,14 +467,31 @@ def item_progress() -> tuple[float | None, float | None]:
     return mpv_get("time-pos"), mpv_get("duration")
 
 
+def _advance_queue(name: str) -> bool:
+    from sqlch.sources import source_config
+    val = source_config(name).get("advance_queue", True)
+    return val if isinstance(val, bool) else True
+
+
 def playback_ended() -> bool:
     """True once the playing item has reached its end. mpv runs with
     keep-open, so it parks at EOF rather than exiting; an external player
-    is judged by its progress."""
+    is judged by its progress, or by stopping after it was seen playing
+    (autoplay off)."""
+    global _handoff_seen_playing
     if _current and _current.get("handoff"):
-        pos, dur = handoff.progress(_current["handoff"])
-        return (isinstance(pos, (int, float)) and isinstance(dur, (int, float))
-                and dur > 0 and pos >= dur - HANDOFF_END_MARGIN)
+        name = _current["handoff"]
+        if not _advance_queue(name):
+            return False
+        pos, dur = handoff.progress(name)
+        num = isinstance(pos, (int, float)) and isinstance(dur, (int, float))
+        state = handoff.state(name)
+        # Stopped right after play() is a startup race, not an end.
+        if state == "playing" or (num and pos > 0):
+            _handoff_seen_playing = True
+        if num and dur > 0 and pos >= dur - HANDOFF_END_MARGIN:
+            return True
+        return state == "stopped" and _handoff_seen_playing
     return mpv_get("eof-reached") is True
 
 

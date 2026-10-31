@@ -92,13 +92,72 @@ class TestPlaybackEnded(unittest.TestCase):
                  mock.patch.object(player, "mpv_get", return_value=val):
                 self.assertFalse(player.playback_ended())
 
-    def test_handoff_ends_at_the_last_second(self):
+    def ended(self, prog=(None, None), state=None, seen=False, cfg=None):
         cur = {"type": "item", "handoff": "spotify"}
+        with mock.patch.object(player, "_current", cur), \
+             mock.patch.object(player, "_handoff_seen_playing", seen), \
+             mock.patch("sqlch.sources.source_config", return_value=cfg or {}), \
+             mock.patch.object(player.handoff, "progress", return_value=prog), \
+             mock.patch.object(player.handoff, "state", return_value=state):
+            return player.playback_ended()
+
+    def test_handoff_ends_at_the_last_second(self):
         for prog, ended in (((299.5, 300.0), True), ((120.0, 300.0), False),
                             ((None, None), False), ((10.0, 0), False)):
-            with mock.patch.object(player, "_current", cur), \
-                 mock.patch.object(player.handoff, "progress", return_value=prog):
-                self.assertEqual(player.playback_ended(), ended, prog)
+            self.assertEqual(self.ended(prog), ended, prog)
+
+    def test_stopped_after_playing_is_the_end(self):
+        self.assertTrue(self.ended(state="stopped", seen=True))
+
+    def test_stopped_before_playing_is_not(self):
+        self.assertFalse(self.ended(state="stopped", seen=False))
+
+    def test_paused_never_ends(self):
+        self.assertFalse(self.ended(state="paused", seen=True))
+
+    def test_seeing_it_play_arms_the_stopped_rule(self):
+        cur = {"type": "item", "handoff": "spotify"}
+        states = iter(["stopped", "playing", "stopped"])
+        with mock.patch.object(player, "_current", cur), \
+             mock.patch.object(player, "_handoff_seen_playing", False), \
+             mock.patch("sqlch.sources.source_config", return_value={}), \
+             mock.patch.object(player.handoff, "progress", return_value=(None, None)), \
+             mock.patch.object(player.handoff, "state", side_effect=lambda n: next(states)):
+            self.assertFalse(player.playback_ended())
+            self.assertFalse(player.playback_ended())
+            self.assertTrue(player.playback_ended())
+
+    def test_progress_past_zero_counts_as_seen_playing(self):
+        cur = {"type": "item", "handoff": "spotify"}
+        progs = iter([(5.0, 200.0), (None, None)])
+        states = iter(["paused", "stopped"])
+        with mock.patch.object(player, "_current", cur), \
+             mock.patch.object(player, "_handoff_seen_playing", False), \
+             mock.patch("sqlch.sources.source_config", return_value={}), \
+             mock.patch.object(player.handoff, "progress", side_effect=lambda n: next(progs)), \
+             mock.patch.object(player.handoff, "state", side_effect=lambda n: next(states)):
+            self.assertFalse(player.playback_ended())
+            self.assertTrue(player.playback_ended())
+
+    def test_toggle_off_leaves_the_player_alone(self):
+        cfg = {"advance_queue": False}
+        self.assertFalse(self.ended(state="stopped", seen=True, cfg=cfg))
+        self.assertFalse(self.ended((299.5, 300.0), cfg=cfg))
+
+    def test_non_bool_toggle_falls_back_to_on(self):
+        for val in ("false", 0, None):
+            self.assertTrue(self.ended(state="stopped", seen=True,
+                                       cfg={"advance_queue": val}), val)
+
+    def test_new_handoff_play_resets_the_seen_flag(self):
+        target = Target(url="spotify:track:T", handoff="spotify")
+        with mock.patch.object(player, "_handoff_seen_playing", True), \
+             mock.patch.object(player, "_current", None), \
+             mock.patch.object(player, "stop"), \
+             mock.patch.object(player.notify, "notify"), \
+             mock.patch.object(player.handoff, "play"):
+            player.play_target(target, {"title": "t"})
+            self.assertFalse(player._handoff_seen_playing)
 
 
 class TestPlaybackFailed(unittest.TestCase):
