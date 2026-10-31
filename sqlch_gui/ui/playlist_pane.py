@@ -92,10 +92,15 @@ class PlaylistPane(Gtk.Box):
         # While media plays the resume position moves every few seconds;
         # it only shows (and only matters here) while parked.
         parked = state["resume"] if state["mode"] == "radio" else None
+        if parked and parked.get("head"):
+            # a head-park stands for whatever heads the queue now
+            head = state["entries"][0] if state["entries"] else None
+            parked = head and {"entry": head, "pos": 0.0, "head": True}
         now = state["now"]
         sig = (state["mode"], now and now["uid"],
                tuple(e["uid"] for e in state["entries"]),
-               parked and (parked["entry"]["uid"], int(parked["pos"])))
+               parked and (parked["entry"]["uid"], int(parked["pos"]),
+                           bool(parked.get("head"))))
         if sig == self._sig:
             return False
         self._sig = sig
@@ -122,7 +127,8 @@ class PlaylistPane(Gtk.Box):
             self.status.set_visible(False)
             return
         title = playqueue.entry_title(parked["entry"])
-        self.status.set_text(f"resume: {title}, {format_duration(parked['pos'])}")
+        where = "" if parked.get("head") else f", {format_duration(parked['pos'])}"
+        self.status.set_text(f"resume: {title}{where}")
         self.status.set_visible(True)
 
     def _build_row(self, entry, now=False):

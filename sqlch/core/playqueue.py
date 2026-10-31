@@ -76,6 +76,8 @@ def _clean(data) -> dict:
         r = data["resume"]
         out["resume"] = {"entry": r["entry"], "pos": float(r["pos"]),
                          "dur": r["dur"] if isinstance(r.get("dur"), (int, float)) else None}
+        if r.get("head") is True:
+            out["resume"]["head"] = True
     return out
 
 
@@ -289,9 +291,14 @@ def pop_history() -> dict | None:
     return _update(go)
 
 
-def set_resume(entry: dict, pos: float, dur: float | None) -> None:
-    _update(lambda state: state.update(
-        resume={"entry": entry, "pos": float(pos), "dur": dur}))
+def set_resume(entry: dict, pos: float, dur: float | None, head: bool = False) -> None:
+    """head=True marks a placeholder for "whatever heads the queue", not a
+    position in a real item; the queue may change under it."""
+    def go(state):
+        state["resume"] = {"entry": entry, "pos": float(pos), "dur": dur}
+        if head:
+            state["resume"]["head"] = True
+    _update(go)
 
 
 def clear_resume() -> None:

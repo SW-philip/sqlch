@@ -120,6 +120,15 @@ class TestResumeLine(unittest.TestCase):
         pane.refresh()
         self.assertFalse(pane.status.get_visible())
 
+    def test_a_head_park_shows_the_current_head(self):
+        a, b = entry("item", A), entry("item", B)
+        r = {"entry": a, "pos": 0.0, "dur": None, "head": True}
+        pane, box = make(state(mode="radio", entries=[b], resume=r))
+        self.assertEqual(pane.status.get_text(), "resume: Song B")
+        box["state"] = state(mode="radio", entries=[], resume=r)
+        pane.refresh()
+        self.assertFalse(pane.status.get_visible())
+
 
 class TestActions(unittest.TestCase):
     def test_remove_button_sends_queue_remove(self):

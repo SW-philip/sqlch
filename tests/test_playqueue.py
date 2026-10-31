@@ -139,6 +139,13 @@ class TestState(Base):
         s = playqueue.read()
         self.assertEqual((s["now"], s["resume"]), (None, None))
 
+    def test_resume_head_flag_round_trips(self):
+        a = self.item()
+        playqueue.set_resume(a, 0.0, None, head=True)
+        self.assertIs(playqueue.read()["resume"]["head"], True)
+        playqueue.set_resume(a, 5.0, None)
+        self.assertNotIn("head", playqueue.read()["resume"])
+
     def test_unknown_mode_raises(self):
         with self.assertRaises(ValueError):
             playqueue.set_mode("shuffle")

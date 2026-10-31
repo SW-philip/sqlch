@@ -375,6 +375,37 @@ class TestSetMode(Base):
             transport.set_mode("shuffle")
 
 
+class TestParkedHead(Base):
+    """A station started from the queue parks the head; later edits to the
+    queue must not leave media resuming a stale one."""
+
+    def setUp(self):
+        super().setUp()
+        self.stations_start()
+        self.h, self.j = self.item(A), self.item(B)
+        playqueue.add(self.station())
+        playqueue.add(self.h)
+        playqueue.add(self.j)
+        self.assertTrue(transport.advance())  # the station; parks H
+
+    def test_a_move_to_the_front_plays_the_new_head(self):
+        playqueue.move(self.j["uid"], 0)
+        transport.set_mode("media")
+        self.assertEqual(self.played_ids(), ["b"])
+
+    def test_a_removed_head_plays_the_next(self):
+        playqueue.remove(self.h["uid"])
+        transport.set_mode("media")
+        self.assertEqual(self.played_ids(), ["b"])
+
+    def test_a_cleared_queue_starts_nothing(self):
+        playqueue.clear()
+        transport.set_mode("media")
+        self.player.play_target.assert_not_called()
+        s = self.state()
+        self.assertEqual((s["mode"], s["resume"]), ("media", None))
+
+
 class TestPlayEntry(Base):
     def test_item_entry_plays_and_drops_the_context(self):
         playqueue.set_context([A, B], "a")

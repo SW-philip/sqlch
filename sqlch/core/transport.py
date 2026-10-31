@@ -57,7 +57,7 @@ def _park_head() -> None:
     """A radio entry never ends, so the next queued item is what media picks up."""
     waiting = [e for e in playqueue.read()["entries"] if e["kind"] == "item"]
     if waiting:
-        playqueue.set_resume(waiting[0], 0.0, None)
+        playqueue.set_resume(waiting[0], 0.0, None, head=True)
     else:
         playqueue.clear_resume()
 
@@ -249,7 +249,9 @@ def set_mode(mode: str) -> None:
         return
     playqueue.set_mode("media")  # even if nothing starts, next/prev now follow the queue
     resume = state["resume"]
-    if resume:
+    if resume and resume.get("head"):
+        playqueue.clear_resume()  # the head may have changed since; play what is first now
+    elif resume:
         entry = resume["entry"]
         playqueue.remove(entry["uid"])  # it may also sit at the head of the queue
         playqueue.clear_resume()
