@@ -19,6 +19,7 @@ MAX_FAILS = 3         # consecutive unplayable entries before advance gives up
 
 _lock = threading.RLock()
 _fails = 0
+_dead = 0  # items in a row that failed to load; the tick gives up at MAX_FAILS
 
 
 class PlayError(Exception):
@@ -103,8 +104,9 @@ def start_item(item: dict, *, context: list | None = None, resume: bool = False,
     if resume:
         start = progress.resume_point(progress.get(item.get("source"), item.get("id")))
     _play_item(item, start, mode)
-    global _fails
+    global _fails, _dead
     _fails = 0
+    _dead = 0
     playqueue.set_mode("media")
     if item.get("id"):
         playqueue.set_now(playqueue.make_entry("item", item))
@@ -128,9 +130,11 @@ def start_station(station: dict) -> None:
 def play_entry(entry: dict) -> bool:
     """Play an entry the user picked (a drop on an idle player, a jump in the
     playlist). It starts a fresh run, so the old context no longer applies."""
+    global _dead
     park()
     if not _start_entry(entry):
         return False
+    _dead = 0
     playqueue.set_context(None, None)
     return True
 
@@ -234,8 +238,10 @@ def prev_cmd() -> None:
 
 @_locked
 def set_mode(mode: str) -> None:
+    global _dead
     if mode not in playqueue.MODES:
         raise ValueError(f"unknown mode: {mode}")
+    _dead = 0
     state = playqueue.read()
     if mode == state["mode"] and not (mode == "media" and player.current() is None):
         return  # idle media (after stop or a restart) falls through to resume
@@ -262,14 +268,33 @@ def set_mode(mode: str) -> None:
 
 @_locked
 def tick() -> None:
-    """About once a second: move on when the playing item has ended."""
+    """About once a second: move on when the playing item has ended or
+    never loaded."""
+    global _dead
     cur = player.current()
-    if not cur or cur.get("type") != "item" or not player.playback_ended():
+    if not cur or cur.get("type") != "item":
+        return
+    if player.playback_ended():
+        _dead = 0
+    elif player.playback_failed():
+        _dead += 1
+        title = playqueue.entry_title({"kind": "item", "item": cur["item"]})
+        notify.notify("sqlch error", f"Couldn't play {title}")
+        if _dead >= MAX_FAILS:
+            _dead = 0
+            _stop_quietly()
+            notify.notify("sqlch", "Queue stopped: too many entries failed to play")
+            return
+    else:
         return
     if advance():
         return
     if cur.get("handoff"):
         return  # the external player may carry on by itself (autoplay)
+    _stop_quietly()
+
+
+def _stop_quietly() -> None:
     player.stop(notify_user=False)
     playqueue.set_now(None)
     playqueue.clear_resume()

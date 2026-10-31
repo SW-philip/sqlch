@@ -26,6 +26,8 @@ class Base(unittest.TestCase):
         self.src.resolve.side_effect = lambda item: f"target:{item.get('id')}"
         self.patch(mock.patch.dict("sqlch.sources.REGISTRY", {"fake": self.src}))
         transport._fails = 0
+        transport._dead = 0
+        self.player.playback_failed.return_value = False
 
     def patch(self, p):
         m = p.start()
@@ -471,6 +473,52 @@ class TestTick(Base):
         self.player.playback_ended.return_value = True
         transport.tick()
         self.player.stop.assert_not_called()
+
+
+class TestTickFailures(Base):
+    def setUp(self):
+        super().setUp()
+        self.player.current.return_value = {"type": "item", "item": A}
+        self.player.playback_ended.return_value = False
+        self.player.playback_failed.return_value = True
+        for i in range(4):
+            playqueue.add(self.item({"source": "fake", "id": f"q{i}", "title": f"Q{i}"}))
+
+    def test_two_dead_items_advance_and_the_third_stops(self):
+        self.playing(self.item(A))
+        transport.tick()
+        transport.tick()
+        self.assertEqual(self.played_ids(), ["q0", "q1"])
+        self.player.stop.assert_not_called()
+        transport.tick()
+        self.player.stop.assert_called_once_with(notify_user=False)
+        self.assertEqual(self.played_ids(), ["q0", "q1"])
+        s = self.state()
+        self.assertEqual((s["now"], s["resume"]), (None, None))
+        self.assertEqual(transport._dead, 0)
+        self.notify.notify.assert_any_call("sqlch", "Queue stopped: too many entries failed to play")
+
+    def test_each_failure_is_announced(self):
+        transport.tick()
+        self.notify.notify.assert_called_once_with("sqlch error", "Couldn't play A")
+
+    def test_a_natural_end_resets_the_count(self):
+        transport.tick()
+        transport.tick()
+        self.player.playback_failed.return_value = False
+        self.player.playback_ended.return_value = True
+        transport.tick()
+        self.assertEqual(transport._dead, 0)
+        self.player.playback_failed.return_value = True
+        self.player.playback_ended.return_value = False
+        transport.tick()
+        self.player.stop.assert_not_called()
+
+    def test_a_user_action_resets_the_count(self):
+        transport.tick()
+        transport._dead = 2
+        transport.start_item(B)
+        self.assertEqual(transport._dead, 0)
 
 
 class TestStop(Base):

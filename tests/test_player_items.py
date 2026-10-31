@@ -101,6 +101,39 @@ class TestPlaybackEnded(unittest.TestCase):
                 self.assertEqual(player.playback_ended(), ended, prog)
 
 
+class TestPlaybackFailed(unittest.TestCase):
+    def check(self, cur, started, idle, now=1000.0):
+        with mock.patch.object(player, "_current", cur), \
+             mock.patch.object(player, "_item_started", started), \
+             mock.patch.object(player.time, "monotonic", return_value=now), \
+             mock.patch.object(player, "mpv_get", return_value=idle):
+            return player.playback_failed()
+
+    def test_idle_mpv_after_the_grace_period(self):
+        self.assertTrue(self.check({"type": "item"}, 990.0, True))
+
+    def test_not_while_still_loading(self):
+        self.assertFalse(self.check({"type": "item"}, 999.0, True))
+
+    def test_not_when_mpv_is_busy_or_unreachable(self):
+        for idle in (False, None):
+            self.assertFalse(self.check({"type": "item"}, 990.0, idle))
+
+    def test_not_without_start_data_a_station_or_a_handoff(self):
+        self.assertFalse(self.check({"type": "item"}, None, True))
+        self.assertFalse(self.check({"type": "station"}, 990.0, True))
+        self.assertFalse(self.check({"type": "item", "handoff": "spotify"}, 990.0, True))
+        self.assertFalse(self.check(None, 990.0, True))
+
+    def test_play_target_records_the_start_time(self):
+        target = Target("/m/a.mp3")
+        with mock.patch.object(player, "_spawn_mpv"), mock.patch.object(player, "stop"), \
+             mock.patch.object(player.notify, "notify"), \
+             mock.patch.object(player.time, "monotonic", return_value=42.0):
+            player.play_target(target, {"id": "a"})
+        self.assertEqual(player._item_started, 42.0)
+
+
 class TestDaemonItems(unittest.TestCase):
     def setUp(self):
         self.src = mock.Mock()

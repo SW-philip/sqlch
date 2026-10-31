@@ -44,6 +44,7 @@ def _need_env(name: str, value: str | None) -> str:
 # ------------------------------------------------------------
 
 _current: dict[str, Any] | None = None
+_item_started: float | None = None  # monotonic time play_target last started an mpv item
 _preview_timer: threading.Timer | None = None
 _metadata_thread: threading.Thread | None = None
 _metadata_stop = threading.Event()
@@ -266,6 +267,7 @@ def _kill_existing() -> None:
 TIMESHIFT_SECS = 3600
 TIMESHIFT_BYTES = 160 * 1024 * 1024
 LIVE_MARGIN = 1.0  # seeking exactly to the edge stalls on a live stream
+LOAD_GRACE = 3.0  # an idle mpv this long after starting an item means it failed to load
 HANDOFF_END_MARGIN = 1.0  # an external player this close to the end counts as finished
 
 
@@ -392,7 +394,7 @@ def play_station(station: dict[str, Any]) -> None:
 
 
 def play_target(target, item: dict[str, Any], start: float | None = None) -> None:
-    global _current
+    global _current, _item_started
     stop(notify_user=False)
     meta = target.meta or {}
     notify.notify("sqlch", f"NOW PLAYING\n{meta.get('title') or item.get('title', '')}")
@@ -407,6 +409,7 @@ def play_target(target, item: dict[str, Any], start: float | None = None) -> Non
         extra["start"] = start
     _spawn_mpv(target.url, video=target.video, **extra)
     _current = {"type": "item", "item": item}
+    _item_started = time.monotonic()
 
 
 def seek(pos: float) -> None:
@@ -471,6 +474,16 @@ def playback_ended() -> bool:
         return (isinstance(pos, (int, float)) and isinstance(dur, (int, float))
                 and dur > 0 and pos >= dur - HANDOFF_END_MARGIN)
     return mpv_get("eof-reached") is True
+
+
+def playback_failed() -> bool:
+    """True when an mpv item never loaded (404, expired url, missing file):
+    with --idle=yes mpv just sits idle, so eof-reached never turns true."""
+    if not _current or _current.get("type") != "item" or _current.get("handoff"):
+        return False
+    if not _item_started or time.monotonic() - _item_started < LOAD_GRACE:
+        return False
+    return mpv_get("idle-active") is True
 
 
 def preview(url: str, duration: int = 10) -> None:
