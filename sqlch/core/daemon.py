@@ -292,6 +292,10 @@ def run_daemon():
     from sqlch.core import mpris_daemon
     threading.Thread(target=mpris_daemon.main, daemon=True, name="mpris").start()
     watcher.start(youtube.fetch_feed, youtube.poll_seconds)
+    try:
+        playqueue.set_now(None)  # mpv did not survive the restart; nothing is playing
+    except Exception:
+        pass
     threading.Thread(target=_track_loop, daemon=True, name="progress").start()
     threading.Thread(target=_tick_loop, daemon=True, name="queue-tick").start()
 

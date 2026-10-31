@@ -237,8 +237,8 @@ def set_mode(mode: str) -> None:
     if mode not in playqueue.MODES:
         raise ValueError(f"unknown mode: {mode}")
     state = playqueue.read()
-    if mode == state["mode"]:
-        return
+    if mode == state["mode"] and not (mode == "media" and player.current() is None):
+        return  # idle media (after stop or a restart) falls through to resume
     if mode == "radio":
         st = library.last_played_station()
         if st:

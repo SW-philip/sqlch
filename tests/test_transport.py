@@ -366,9 +366,23 @@ class TestSetMode(Base):
         self.player.play_station.assert_not_called()
         self.assertEqual(self.state()["mode"], "radio")
 
-    def test_same_mode_is_a_no_op(self):
+    def test_radio_to_radio_is_a_no_op(self):
         transport.set_mode("radio")
         self.player.play_station.assert_not_called()
+
+    def test_media_to_media_while_playing_is_a_no_op(self):
+        self.playing(self.item(A))
+        self.player.current.return_value = {"type": "item", "item": A}
+        playqueue.add(self.item(B))
+        transport.set_mode("media")
+        self.player.play_target.assert_not_called()
+
+    def test_idle_media_resumes_the_parked_item(self):
+        self.playing(None)
+        playqueue.set_resume(self.item(A), 100.0, 300.0)
+        transport.set_mode("media")
+        self.player.play_target.assert_called_once_with("target:a", A, start=100.0)
+        self.assertIsNone(self.state()["resume"])
 
     def test_unknown_mode_raises(self):
         with self.assertRaises(ValueError):
