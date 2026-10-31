@@ -42,12 +42,12 @@ def _resume_start(pos, dur) -> float | None:
     return float(pos)
 
 
-def _play_item(item: dict, start: float | None = None) -> None:
+def _play_item(item: dict, start: float | None = None, mode: str | None = None) -> None:
     src = sources.REGISTRY.get(item.get("source"))
     if src is None:
         raise PlayError(f"unknown source: {item.get('source')}")
     try:
-        target = src.resolve(item)
+        target = src.resolve(item, mode=mode) if mode else src.resolve(item)
     except Exception as e:
         raise PlayError(f"resolve failed: {e}") from e
     player.play_target(target, item, start=start)
@@ -90,11 +90,12 @@ def _start_entry(entry: dict, start: float | None = None) -> bool:
 # ---- starting things ----
 
 @_locked
-def start_item(item: dict, *, context: list | None = None, resume: bool = False) -> None:
+def start_item(item: dict, *, context: list | None = None, resume: bool = False,
+               mode: str | None = None) -> None:
     start = None
     if resume:
         start = progress.resume_point(progress.get(item.get("source"), item.get("id")))
-    _play_item(item, start)
+    _play_item(item, start, mode)
     global _fails
     _fails = 0
     playqueue.set_mode("media")

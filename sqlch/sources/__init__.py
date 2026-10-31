@@ -7,7 +7,7 @@ import logging
 
 log = logging.getLogger(__name__)
 
-RESERVED = ("library", "discover", "np")
+RESERVED = ("library", "discover", "np", "radio", "playlist")
 _MODULES = ("local", "video", "jellyfin", "youtube", "spotify", "podcasts")
 
 
