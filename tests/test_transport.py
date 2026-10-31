@@ -25,7 +25,6 @@ class Base(unittest.TestCase):
         self.src = mock.Mock()
         self.src.resolve.side_effect = lambda item: f"target:{item.get('id')}"
         self.patch(mock.patch.dict("sqlch.sources.REGISTRY", {"fake": self.src}))
-        transport._fails = 0
         transport._dead = 0
         self.player.playback_failed.return_value = False
 
@@ -214,7 +213,18 @@ class TestAdvance(Base):
             playqueue.add(self.item({"source": "fake", "id": f"x{i}"}))
         self.assertFalse(transport.advance())
         self.assertEqual(len(self.state()["entries"]), 1)  # the fourth was never tried
-        self.assertEqual(transport._fails, 0)  # reset so the next press tries again
+        self.src.resolve.side_effect = lambda item: f"target:{item['id']}"
+        self.assertTrue(transport.advance())  # a fresh press tries the rest
+        self.assertEqual(self.played_ids(), ["x3"])
+
+    def test_failures_outside_advance_do_not_block_it(self):
+        self.src.resolve.side_effect = OSError("nope")
+        for _ in range(3):
+            self.assertFalse(transport.play_entry(self.item(C)))
+        self.src.resolve.side_effect = lambda item: f"target:{item['id']}"
+        playqueue.add(self.item(B))
+        self.assertTrue(transport.advance())
+        self.assertEqual(self.played_ids(), ["b"])
 
 
 class TestNextPrev(Base):

@@ -18,7 +18,6 @@ NEAR_END = 10.0       # a parked item this close to its end starts over
 MAX_FAILS = 3         # consecutive unplayable entries before advance gives up
 
 _lock = threading.RLock()
-_fails = 0
 _dead = 0  # items in a row that failed to load; the tick gives up at MAX_FAILS
 
 
@@ -72,8 +71,7 @@ def _station_started(station: dict) -> bool:
 
 def _start_entry(entry: dict, start: float | None = None) -> bool:
     """Play one queue entry and record it as now playing. A failure is
-    counted, announced and reported as False."""
-    global _fails
+    announced and reported as False."""
     try:
         if entry["kind"] == "station":
             player.play_station(entry["station"])
@@ -84,10 +82,8 @@ def _start_entry(entry: dict, start: float | None = None) -> bool:
             _play_item(entry["item"], start)
             mode = "media"
     except Exception as e:
-        _fails += 1
         notify.notify("sqlch error", f"Skipped {playqueue.entry_title(entry)}: {e}")
         return False
-    _fails = 0
     playqueue.set_mode(mode)
     playqueue.set_now(entry)
     if mode == "radio":
@@ -104,8 +100,7 @@ def start_item(item: dict, *, context: list | None = None, resume: bool = False,
     if resume:
         start = progress.resume_point(progress.get(item.get("source"), item.get("id")))
     _play_item(item, start, mode)
-    global _fails, _dead
-    _fails = 0
+    global _dead
     _dead = 0
     playqueue.set_mode("media")
     if item.get("id"):
@@ -172,9 +167,8 @@ def park() -> None:
 def advance() -> bool:
     """Play the next queue entry, else the next item of the list the playing
     item came from. False when nothing is left or too many entries failed."""
-    global _fails
     finished = playqueue.read()["now"]
-    while _fails < MAX_FAILS:
+    for _ in range(MAX_FAILS):
         entry = playqueue.pop_head()
         if entry is None:
             item = playqueue.next_in_context()
@@ -185,7 +179,6 @@ def advance() -> bool:
             if finished:
                 playqueue.push_history(finished)
             return True
-    _fails = 0
     notify.notify("sqlch", "Queue stopped: too many entries failed to play")
     return False
 
