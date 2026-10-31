@@ -207,9 +207,11 @@ def prev_cmd() -> None:
         player.seek(0.0)
         return
     entry = playqueue.pop_history()
-    if state["now"]:
-        playqueue.add(state["now"], play_next=True)  # next goes forward again
-    _start_entry(entry)
+    if _start_entry(entry):
+        if state["now"]:
+            playqueue.add(state["now"], play_next=True)  # next goes forward again
+    else:
+        playqueue.push_history(entry)
 
 
 @_locked

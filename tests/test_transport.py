@@ -237,6 +237,19 @@ class TestNextPrev(Base):
         self.assertEqual([e["uid"] for e in s["entries"]], [a["uid"]])
         self.assertEqual(s["history"], [])
 
+    def test_media_prev_failure_restores_history_and_keeps_now(self):
+        a, b = self.item(A), self.item(B)
+        self.playing(a)
+        playqueue.push_history(b)
+        self.player.current.return_value = {"type": "item", "item": A}
+        self.player.item_progress.return_value = (2.0, 100.0)
+        self.src.resolve.side_effect = OSError("gone")
+        transport.prev_cmd()
+        s = self.state()
+        self.assertEqual([h["uid"] for h in s["history"]], [b["uid"]])
+        self.assertEqual(s["entries"], [])
+        self.assertEqual(s["now"]["uid"], a["uid"])
+
     def test_media_prev_with_no_history_restarts(self):
         self.playing(self.item(A))
         self.player.current.return_value = {"type": "item", "item": A}
