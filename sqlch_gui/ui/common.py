@@ -160,6 +160,7 @@ def _build_css(colors: dict) -> str:
         padding: 2px 6px;
         border-radius: 7px;
         border: {hairline};
+        box-shadow: {drop};
         margin: 6px;
     }}
     .corner-tag-left {{
@@ -210,6 +211,7 @@ def _build_css(colors: dict) -> str:
         padding: 2px 8px;
         border-radius: 9px;
         border: {hairline};
+        box-shadow: {drop};
         background: none;
         color: {root};
     }}
@@ -224,8 +226,12 @@ def _build_css(colors: dict) -> str:
         min-height: 0;
         border: {hairline};
         border-radius: 8px;
+        box-shadow: {drop};
         background: none;
         color: {root};
+    }}
+    .section-pill:active, .row-btn:active {{
+        box-shadow: {press};
     }}
 
     .list-plate {{
@@ -363,6 +369,7 @@ def _build_css(colors: dict) -> str:
         padding: 2px 7px;
         border-radius: 7px;
         border: {hairline};
+        box-shadow: {drop};
     }}
     .tag-chip:hover {{
         background-color: {stage};
@@ -619,6 +626,7 @@ def _build_css(colors: dict) -> str:
         padding: 6px 10px;
         margin-top: 4px;
         border: {hairline};
+        box-shadow: {drop};
         background-image: none;
         background-color: {wing};
         color: {lyric};
