@@ -43,11 +43,10 @@ def _build_css(colors: dict) -> str:
     a_drop = colors.get('STAFF_A_DROP', '0.55')
     a_inset = colors.get('STAFF_A_INSET_BOT', '0.30')
 
-    # Installed family names: plain "JetBrains Mono" / "Inter" aren't on the
-    # system and silently fell back to DejaVu. Propo is the same design with
-    # proportional advance, for titles that need to fit more per line.
-    mono = '"JetBrainsMono Nerd Font", "JetBrains Mono", monospace'
-    prop = '"JetBrainsMono Nerd Font Propo", "JetBrainsMono Nerd Font", sans-serif'
+    # Josefin Sans everywhere, same as the eww notification panel; the
+    # JetBrains Nerd Font stays as a glyph fallback for icons.
+    mono = '"Josefin Sans", "JetBrainsMono Nerd Font", "DejaVu Sans", sans-serif'
+    prop = mono  # kept as a separate name so a proportional face can be split out again
     # Smallest label size. Below ~10px logical, glyphs land on fractional
     # device pixels at 1.25x scale and strokes look broken; hierarchy below
     # body text comes from caps, weight, spacing and color instead.
@@ -493,12 +492,14 @@ def _build_css(colors: dict) -> str:
         box-shadow: none;
     }}
     .sq-track {{
+        padding: 2px 0 1px 0;
         font-family: {prop};
         font-size: 1.1em;
         font-weight: 700;
         color: {score};
     }}
     .sq-station {{
+        padding: 1px 0 2px 0;
         font-family: {mono};
         font-size: {small};
         font-style: italic;
