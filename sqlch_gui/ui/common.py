@@ -39,7 +39,6 @@ def _build_css(colors: dict) -> str:
     forte = colors.get('FORTE', '#eb6f92')
     sotto = colors.get('SOTTO', '#ea9a97')
 
-    a_outer = colors.get('STAFF_A_OUTER', '0.50')
     a_drop = colors.get('STAFF_A_DROP', '0.55')
     a_inset = colors.get('STAFF_A_INSET_BOT', '0.30')
 
@@ -52,19 +51,23 @@ def _build_css(colors: dict) -> str:
     # body text comes from caps, weight, spacing and color instead.
     small = "0.85em"
 
-    hairline = f"1px solid rgba({score_rgb}, 0.14)"
+    # Art-deco accent, shared with the eww panels: keylines in the theme's
+    # accent (ROOT) instead of neutral score-tinted hairlines.
+    root_rgb = _hex_to_rgb(root)
+    hairline = f"1px solid rgba({root_rgb}, 0.35)"
     # Now Playing card only: the plain hairline barely registers between
     # STAGE/WING fills that sit close in lightness on several palettes.
     # A louder border (not a fill-color change) separates the player from
     # the shell without touching text-bearing surfaces -- see
     # docs/superpowers/specs/2026-09-17-sqlch-gui-depth-pass-design.md for
     # why the fill-contrast route (a layer-contrast ladder) was rejected.
-    edge = f"2px solid rgba({score_rgb}, 0.32)"
+    edge = f"2px solid rgba({root_rgb}, 0.55)"
     rule = f"1px solid rgba({score_rgb}, 0.13)"
     drop = f"0 2px 3px rgba({staff}, {a_drop})"
     recess = f"inset 0 2px 4px rgba({staff}, {a_inset})"
     press = f"inset 0 1px 3px rgba({staff}, 0.6)"
     shell_shadow = f"3px 4px 0 0 rgba({staff}, {a_drop})"
+    shell_keyline = f"inset 0 0 0 4px {wing}, inset 0 0 0 5px rgba({root_rgb}, 0.35)"
 
     shell_noise = (
         "url(\"data:image/svg+xml;utf8,"
@@ -93,8 +96,8 @@ def _build_css(colors: dict) -> str:
         color: {score};
         font-family: {mono};
         border-radius: 18px;
-        border: 1px solid rgba({score_rgb}, {a_outer});
-        box-shadow: {shell_shadow};
+        border: 1px solid {root};
+        box-shadow: {shell_keyline}, {shell_shadow};
         transition: box-shadow 60ms ease-out;
         margin: 2px 10px 10px 2px;
         padding: 2px;
@@ -103,7 +106,7 @@ def _build_css(colors: dict) -> str:
     .sq-tab {{
         padding: 4px 0;
         margin: 0;
-        border-radius: 7px 7px 0 0;
+        border-radius: 9px 9px 0 0;
         color: {lyric};
         background-color: {wing};
         background-image: none;
@@ -113,7 +116,7 @@ def _build_css(colors: dict) -> str:
         font-family: {mono};
         font-size: {small};
         font-weight: 700;
-        letter-spacing: 0.12em;
+        letter-spacing: 0.2em;
     }}
     .sq-tab:hover {{
         background-color: {stage};
@@ -391,7 +394,7 @@ def _build_css(colors: dict) -> str:
         font-family: {mono};
         font-weight: 700;
         font-size: {small};
-        letter-spacing: 0.14em;
+        letter-spacing: 0.3em;
     }}
     .section-rule.gold label {{
         color: {root};
@@ -422,8 +425,8 @@ def _build_css(colors: dict) -> str:
         font-family: {mono};
         font-size: {small};
         font-weight: 700;
-        letter-spacing: 0.24em;
-        color: {rest};
+        letter-spacing: 0.4em;
+        color: {root};
         margin: 4px 4px 0 4px;
     }}
     window.dock-overlay, .dock-overlay {{
@@ -436,8 +439,8 @@ def _build_css(colors: dict) -> str:
         font-family: {mono};
         font-size: {small};
         font-weight: 700;
-        letter-spacing: 0.24em;
-        color: {rest};
+        letter-spacing: 0.4em;
+        color: {root};
     }}
     .dock-close {{
         min-width: 20px;
