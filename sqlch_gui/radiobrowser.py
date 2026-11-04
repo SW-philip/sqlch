@@ -23,6 +23,8 @@ def download_logo(station_id: str, logo_url: str) -> str | None:
     """Download a station graphic icon from an external address provider. Returns local path."""
     if not logo_url or not logo_url.startswith("http"):
         return None
+    if not station_id or not all(c.isalnum() or c in "_-" for c in station_id):
+        return None
     ext = "png"
     if ".jpg" in logo_url.lower() or ".jpeg" in logo_url.lower():
         ext = "jpg"

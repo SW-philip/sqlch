@@ -8,7 +8,7 @@ from typing import Any
 
 import requests
 
-from sqlch.core.paths import cache_dir
+from sqlch.core.paths import cache_dir, write_private
 
 CACHE_TTL = 60 * 60 * 24 * 30  # 30 days
 
@@ -82,7 +82,7 @@ def _get_token() -> str | None:
     r.raise_for_status()
     tok = r.json()
     tok['expires_at'] = time.time() + tok['expires_in'] - 30
-    _token_cache().write_text(json.dumps(tok))
+    write_private(_token_cache(), json.dumps(tok))
     return tok['access_token']
 
 

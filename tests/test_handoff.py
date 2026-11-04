@@ -65,7 +65,7 @@ class TestPlayerHandoff(unittest.TestCase):
              mock.patch.object(player.handoff, "play") as play:
             player.play_target(self.t, self.item)
         spawn.assert_not_called()
-        play.assert_called_once_with("spotify", "spotify:track:T1")
+        play.assert_called_once_with("spotify", "spotify:track:T1", None)
         cur = player.current()
         self.assertEqual((cur["handoff"], cur["item"]["art"]), ("spotify", "/c/a.jpg"))
 
@@ -91,6 +91,121 @@ class TestPlayerHandoff(unittest.TestCase):
             info = player.now_playing_info()
         self.assertEqual((info["status"], info["station"], info["track"]),
                          ("playing", "SPOTIFY", "S"))
+
+
+class TestFollowHandoff(unittest.TestCase):
+    def setUp(self):
+        player._current = {"type": "item", "handoff": "spotify",
+                           "item": {"source": "spotify", "id": "T1", "title": "S"}}
+        self.addCleanup(setattr, player, "_current", None)
+        src = mock.Mock()
+        src.resolve.return_value = Target("spotify:track:T2", False,
+                                          {"title": "Next", "artist": "A", "album": "Al",
+                                           "art": "/c/n.jpg"}, handoff="spotify")
+        p = mock.patch.dict("sqlch.sources.REGISTRY", {"spotify": src})
+        p.start()
+        self.addCleanup(p.stop)
+        self.src = src
+
+    def test_autoplayed_track_replaces_the_item(self):
+        with mock.patch.object(player.handoff, "track_uri", return_value="spotify:track:T2"):
+            cur = player.current()
+        self.assertEqual((cur["item"]["id"], cur["item"]["title"], cur["item"]["artist"],
+                          cur["item"]["art"], cur["handoff"]),
+                         ("T2", "Next", "A", "/c/n.jpg", "spotify"))
+
+    def test_same_track_does_not_resolve(self):
+        with mock.patch.object(player.handoff, "track_uri", return_value="spotify:track:T1"):
+            player.current()
+        self.src.resolve.assert_not_called()
+
+    def test_failed_lookup_keeps_item_and_is_not_retried(self):
+        self.src.resolve.side_effect = OSError("offline")
+        with mock.patch.object(player.handoff, "track_uri", return_value="spotify:track:T2"):
+            self.assertEqual(player.current()["item"]["id"], "T1")
+            player.current()
+        self.assertEqual(self.src.resolve.call_count, 1)
+
+    def test_unknown_uri_is_ignored(self):
+        with mock.patch.object(player.handoff, "track_uri", return_value=None):
+            self.assertEqual(player.current()["item"]["id"], "T1")
+
+
+class TestTrackUri(unittest.TestCase):
+    def test_mpris_parses_spotify_trackid(self):
+        h = handoff.Mpris("spotify", "spotify")
+        with mock.patch.object(handoff, "_playerctl",
+                               return_value=cp(0, "/com/spotify/track/4uLU6hMCjMI75M1A2tKUQC\n")):
+            self.assertEqual(h.track_uri(), "spotify:track:4uLU6hMCjMI75M1A2tKUQC")
+        with mock.patch.object(handoff, "_playerctl", return_value=cp(1)):
+            self.assertIsNone(h.track_uri())
+
+
+class TestHandoffState(unittest.TestCase):
+    def test_mpris_status_words(self):
+        h = handoff.Mpris("spotify", "spotify")
+        for out, want in (("Playing\n", "playing"), ("Paused\n", "paused"),
+                          ("Stopped\n", "stopped"), ("wat\n", None), ("", None)):
+            with mock.patch.object(handoff, "_playerctl", return_value=cp(0, out)):
+                self.assertEqual(h.state(), want, out)
+
+    def test_mpris_nonzero_is_unknown(self):
+        with mock.patch.object(handoff, "_playerctl", return_value=cp(1, "Playing\n")):
+            self.assertIsNone(handoff.Mpris("spotify", "spotify").state())
+
+    def test_librespot_status(self):
+        h = handoff.Librespot()
+        trk = {"uri": "spotify:track:T1"}
+        for status, want in (({"stopped": True, "track": trk}, "stopped"),
+                             ({"stopped": False, "paused": True, "track": trk}, "paused"),
+                             ({"stopped": False, "paused": False, "track": trk}, "playing"),
+                             ({"track": trk}, "playing"),
+                             ({}, None), (None, None)):
+            with mock.patch.object(h, "_call", return_value=status):
+                self.assertEqual(h.state(), want, status)
+
+    def test_librespot_down_is_unknown(self):
+        h = handoff.Librespot()
+        with mock.patch.object(h, "_call", side_effect=OSError("down")):
+            self.assertIsNone(h.state())
+
+    def test_preferred_delegates_to_active(self):
+        a, b = mock.Mock(), mock.Mock()
+        a.state.return_value, b.state.return_value = "paused", "playing"
+        pref = handoff.Preferred(a, b)
+        self.assertEqual(pref.state(), "playing")
+        pref.active = a
+        self.assertEqual(pref.state(), "paused")
+
+    def test_module_state_swallows_errors(self):
+        for exc in (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+            h = mock.Mock()
+            h.state.side_effect = exc("x")
+            with mock.patch.dict(handoff.HANDLERS, {"t": h}):
+                self.assertIsNone(handoff.state("t"))
+        h.state.side_effect = None
+        h.state.return_value = "stopped"
+        with mock.patch.dict(handoff.HANDLERS, {"t": h}):
+            self.assertEqual(handoff.state("t"), "stopped")
+
+
+    def test_librespot_snapshot_fetches_status_once(self):
+        h = handoff.Librespot()
+        status = {"paused": False, "track": {"uri": "spotify:track:T1",
+                                            "position": 5000, "duration": 200000}}
+        with mock.patch.object(h, "_call", return_value=status) as call:
+            self.assertEqual(h.snapshot(), (5.0, 200.0, "playing"))
+        call.assert_called_once_with("/status")
+
+    def test_librespot_snapshot_down_is_unknown(self):
+        h = handoff.Librespot()
+        with mock.patch.object(h, "_call", side_effect=OSError("down")):
+            self.assertEqual(h.snapshot(), (None, None, None))
+
+    def test_preferred_snapshot_falls_back_to_progress_and_state(self):
+        a = mock.Mock(spec=["progress", "state"])
+        a.progress.return_value, a.state.return_value = (1.0, 2.0), "paused"
+        self.assertEqual(handoff.Preferred(a, a).snapshot(), (1.0, 2.0, "paused"))
 
 
 if __name__ == "__main__":

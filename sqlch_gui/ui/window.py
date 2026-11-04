@@ -13,6 +13,8 @@ from .header import next_connected
 from .now_playing import NowPlayingPanel
 from .station_list import StationListPanel
 from .discover import DiscoverPanel
+from .radio_pane import RadioPane
+from .playlist_pane import PlaylistPane
 from .dock_manager import DockManager
 from .overlay_card import OverlayCard
 from .source_pane import SourcePane
@@ -73,6 +75,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         self.now_playing = NowPlayingPanel(self)
         self.station_list = StationListPanel(self)
         self.discover = DiscoverPanel(self)
+        self.radio = RadioPane(self.station_list, self.discover)
 
         self.card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.card.add_css_class("popup-window")
@@ -86,10 +89,11 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
             on_drag=lambda r: self.docks.np_drag(r),
             on_drop=lambda r: self.docks.np_drop(r),
             on_drag_start=lambda: self.docks.np_drag_started(),
+            on_double_click=lambda: self.docks.toggle_np_collapsed(),
             exclude=(self.now_playing.nav_column,),
             sized=False)
 
-        panels = {"library": self.station_list, "discover": self.discover}
+        panels = {"radio": self.radio, "playlist": lambda: PlaylistPane(self)}
         titles = {}
         for name, src in SOURCES.items():
             panels[name] = lambda s=src: SourcePane(self, s)
@@ -101,8 +105,8 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         self.docks = DockManager(
             self, panels=panels, titles=titles,
             nav=self.now_playing.nav_column,
-            on_shown={"library": self.station_list.on_shown, "discover": lambda: None},
-            on_hidden={"library": self.station_list.abort_probes, "discover": lambda: None},
+            on_shown={"radio": self.radio.on_shown},
+            on_hidden={"radio": self.radio.on_hidden},
         )
         self.now_playing.connect("nav-toggled", lambda _p, name: self.docks.toggle(name))
         self.connect("map", lambda _w: GLib.idle_add(self.docks.show_saved))
@@ -157,7 +161,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
         self._pal_reload_pending = False
         load_custom_css()
         self.station_list.refresh()  # group headers bake palette hex into markup
-        self.now_playing.vol_meter.queue_draw()  # VU meter re-reads palette on next draw
+        self.now_playing.vol_meter.queue_draw()  # volume ramp re-reads palette on next draw
         return False
 
     def on_close_request(self, win):
@@ -167,6 +171,7 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
     def _daemon_monitor_loop(self):
         import time
         from .. import metadata
+        tick = 0
         while self._keep_running:
             resp = daemon.send({"cmd": "status"})
             icy = metadata.get_icy_track()
@@ -179,7 +184,16 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
                 self._apply_daemon_state,
                 resp, icy, vol, muted, bitrate, fmt, buffer
             )
+            tick += 1
+            if tick % 5 == 0:
+                GLib.idle_add(self._show_notices, daemon.send({"cmd": "drain_notices"}))
             time.sleep(1.0)
+
+    def _show_notices(self, resp) -> bool:
+        if self._keep_running and resp and resp.get("ok"):
+            for text in resp.get("notices") or []:
+                self.now_playing.show_toast(text)
+        return False
 
     def _apply_daemon_state(self, resp, icy, vol, muted, bitrate, fmt, buffer) -> bool:
         if not self._keep_running:

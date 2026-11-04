@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from sqlch.core.paths import cache_dir
@@ -15,7 +15,7 @@ LABEL = "Jellyfin"
 HINT = ("Create an API key in Jellyfin (Dashboard > API Keys) and put it in "
         "/run/secrets/jellyfin_api_key, or set sources.jellyfin.token_file")
 
-DEFAULT_SERVER = "http://desktop:8096"
+DEFAULT_SERVER = "https://swphil.tail6e0780.ts.net"
 DEFAULT_TOKEN_FILE = "/run/secrets/jellyfin_api_key"
 TIMEOUT = 8
 SEARCH_LIMIT = 50
@@ -32,8 +32,21 @@ def _cfg() -> dict:
     return cfg if isinstance(cfg, dict) else {}
 
 
+_LOOPBACK = {"localhost", "127.0.0.1", "::1"}
+
+
 def _server() -> str:
-    return (_cfg().get("server") or DEFAULT_SERVER).rstrip("/")
+    server = (_cfg().get("server") or DEFAULT_SERVER).rstrip("/")
+    u = urlparse(server)
+    if u.scheme not in ("http", "https"):
+        raise ValueError("jellyfin server must be an http(s) url")
+    # the API key travels in every request; keep it off the wire in clear text
+    # unless the server is local or the user opted in
+    if u.scheme == "http" and u.hostname not in _LOOPBACK and not _cfg().get("allow_http"):
+        raise ValueError(
+            f"jellyfin server {server} is plain http; use https or set "
+            'sources.jellyfin.allow_http = true (the API key is sent unencrypted)')
+    return server
 
 
 def _token() -> str | None:
@@ -105,22 +118,33 @@ def _to_item(jf: dict) -> dict:
     return make_item(
         NAME, jf["Id"], title, kind=kind, artist=artist, album=album,
         duration=_duration(jf),
-        path=f"{t}:{jf['Id']}" if kind == "folder" else None)
+        path=f"{t}:{jf['Id']}" if kind == "folder" else None,
+        description=jf.get("Overview") or None)
 
 
 def _items(params: dict) -> list[dict]:
-    data = _get("/Items", {"userId": _user_id(), **params})
+    data = _get("/Items", {"userId": _user_id(), "Fields": "Overview", **params})
     return [_to_item(jf) for jf in data.get("Items", [])]
 
 
+def sections() -> list[dict]:
+    return [{"id": "libraries", "title": "LIBRARIES"},
+            {"id": "playlists", "title": "PLAYLISTS"}]
+
+
 def browse(path: str | None = None) -> list[dict]:
-    if not path:
+    if path == "section:playlists":
+        return _items({"IncludeItemTypes": "Playlist", "Recursive": "true",
+                       "SortBy": "SortName"})
+    if not path or path == "section:libraries":
         data = _get("/UserViews", {"userId": _user_id()})
         return [_to_item({**jf, "Type": jf.get("Type") or "CollectionFolder"})
                 for jf in data.get("Items", [])]
     kind, _, jid = path.partition(":")
     if not jid:
         raise ValueError("bad jellyfin path")
+    if kind == "Playlist":
+        return _items({"parentId": jid})
     if kind == "MusicArtist":
         return _items({"AlbumArtistIds": jid, "IncludeItemTypes": "MusicAlbum",
                        "Recursive": "true", "SortBy": "ProductionYear,SortName"})

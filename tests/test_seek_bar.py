@@ -50,5 +50,30 @@ class TestSeekBar(unittest.TestCase):
         self.assertFalse(bar.get_visible())
 
 
+    def test_skip_buttons_only_with_a_queue(self):
+        bar = SeekBar()
+        bar.set_state(10, 100)
+        self.assertFalse(bar._next.get_visible())
+        bar.set_state(10, 100, True)
+        self.assertTrue(bar._next.get_visible())
+
+    def test_skip_without_duration_shows_only_skip(self):
+        bar = SeekBar()
+        bar.set_state(None, None, True)
+        self.assertTrue(bar.get_visible())
+        self.assertTrue(bar._prev.get_visible())
+        self.assertFalse(bar._scale.get_visible())
+        self.assertFalse(bar._fwd.get_visible())
+
+    def test_buttons_emit(self):
+        bar = SeekBar()
+        got = []
+        bar.connect("seek-relative", lambda _b, d: got.append(d))
+        bar.connect("skip", lambda _b, f: got.append(f))
+        for b in (bar._back, bar._fwd, bar._prev, bar._next):
+            b.emit("clicked")
+        self.assertEqual(got, [-15.0, 30.0, False, True])
+
+
 if __name__ == "__main__":
     unittest.main()

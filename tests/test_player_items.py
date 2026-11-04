@@ -22,6 +22,11 @@ class TestMpvArgs(unittest.TestCase):
         self.assertNotIn("--wayland-app-id=sqlch-video", a)
         self.assertEqual(a[-1], "URL")
 
+    def test_start_offset_only_when_given(self):
+        self.assertIn("--start=300.5", self._args(start=300.5))
+        self.assertFalse([x for x in self._args() if x.startswith("--start")])
+        self.assertFalse([x for x in self._args(start=0) if x.startswith("--start")])
+
     def test_mpris_script_inserted_at_index_two(self):
         self.assertEqual(self._args(mpris="/p/mpris.so")[2], "--script=/p/mpris.so")
 
@@ -74,6 +79,119 @@ class TestPlayTarget(unittest.TestCase):
             self.assertEqual(player.item_progress(), (12.5, 200.0))
 
 
+class TestPlaybackEnded(unittest.TestCase):
+    def test_mpv_parked_at_eof(self):
+        with mock.patch.object(player, "_current", {"type": "item"}), \
+             mock.patch.object(player, "mpv_get", return_value=True) as get:
+            self.assertTrue(player.playback_ended())
+        get.assert_called_once_with("eof-reached")
+
+    def test_mpv_still_playing_or_not_loaded(self):
+        for val in (False, None):
+            with mock.patch.object(player, "_current", {"type": "item"}), \
+                 mock.patch.object(player, "mpv_get", return_value=val):
+                self.assertFalse(player.playback_ended())
+
+    def ended(self, prog=(None, None), state=None, seen=False, cfg=None):
+        cur = {"type": "item", "handoff": "spotify"}
+        with mock.patch.object(player, "_current", cur), \
+             mock.patch.object(player, "_handoff_seen_playing", seen), \
+             mock.patch("sqlch.sources.source_config", return_value=cfg or {}), \
+             mock.patch.object(player.handoff, "snapshot", return_value=(*prog, state)):
+            return player.playback_ended()
+
+    def test_handoff_ends_at_the_last_second(self):
+        for prog, ended in (((299.5, 300.0), True), ((120.0, 300.0), False),
+                            ((None, None), False), ((10.0, 0), False)):
+            self.assertEqual(self.ended(prog), ended, prog)
+
+    def test_stopped_after_playing_is_the_end(self):
+        self.assertTrue(self.ended(state="stopped", seen=True))
+
+    def test_stopped_before_playing_is_not(self):
+        self.assertFalse(self.ended(state="stopped", seen=False))
+
+    def test_paused_never_ends(self):
+        self.assertFalse(self.ended(state="paused", seen=True))
+
+    def test_seeing_it_play_arms_the_stopped_rule(self):
+        cur = {"type": "item", "handoff": "spotify"}
+        states = iter(["stopped", "playing", "stopped"])
+        with mock.patch.object(player, "_current", cur), \
+             mock.patch.object(player, "_handoff_seen_playing", False), \
+             mock.patch("sqlch.sources.source_config", return_value={}), \
+             mock.patch.object(player.handoff, "snapshot",
+                               side_effect=lambda n: (None, None, next(states))):
+            self.assertFalse(player.playback_ended())
+            self.assertFalse(player.playback_ended())
+            self.assertTrue(player.playback_ended())
+
+    def test_progress_past_zero_counts_as_seen_playing(self):
+        cur = {"type": "item", "handoff": "spotify"}
+        progs = iter([(5.0, 200.0), (None, None)])
+        states = iter(["paused", "stopped"])
+        with mock.patch.object(player, "_current", cur), \
+             mock.patch.object(player, "_handoff_seen_playing", False), \
+             mock.patch("sqlch.sources.source_config", return_value={}), \
+             mock.patch.object(player.handoff, "snapshot",
+                               side_effect=lambda n: (*next(progs), next(states))):
+            self.assertFalse(player.playback_ended())
+            self.assertTrue(player.playback_ended())
+
+    def test_toggle_off_leaves_the_player_alone(self):
+        cfg = {"advance_queue": False}
+        self.assertFalse(self.ended(state="stopped", seen=True, cfg=cfg))
+        self.assertFalse(self.ended((299.5, 300.0), cfg=cfg))
+
+    def test_non_bool_toggle_falls_back_to_on(self):
+        for val in ("false", 0, None):
+            self.assertTrue(self.ended(state="stopped", seen=True,
+                                       cfg={"advance_queue": val}), val)
+
+    def test_new_handoff_play_resets_the_seen_flag(self):
+        target = Target(url="spotify:track:T", handoff="spotify")
+        with mock.patch.object(player, "_handoff_seen_playing", True), \
+             mock.patch.object(player, "_current", None), \
+             mock.patch.object(player, "stop"), \
+             mock.patch.object(player.notify, "notify"), \
+             mock.patch.object(player.handoff, "play"):
+            player.play_target(target, {"title": "t"})
+            self.assertFalse(player._handoff_seen_playing)
+
+
+class TestPlaybackFailed(unittest.TestCase):
+    def check(self, cur, started, idle, now=1000.0):
+        with mock.patch.object(player, "_current", cur), \
+             mock.patch.object(player, "_item_started", started), \
+             mock.patch.object(player.time, "monotonic", return_value=now), \
+             mock.patch.object(player, "mpv_get", return_value=idle):
+            return player.playback_failed()
+
+    def test_idle_mpv_after_the_grace_period(self):
+        self.assertTrue(self.check({"type": "item"}, 990.0, True))
+
+    def test_not_while_still_loading(self):
+        self.assertFalse(self.check({"type": "item"}, 999.0, True))
+
+    def test_not_when_mpv_is_busy_or_unreachable(self):
+        for idle in (False, None):
+            self.assertFalse(self.check({"type": "item"}, 990.0, idle))
+
+    def test_not_without_start_data_a_station_or_a_handoff(self):
+        self.assertFalse(self.check({"type": "item"}, None, True))
+        self.assertFalse(self.check({"type": "station"}, 990.0, True))
+        self.assertFalse(self.check({"type": "item", "handoff": "spotify"}, 990.0, True))
+        self.assertFalse(self.check(None, 990.0, True))
+
+    def test_play_target_records_the_start_time(self):
+        target = Target("/m/a.mp3")
+        with mock.patch.object(player, "_spawn_mpv"), mock.patch.object(player, "stop"), \
+             mock.patch.object(player.notify, "notify"), \
+             mock.patch.object(player.time, "monotonic", return_value=42.0):
+            player.play_target(target, {"id": "a"})
+        self.assertEqual(player._item_started, 42.0)
+
+
 class TestDaemonItems(unittest.TestCase):
     def setUp(self):
         self.src = mock.Mock()
@@ -87,7 +205,17 @@ class TestDaemonItems(unittest.TestCase):
         with mock.patch.object(player, "play_target") as play:
             resp = daemon._handle({"cmd": "play_item", "item": item})
         self.assertEqual(resp, {"ok": True})
-        play.assert_called_once_with(Target("/m/a.mp3"), item)
+        play.assert_called_once_with(Target("/m/a.mp3"), item, start=None)
+
+    def test_play_item_passes_a_known_mode_and_refuses_others(self):
+        self.src.PLAY_MODES = (("Play album", "album"),)
+        item = {"source": "fake", "id": "1", "title": "T"}
+        with mock.patch.object(player, "play_target"):
+            self.assertTrue(daemon._handle(
+                {"cmd": "play_item", "item": item, "mode": "album"})["ok"])
+            self.src.resolve.assert_called_once_with(item, mode="album")
+            self.assertFalse(daemon._handle(
+                {"cmd": "play_item", "item": item, "mode": "bogus"})["ok"])
 
     def test_play_item_errors(self):
         self.assertFalse(daemon._handle({"cmd": "play_item"})["ok"])
@@ -117,6 +245,27 @@ class TestDaemonItems(unittest.TestCase):
                                    return_value={"type": "station", "item": {}}):
                 r = daemon._handle({"cmd": "status"})
             self.assertNotIn("position", r)
+
+
+class TestItemTransport(unittest.TestCase):
+    def test_item_seek_relative_clamps_to_item(self):
+        with mock.patch.object(player, "_current", {"type": "item", "item": {}}), \
+             mock.patch.object(player, "item_progress", return_value=(10.0, 100.0)), \
+             mock.patch.object(player, "seek") as seek:
+            player.seek_relative(-15)
+            player.seek_relative(30)
+        self.assertEqual([c.args[0] for c in seek.call_args_list], [0.0, 40.0])
+
+    def test_next_skips_the_handoff_track_not_the_station(self):
+        cur = {"type": "item", "item": {"id": "T"}, "handoff": "spotify"}
+        with mock.patch.object(player, "_current", cur), \
+             mock.patch.object(player.handoff, "skip") as skip, \
+             mock.patch.object(player, "play_station") as play:
+            self.assertTrue(daemon._handle({"cmd": "next"})["ok"])
+            self.assertTrue(daemon._handle({"cmd": "prev"})["ok"])
+        self.assertEqual(skip.call_args_list,
+                         [mock.call("spotify", True), mock.call("spotify", False)])
+        play.assert_not_called()
 
 
 if __name__ == "__main__":

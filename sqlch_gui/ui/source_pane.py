@@ -1,13 +1,29 @@
 """Generic dock pane for a media source: browse folders, search, play items."""
 
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
-from gi.repository import Gtk, GLib
+from gi.repository import Gdk, Gtk, GLib
 
-from sqlch.sources import safe_available
+from sqlch.core import follows, progress as watch_progress
+from sqlch.sources import safe_available, sections_for
 
 from .. import daemon
-from .timefmt import format_duration
+from . import dnd
+from .banner import RibbonBanner
+from .grouping import LABELS, group, next_mode, sectioned
+from .timefmt import format_date, format_duration
+from .tooltips import item_tooltip
+
+_THUMBS = ThreadPoolExecutor(max_workers=4, thread_name_prefix="thumb")
+SEARCH = "search"
+# Super+click as well as right-click opens a row's menu (Meta is how some
+# compositors report Super).
+_MENU_MODS = Gdk.ModifierType.SUPER_MASK | Gdk.ModifierType.META_MASK
+
+
+def _is_search(path):
+    return isinstance(path, tuple) and path[:1] == (SEARCH,)
 
 
 def _thread_run(work, done):
@@ -22,7 +38,8 @@ def _thread_run(work, done):
 
 
 class SourcePane(Gtk.Box):
-    def __init__(self, parent_window, source, run_async=_thread_run, play=None):
+    def __init__(self, parent_window, source, run_async=_thread_run, play=None,
+                 store=None, send=None, watch=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.set_margin_start(6)
         self.set_margin_end(6)
@@ -33,12 +50,28 @@ class SourcePane(Gtk.Box):
         self._run = run_async
         self._play = play or self._daemon_play
         self._items: list[dict] = []
-        self._stack: list[tuple] = []
-        self._searching = False
+        self._shown: list[dict] = []
+        self._stack: list[tuple] = []  # (path, title); a search is a (SEARCH, query) path
         self._gen = 0
         self._loaded = False
         self._pending = None
         self._play_error = False
+        self._store = store or follows
+        self._send = send or (lambda msg: daemon.send(msg))
+        self._sections = sections_for(source)
+        self._section = self._sections[0]["id"]
+        self._fav_ids: set = set()
+        self._followed: set = set()
+        self._watch = watch or watch_progress
+        self._progress: dict = {}
+        self._row_refs: dict = {}
+        self._fav_btns: dict[str, list[Gtk.Button]] = {}
+        self._follow_btns: dict[str, list[Gtk.Button]] = {}
+        self._oldest_first = False
+        self._groupings = tuple(getattr(source, "GROUPINGS", ()) or ())
+        self._group_mode = self._groupings[0] if self._groupings else None
+        self._collapsed: set = set()
+        self._group_rows: list = []
 
         search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         self.entry = Gtk.Entry(placeholder_text=f"Search {source.NAME}...")
@@ -50,7 +83,31 @@ class SourcePane(Gtk.Box):
         btn_go.connect("clicked", lambda b: self._search(self.entry.get_text().strip()))
         search_box.append(self.entry)
         search_box.append(btn_go)
+        self.btn_order = None
+        if getattr(source, "HAS_DATES", False):
+            self.btn_order = Gtk.ToggleButton(label="Oldest first")
+            self.btn_order.add_css_class("section-pill")
+            self.btn_order.connect("toggled", self._on_order_toggled)
+            search_box.append(self.btn_order)
+        self.btn_group = None
+        if self._groupings:
+            self.btn_group = Gtk.Button(label=LABELS.get(self._group_mode, self._group_mode))
+            self.btn_group.add_css_class("section-pill")
+            self.btn_group.set_tooltip_text("Group by")
+            self.btn_group.connect("clicked", self._on_group_clicked)
+            search_box.append(self.btn_group)
         self.append(search_box)
+
+        self.section_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self._pills: dict[str, Gtk.Button] = {}
+        for sec in self._sections:
+            pill = Gtk.Button(label=sec["title"])
+            pill.add_css_class("section-pill")
+            pill.connect("clicked", lambda _b, sid=sec["id"]: self._select_section(sid))
+            self.section_row.append(pill)
+            self._pills[sec["id"]] = pill
+        self._mark_pills()
+        self.append(self.section_row)
 
         self.nav = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.nav.set_visible(False)
@@ -81,9 +138,12 @@ class SourcePane(Gtk.Box):
         scroll.set_child(self.list)
         self.append(scroll)
 
-    @staticmethod
-    def _daemon_play(item):
-        resp = daemon.send({"cmd": "play_item", "item": item})
+    def _daemon_play(self, item, resume=False, mode=None):
+        context = self._shown  # as listed, so next follows what the user sees
+        msg = {"cmd": "play_item", "item": item, "resume": resume, "context": context}
+        if mode:
+            msg["mode"] = mode
+        resp = self._send(msg)
         if resp is None:
             raise RuntimeError("daemon not running")
         if not resp.get("ok", True):
@@ -93,9 +153,12 @@ class SourcePane(Gtk.Box):
         if self._loaded:
             if self._pending is not None:
                 self._load(self._pending)
+            else:
+                self._refresh_progress()
             return
         self._loaded = True
         if not safe_available(self.source):
+            self.section_row.set_visible(False)
             self._set_status(self.source.HINT)
             return
         self._reload()
@@ -109,22 +172,65 @@ class SourcePane(Gtk.Box):
         self.status.set_visible(bool(text))
 
     def _current_path(self):
-        return self._stack[-1][0] if self._stack else None
+        if self._stack:
+            return self._stack[-1][0]
+        if self._section == "browse":
+            return None
+        return f"section:{self._section}"
+
+    def _mark_pills(self):
+        for sid, pill in self._pills.items():
+            if sid == self._section:
+                pill.add_css_class("active")
+            else:
+                pill.remove_css_class("active")
+
+    @property
+    def _searching(self):
+        return bool(self._stack) and _is_search(self._stack[-1][0])
+
+    def _select_section(self, sid):
+        self._section = sid
+        self._stack = []
+        self.entry.set_text("")
+        self._mark_pills()
+        self._reload()
+
+    def _browse(self, path):
+        if _is_search(path):
+            return self.source.search(path[1])
+        if path == "section:favorites":
+            return self._store.list_favorites(self.source.NAME)
+        return self.source.browse(path)
 
     def _reload(self):
-        self._load(lambda: self.source.browse(self._current_path()))
+        self._load(lambda: self._browse(self._current_path()))
+
+    def _with_marks(self, work):
+        """Read star/follow state and any source warning in the worker; _show
+        applies them on the main thread."""
+        def run():
+            result = work()
+            warn = getattr(self.source, "last_warning", None)
+            return (result, set(self._store.favorite_ids(self.source.NAME)),
+                    set(self._store.followed_ids()) | set(self._store.followed_feeds()),
+                    warn() if warn else None)
+        return run
 
     def _load(self, work):
         self._gen += 1
         gen = self._gen
         self._pending = work
         self._update_nav()
-        self._run(work, lambda result, err: self._show(gen, result, err))
+        self._run(self._with_marks(work), lambda result, err: self._show(gen, result, err))
 
     def _show(self, gen, result, err):
         if gen != self._gen:
             return False
         self._pending = None
+        warning = None
+        if err is None:
+            result, self._fav_ids, self._followed, warning = result
         while child := self.list.get_first_child():
             self.list.remove(child)
         if err is not None:
@@ -132,51 +238,373 @@ class SourcePane(Gtk.Box):
             self._set_status(f"Couldn't load: {err}")
             return False
         self._items = list(result or [])
-        for item in self._items:
-            self.list.append(self._build_row(item))
-        self._set_status("" if self._items else "Nothing here")
+        self._progress = self._watch.read_all()
+        self._collapsed = set()
+        self._fill()
+        self._set_status(warning or ("" if self._items else "Nothing here"))
         return False
 
-    def _update_nav(self):
-        self.nav.set_visible(bool(self._stack) or self._searching)
-        if self._searching:
-            self.crumb.set_text("Search results")
-        else:
-            self.crumb.set_text(" / ".join(t for _, t in self._stack))
+    def _fill(self):
+        while child := self.list.get_first_child():
+            self.list.remove(child)
+        self._row_refs = {}
+        self._fav_btns = {}
+        self._follow_btns = {}
+        self._group_rows = []
+        self._shown = []
+        grouped = self._grouped()
+        if self.btn_group is not None:
+            self.btn_group.set_visible(grouped)
+        if self.btn_order is not None:
+            self.btn_order.set_visible(not grouped)
+        if grouped:
+            providers = getattr(self.source, "PROVIDERS", None) or {}
+            self._fill_rows(group(self._items, self._group_mode, providers))
+            return
+        items = self._items
+        if self._oldest_first:
+            # Stable: undated rows (folders) keep their place after the dated ones.
+            items = sorted(items, key=lambda i: (i.get("date") is None, i.get("date") or 0))
+        rows = sectioned(items)
+        if rows:
+            self._fill_rows(rows)
+            return
+        for item in items:
+            self._shown_add(item)
+            self.list.append(self._build_row(item))
 
-    def _build_row(self, item):
+    def _shown_add(self, item):
+        if item.get("kind") != "folder":
+            self._shown.append(item)
+
+    def _grouped(self):
+        return bool(self._groupings) and (
+            self._searching or (not self._stack and self._section != "favorites"))
+
+    def _fill_rows(self, rows):
+        path: list[str] = []
+        for kind, value, extra in rows:
+            if kind == "header":
+                del path[extra:]
+                path.append(value)
+                key = "/".join(path)
+                banner = RibbonBanner(value, gold=extra == 0, collapsible=True,
+                                      collapsed=key in self._collapsed,
+                                      on_toggle=lambda c, k=key: self._toggle_group(k, c))
+                if extra:
+                    banner.set_margin_start(10 * extra)
+                self.list.append(banner)
+                self._group_rows.append((banner, extra, key))
+            else:
+                self._shown_add(value)
+                row = self._build_row(value, tag=extra)
+                self.list.append(row)
+                self._group_rows.append((row, None, None))
+        self._apply_collapse()
+
+    def _toggle_group(self, key, collapsed):
+        if collapsed:
+            self._collapsed.add(key)
+        else:
+            self._collapsed.discard(key)
+        self._apply_collapse()
+
+    def _apply_collapse(self):
+        hidden_below = None  # depth of the collapsed header hiding what follows
+        for widget, depth, key in self._group_rows:
+            if depth is not None and hidden_below is not None and depth <= hidden_below:
+                hidden_below = None
+            (widget.get_parent() or widget).set_visible(hidden_below is None)
+            if depth is not None and hidden_below is None and key in self._collapsed:
+                hidden_below = depth
+
+    def _on_group_clicked(self, button):
+        self._group_mode = next_mode(self._group_mode, self._groupings)
+        button.set_label(LABELS.get(self._group_mode, self._group_mode))
+        self._fill()
+
+    def _on_order_toggled(self, button):
+        self._oldest_first = button.get_active()
+        self._fill()
+
+    def _refresh_progress(self):
+        self._progress = self._watch.read_all()
+        for key in self._row_refs:
+            self._apply_progress(key)
+
+    def _apply_progress(self, key):
+        refs = self._row_refs.get(key)
+        if not refs:
+            return
+        row = self._progress.get(key)
+        row = row if isinstance(row, dict) else None
+        watched = bool(row and row.get("watched"))
+        frac = watch_progress.fraction(row)
+        refs["banner"].set_visible(watched)
+        refs["bar"].set_fraction(frac)
+        refs["bar"].set_visible(not watched and frac > 0)
+        pos = watch_progress.resume_point(row)
+        if watched:
+            note = "Watched"
+        elif pos is not None:
+            note = f"{format_duration(pos)} of {format_duration(row.get('duration'))} watched"
+        else:
+            note = ""
+        refs["note"].set_text(note)
+        refs["note"].set_visible(bool(note))
+        refs["toggle"].set_label("✓" if watched else "○")
+
+    def _update_nav(self):
+        self.nav.set_visible(bool(self._stack))
+        self.crumb.set_text(" / ".join(t for _, t in self._stack))
+
+    def _build_row(self, item, tag=None):
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         row.add_css_class("station-row")
+        is_video = item.get("kind") == "video"
+        key = watch_progress.key(item.get("source", ""), item.get("id", ""))
+        if is_video:
+            thumb, banner = self._build_thumb(item)
+            row.append(thumb)
         body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         body.set_hexpand(True)
         title = Gtk.Label(label=item.get("title", ""), xalign=0.0)
         title.set_ellipsize(3)
         body.append(title)
-        sub_text = " · ".join(x for x in (item.get("artist"), item.get("album")) if x)
+        sub_text = " · ".join(x for x in (item.get("artist"), item.get("album"),
+                                          format_date(item.get("date")), tag) if x)
         sub = Gtk.Label(label=sub_text, xalign=0.0)
         sub.add_css_class("station-live")
         sub.set_ellipsize(3)
         sub.set_visible(bool(sub_text))
         body.append(sub)
+        if is_video:
+            note = Gtk.Label(xalign=0.0)
+            note.add_css_class("station-live")
+            note.set_visible(False)
+            body.append(note)
+            bar = Gtk.ProgressBar()
+            bar.add_css_class("watch-bar")
+            bar.set_visible(False)
+            body.append(bar)
         row.append(body)
         right = "›" if item.get("kind") == "folder" else format_duration(item.get("duration"))
         end = Gtk.Label(label=right, xalign=1.0)
         end.add_css_class("meta-genre")
         end.set_valign(Gtk.Align.CENTER)
         row.append(end)
+        star = Gtk.Button(label="★" if item.get("id") in self._fav_ids else "☆")
+        star.add_css_class("row-btn")
+        star.set_valign(Gtk.Align.CENTER)
+        star.connect("clicked", lambda b, it=item: self._toggle_favorite(it, b))
+        row.append(star)
+        self._fav_btns.setdefault(item.get("id"), []).append(star)
+        if is_video:
+            toggle = Gtk.Button(label="○")
+            toggle.add_css_class("row-btn")
+            toggle.set_valign(Gtk.Align.CENTER)
+            toggle.set_tooltip_text("Mark watched / unwatched")
+            toggle.connect("clicked", lambda b, it=item: self._toggle_watched(it))
+            row.append(toggle)
+            self._row_refs[key] = {"banner": banner, "bar": bar,
+                                   "note": note, "toggle": toggle}
+            self._apply_progress(key)
+        follow_key = item.get("channel_id") or item.get("feed_url")
+        if follow_key:
+            following = follow_key in self._followed
+            fol = Gtk.Button(label="Unfollow" if following else "Follow")
+            fol.add_css_class("row-btn")
+            fol.set_valign(Gtk.Align.CENTER)
+            fol.connect("clicked", lambda b, it=item: self._toggle_follow(it, b))
+            row.append(fol)
+            self._follow_btns.setdefault(follow_key, []).append(fol)
         click = Gtk.GestureClick()
-        click.set_button(1)
-        click.connect("released", lambda g, n, x, y, it=item: self._activate(it))
+        click.set_button(0)
+        click.connect("released", lambda g, n, x, y, it=item, r=row: self._clicked(g, it, r))
         row.add_controller(click)
+        if item.get("kind") != "folder":
+            dnd.attach_drag(row, {"kind": "item", "payload": item})
+        # A source's own hover text beats the generic one.
+        info = item.get("info")
+        row.set_tooltip_text(info if isinstance(info, str) else item_tooltip(item))
         return row
 
-    def _activate(self, item):
+    def _clicked(self, gesture, item, row):
+        button = gesture.get_current_button()
+        state = gesture.get_current_event_state()
+        if button == Gdk.BUTTON_SECONDARY or (
+                button == Gdk.BUTTON_PRIMARY and state & _MENU_MODS):
+            self._open_menu(item, row)
+        elif button == Gdk.BUTTON_PRIMARY:
+            self._activate(item, row)
+
+    def _build_thumb(self, item):
+        pic = Gtk.Picture()
+        pic.set_size_request(96, 54)
+        pic.set_can_shrink(True)
+        pic.set_content_fit(Gtk.ContentFit.COVER)
+        pic.add_css_class("thumb")
+        banner = Gtk.Label(label="WATCHED")
+        banner.add_css_class("corner-tag")
+        banner.add_css_class("corner-tag-right")
+        banner.add_css_class("thumb-tag")
+        banner.set_halign(Gtk.Align.END)
+        banner.set_valign(Gtk.Align.END)
+        banner.set_visible(False)
+        overlay = Gtk.Overlay()
+        overlay.set_child(pic)
+        overlay.add_overlay(banner)
+        overlay.set_valign(Gtk.Align.CENTER)
+        thumbnail = getattr(self.source, "thumbnail", None)
+        if thumbnail is not None:
+            _THUMBS.submit(self._load_thumb, thumbnail, item, pic)
+        return overlay, banner
+
+    @staticmethod
+    def _load_thumb(thumbnail, item, pic):
+        try:
+            path = thumbnail(item)
+        except Exception:
+            return
+        if path:
+            GLib.idle_add(pic.set_filename, path)
+
+    def _activate(self, item, anchor=None):
         if item.get("kind") == "folder":
-            self._stack.append((item["path"], item["title"]))
-            self._searching = False
-            self._reload()
+            self._open(item["path"], item["title"])
+            return
+        point = None
+        if item.get("kind") == "video":
+            point = watch_progress.resume_point(self._watch.get(item["source"], item["id"]))
+        modes = getattr(self.source, "PLAY_MODES", None)
+        if point is not None and anchor is not None:
+            self._offer_resume(item, point, anchor)
+        elif modes and item.get("kind") == "track" and anchor is not None:
+            self._offer_modes(item, modes, anchor)
         else:
             self._run(lambda: self._play(item), self._played)
+
+    def _open_menu(self, item, anchor):
+        """The source's actions for an item: go to (path/title), copy (text to
+        the clipboard) or action (an id for source.act, run off the main thread);
+        playable items also get the queue actions."""
+        menu = getattr(self.source, "menu", None)
+        queueable = item.get("kind") != "folder"
+        if menu is None and not queueable:
+            return
+        pop = Gtk.Popover()
+        pop.add_css_class("context-menu")
+        pop.set_parent(anchor)
+        pop.connect("closed", lambda p: GLib.idle_add(p.unparent))
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.append(Gtk.Label(label="…"))
+        pop.set_child(box)
+        pop.popup()
+
+        def done(entries, err):
+            while child := box.get_first_child():
+                box.remove(child)
+            if err is not None:
+                box.append(Gtk.Label(label=f"Couldn't load: {err}", wrap=True))
+            for entry in entries or []:
+                if entry.get("note"):
+                    note = Gtk.Label(label=entry["label"], xalign=0.0, wrap=True)
+                    note.add_css_class("meta-genre")
+                    box.append(note)
+                    continue
+                btn = Gtk.Button(label=entry["label"])
+                btn.add_css_class("menu-btn")
+                btn.connect("clicked", lambda b, e=entry: self._menu_pick(item, e, pop))
+                box.append(btn)
+            if queueable:
+                for label, play_next in (("Add to queue", False), ("Play next", True)):
+                    btn = Gtk.Button(label=label)
+                    btn.add_css_class("menu-btn")
+                    btn.connect("clicked", lambda b, n=play_next: self._queue(item, n, pop))
+                    box.append(btn)
+            return False
+
+        self._run(lambda: menu(item) if menu else [], done)
+
+    def _menu_pick(self, item, entry, pop):
+        pop.popdown()
+        if "path" in entry:
+            self._open(entry["path"], entry.get("title") or entry["label"])
+        elif "copy" in entry:
+            self.get_clipboard().set(entry["copy"])
+            self._set_status("Link copied")
+        elif "action" in entry:
+            def done(msg, err):
+                self._set_status(f"Couldn't do that: {err}" if err is not None else msg or "")
+                return False
+            self._run(lambda: self.source.act(item, entry["action"]), done)
+
+    def _queue(self, item, play_next, pop):
+        pop.popdown()
+
+        def done(resp, err):
+            problem = err if err is not None else (
+                "daemon not running" if resp is None
+                else None if resp.get("ok", True) else resp.get("error") or "daemon refused")
+            self._set_status(f"Couldn't queue it: {problem}" if problem is not None
+                             else "Playing" if resp.get("played") else "Queued")
+            return False
+        self._run(lambda: self._send(dnd.queue_msg("item", item, play_next)), done)
+
+    def _offer_resume(self, item, point, anchor):
+        pop = Gtk.Popover()
+        pop.set_parent(anchor)
+        pop.connect("closed", lambda p: GLib.idle_add(p.unparent))
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        for label, resume in ((f"Resume from {format_duration(point)}", True),
+                              ("Start over", False)):
+            btn = Gtk.Button(label=label)
+            btn.add_css_class("row-btn")
+            btn.connect("clicked", lambda b, r=resume, p=pop: self._start(item, r, p))
+            box.append(btn)
+        pop.set_child(box)
+        pop.popup()
+
+    def _offer_modes(self, item, modes, anchor):
+        pop = Gtk.Popover()
+        pop.set_parent(anchor)
+        pop.connect("closed", lambda p: GLib.idle_add(p.unparent))
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        for label, mode in modes:
+            btn = Gtk.Button(label=label)
+            btn.add_css_class("row-btn")
+            btn.connect("clicked", lambda b, m=mode, p=pop: self._start_mode(item, m, p))
+            box.append(btn)
+        pop.set_child(box)
+        pop.popup()
+
+    def _start_mode(self, item, mode, pop):
+        pop.popdown()
+        self._run(lambda: self._play(item, mode=mode), self._played)
+
+    def _start(self, item, resume, pop):
+        pop.popdown()
+        if resume:
+            self._run(lambda: self._play(item, resume=True), self._played)
+        else:
+            self._run(lambda: self._play(item), self._played)
+
+    def _toggle_watched(self, item):
+        key = watch_progress.key(item["source"], item["id"])
+        row = self._progress.get(key)
+        watched = not bool(isinstance(row, dict) and row.get("watched"))
+        msg = {"cmd": "mark_watched", "item": item, "watched": watched}
+
+        def done(result, err):
+            resp = result or {}
+            if err is not None or not resp.get("ok"):
+                self._set_status("Couldn't update watched: "
+                                 f"{err or resp.get('error') or 'daemon not running'}")
+            else:
+                self._refresh_progress()
+            return False
+
+        self._run(lambda: self._send(msg), done)
 
     def _played(self, result, err):
         if err is not None:
@@ -185,19 +613,81 @@ class SourcePane(Gtk.Box):
             self._set_status("")
         return False
 
+    @staticmethod
+    def _buttons(index, key, button):
+        """The clicked button plus every row's twin for the same key."""
+        found = list(index.get(key, []))
+        return found if any(b is button for b in found) else found + [button]
+
+    def _toggle_favorite(self, item, button):
+        def done(result, err):
+            resp = result or {}
+            if err is not None or not resp.get("ok"):
+                self._set_status("Couldn't update favorites: "
+                                 f"{err or resp.get('error') or 'daemon not running'}")
+                return False
+            if resp["favorite"]:
+                self._fav_ids.add(item["id"])
+            else:
+                self._fav_ids.discard(item["id"])
+            for b in self._buttons(self._fav_btns, item["id"], button):
+                b.set_label("★" if resp["favorite"] else "☆")
+            if (self._section == "favorites" and not self._stack
+                    and not self._searching and not resp["favorite"]):
+                self._reload()
+            return False
+
+        self._run(lambda: self._send({"cmd": "toggle_favorite", "item": item}), done)
+
+    def _toggle_follow(self, item, button):
+        key = item.get("channel_id") or item["feed_url"]
+        following = key in self._followed
+        if item.get("channel_id"):
+            if following:
+                msg = {"cmd": "unfollow", "channel_id": key}
+            else:
+                name = item["title"] if item.get("kind") == "folder" else item.get("artist")
+                msg = {"cmd": "follow", "channel_id": key, "name": name or key}
+        elif following:
+            msg = {"cmd": "podcast_unfollow", "feed_url": key}
+        else:
+            msg = {"cmd": "podcast_follow", "item": item}
+
+        def done(result, err):
+            resp = result or {}
+            if err is not None or not resp.get("ok"):
+                self._set_status("Couldn't update follows: "
+                                 f"{err or resp.get('error') or 'daemon not running'}")
+                return False
+            if following:
+                self._followed.discard(key)
+            else:
+                self._followed.add(key)
+            for b in self._buttons(self._follow_btns, key, button):
+                b.set_label("Follow" if following else "Unfollow")
+            if following and self._section in ("channels", "following") \
+                    and not self._stack and not self._searching:
+                self._reload()
+            return False
+
+        self._run(lambda: self._send(msg), done)
+
+    def _open(self, path, title):
+        self._stack.append((path, title))
+        self._reload()
+
     def back(self):
-        if self._searching:
-            self.entry.set_text("")
-            self._searching = False
-        elif self._stack:
+        if self._stack:
             self._stack.pop()
+        # Stepping back onto a results page shows its query again.
+        self.entry.set_text(self._stack[-1][0][1] if self._searching else "")
         self._reload()
 
     def _search(self, query):
+        if self._searching:
+            self._stack.pop()  # a new query replaces the results page, not stacks on it
         if not query:
             self.entry.set_text("")
-            self._searching = False
-            self._reload()
-            return
-        self._searching = True
-        self._load(lambda: self.source.search(query))
+        else:
+            self._stack.append(((SEARCH, query), f"Search “{query}”"))
+        self._reload()

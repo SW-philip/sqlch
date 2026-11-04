@@ -32,7 +32,7 @@ class TestOpen(unittest.TestCase):
             seen["url"], seen["tok"] = req.full_url, req.get_header("Authorization")
             return Resp()
 
-        with _cfg(server="http://j:8096/", token_file="/nonexistent"), \
+        with _cfg(server="http://j:8096/", allow_http=True, token_file="/nonexistent"), \
              mock.patch.object(jellyfin, "_token", return_value="KEY"), \
              mock.patch.object(jellyfin, "urlopen", fake):
             self.assertEqual(jellyfin._get("/Items", {"a": "b c"}), {"ok": 1})
@@ -46,7 +46,7 @@ class TestJellyfin(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.tok = Path(self._tmp.name) / "tok"
         self.tok.write_text("KEY\n")
-        for p in (_cfg(server="http://j:8096/", token_file=str(self.tok)),
+        for p in (_cfg(server="http://j:8096/", allow_http=True, token_file=str(self.tok)),
                   mock.patch.object(jellyfin, "cache_dir",
                                     lambda: Path(self._tmp.name))):
             p.start()
@@ -116,7 +116,7 @@ class TestJellyfin(unittest.TestCase):
         jellyfin.search("a")
         jellyfin.search("b")
         self.assertEqual([c[0] for c in fake.calls].count("/Users"), 1)
-        with _cfg(server="http://j", token_file=str(self.tok), user_id="CFG"):
+        with _cfg(server="http://j", allow_http=True, token_file=str(self.tok), user_id="CFG"):
             self.assertEqual(jellyfin._user_id(), "CFG")
 
     def test_resolve_audio_downloads_cover(self):
@@ -148,6 +148,45 @@ class TestJellyfin(unittest.TestCase):
         with mock.patch.object(jellyfin, "_open", side_effect=OSError):
             t = jellyfin.resolve({"id": "T1"})
         self.assertIsNone(t.meta["art"])
+
+    def test_sections(self):
+        self.assertEqual([s["id"] for s in jellyfin.sections()],
+                         ["libraries", "playlists"])
+
+    def test_libraries_section_is_the_old_root(self):
+        with mock.patch.object(jellyfin, "_user_id", return_value="u"), \
+             mock.patch.object(jellyfin, "_get", return_value={"Items": []}) as get:
+            self.assertEqual(jellyfin.browse("section:libraries"), [])
+        self.assertEqual(get.call_args[0][0], "/UserViews")
+
+    def test_playlists_section(self):
+        with mock.patch.object(jellyfin, "_items", return_value=["x"]) as items:
+            self.assertEqual(jellyfin.browse("section:playlists"), ["x"])
+        items.assert_called_once_with({"IncludeItemTypes": "Playlist",
+                                       "Recursive": "true", "SortBy": "SortName"})
+
+    def test_playlist_contents_keep_playlist_order(self):
+        with mock.patch.object(jellyfin, "_items", return_value=[]) as items:
+            jellyfin.browse("Playlist:abc")
+        items.assert_called_once_with({"parentId": "abc"})
+
+
+class TestDescription(unittest.TestCase):
+    def test_overview_maps_to_description_and_is_requested(self):
+        seen = {}
+
+        def fake_get(path, params=None):
+            seen["params"] = params
+            return {"Items": [{"Id": "1", "Name": "Ep", "Type": "Episode",
+                               "Overview": "Plot here"},
+                              {"Id": "2", "Name": "Song", "Type": "Audio"}]}
+
+        with mock.patch.object(jellyfin, "_get", fake_get), \
+             mock.patch.object(jellyfin, "_user_id", return_value="U"):
+            items = jellyfin._items({"parentId": "L"})
+        self.assertEqual(items[0]["description"], "Plot here")
+        self.assertIsNone(items[1]["description"])
+        self.assertEqual(seen["params"]["Fields"], "Overview")
 
 
 if __name__ == "__main__":

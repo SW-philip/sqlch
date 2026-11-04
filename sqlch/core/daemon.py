@@ -2,11 +2,14 @@ import json
 import os
 import socket
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
 from sqlch import sources
-from sqlch.core import library, notify, player, discover
+from sqlch.core import discover, follows, library, notify, player, playqueue, progress, transport, watcher
+from sqlch.core.urlcheck import is_stream_url
+from sqlch.sources import youtube
 from sqlch.core.paths import runtime_dir
 
 
@@ -19,8 +22,59 @@ def _reply(conn: socket.socket, obj: dict[str, Any]):
     conn.sendall(data)
 
 
+TRACK_EVERY = 5  # seconds between playhead samples
+TICK_EVERY = 1   # seconds between end-of-playback checks
+_FLUSH_BEFORE = {'stop', 'play', 'play_item', 'next', 'prev', 'queue_play', 'set_mode'}
+
+
+def track_once() -> None:
+    """Save the playhead of the playing video so it can be resumed or marked watched."""
+    cur = player.current()
+    if not cur or cur.get('type') != 'item':
+        return
+    item = cur.get('item') or {}
+    if item.get('kind') != 'video' or not item.get('source') or not item.get('id'):
+        return
+    pos, dur = player.item_progress()
+    # mpv reports nothing or 0 until the file is loaded; recording that would
+    # wipe a saved resume point.
+    if not isinstance(pos, (int, float)) or pos < 1:
+        return
+    progress.record(item['source'], item['id'], pos, dur)
+
+
+def sample_once() -> None:
+    """One playhead sample: the video's watch progress, and the parked
+    position the queue resumes from."""
+    for sample in (track_once, transport.park):
+        try:
+            sample()
+        except Exception:
+            pass
+
+
+def _track_loop() -> None:
+    while True:
+        time.sleep(TRACK_EVERY)
+        sample_once()
+
+
+def _tick_loop() -> None:
+    while True:
+        time.sleep(TICK_EVERY)
+        try:
+            transport.tick()
+        except Exception:
+            pass
+
+
 def _handle(msg: dict[str, Any]) -> dict[str, Any]:
     cmd = msg.get('cmd')
+    if cmd in _FLUSH_BEFORE:
+        try:
+            track_once()
+        except Exception:
+            pass
     if cmd == 'ping':
         return {'ok': True, 'msg': 'pong'}
     if cmd == 'status':
@@ -30,14 +84,17 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
                 'recording': recorder.status()}
         if cur and cur.get('type') == 'item':
             resp['position'], resp['duration'] = player.item_progress()
+            resp['can_skip'] = player.can_skip()
         elif cur:
             resp['timeshift'] = player.timeshift()
             shown = player.displayed_title()
             if shown:
                 resp['displayed_icy'] = shown
+        state = playqueue.read()
+        resp['mode'], resp['queue_len'] = state['mode'], len(state['entries'])
         return resp
     if cmd == 'stop':
-        player.stop()
+        transport.stop()
         return {'ok': True}
     if cmd == 'pause':
         player.pause()
@@ -50,7 +107,7 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
             st = library.last_played_station()
             if not st:
                 return {'ok': False, 'error': 'no last played station'}
-            player.play_station(st)
+            transport.start_station(st)
             return {'ok': True}
         st = library.find_station(q)
         if not st:
@@ -67,20 +124,19 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
                     'error': f'could not resolve: {q}',
                     'results': results[:10],
                 }
-        player.play_station(st)
+        transport.start_station(st)
         return {'ok': True, 'station': {'id': st.get('id'), 'name': st.get('name')}}
     if cmd == 'play_item':
         item = msg.get('item')
         if not isinstance(item, dict):
             return {'ok': False, 'error': 'missing item'}
-        src = sources.REGISTRY.get(item.get('source'))
-        if src is None:
-            return {'ok': False, 'error': f"unknown source: {item.get('source')}"}
+        context = msg.get('context')
+        opts = {'mode': msg['mode']} if msg.get('mode') is not None else {}
         try:
-            target = src.resolve(item)
-        except Exception as e:
-            return {'ok': False, 'error': f'resolve failed: {e}'}
-        player.play_target(target, item)
+            transport.start_item(item, context=context if isinstance(context, list) else None,
+                                 resume=bool(msg.get('resume')), **opts)
+        except transport.PlayError as e:
+            return {'ok': False, 'error': str(e)}
         return {'ok': True}
     if cmd == 'seek':
         try:
@@ -107,26 +163,10 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
         player.preview(url, duration=dur)
         return {'ok': True}
     if cmd == 'next':
-        current = player.current()
-        if current:
-            sid = current.get('item', {}).get('id')
-            st = library.next_station(sid)
-        else:
-            stations = library.list_stations()
-            st = stations[0] if stations else None
-        if st:
-            player.play_station(st)
+        transport.next_cmd()
         return {'ok': True}
     if cmd == 'prev':
-        current = player.current()
-        if current:
-            sid = current.get('item', {}).get('id')
-            st = library.prev_station(sid)
-        else:
-            stations = library.list_stations()
-            st = stations[-1] if stations else None
-        if st:
-            player.play_station(st)
+        transport.prev_cmd()
         return {'ok': True}
     if cmd == 'record':
         from sqlch.core import recorder
@@ -145,6 +185,93 @@ def _handle(msg: dict[str, Any]) -> dict[str, Any]:
             cur = player.current() or {}
             return recorder.start(mode, cur.get('item'))
         return {'ok': False, 'error': f'unknown record action: {action}'}
+    if cmd == 'toggle_favorite':
+        item = msg.get('item')
+        if not isinstance(item, dict):
+            return {'ok': False, 'error': 'missing item'}
+        try:
+            return {'ok': True, 'favorite': follows.toggle_favorite(item)}
+        except ValueError as e:
+            return {'ok': False, 'error': str(e)}
+    if cmd == 'follow':
+        cid = msg.get('channel_id')
+        if not isinstance(cid, str) or not youtube.valid_channel_id(cid):
+            return {'ok': False, 'error': 'bad channel id'}
+        name = msg.get('name')
+        follows.follow(cid, name if isinstance(name, str) and name else cid)
+        return {'ok': True}
+    if cmd == 'unfollow':
+        cid = msg.get('channel_id')
+        if not isinstance(cid, str):
+            return {'ok': False, 'error': 'bad channel id'}
+        follows.unfollow(cid)
+        return {'ok': True}
+    if cmd == 'podcast_follow':
+        item = msg.get('item')
+        feed = item.get('feed_url') if isinstance(item, dict) else None
+        if not (isinstance(feed, str) and feed.startswith(('http://', 'https://'))):
+            return {'ok': False, 'error': 'bad feed url'}
+        follows.follow_podcast(item)
+        return {'ok': True}
+    if cmd == 'podcast_unfollow':
+        feed = msg.get('feed_url')
+        if not (isinstance(feed, str) and feed.startswith(('http://', 'https://'))):
+            return {'ok': False, 'error': 'bad feed url'}
+        follows.unfollow_podcast(feed)
+        return {'ok': True}
+    if cmd == 'mark_watched':
+        item = msg.get('item')
+        if not isinstance(item, dict) or not item.get('source') or not item.get('id'):
+            return {'ok': False, 'error': 'missing item'}
+        progress.mark(item['source'], item['id'], bool(msg.get('watched', True)))
+        return {'ok': True}
+    if cmd == 'queue_add':
+        try:
+            entry = playqueue.make_entry(msg.get('kind'), msg.get('payload'))
+        except ValueError as e:
+            return {'ok': False, 'error': str(e)}
+        if entry['kind'] == 'station' and not is_stream_url(entry['station']['url']):
+            return {'ok': False, 'error': 'not a stream address'}
+        if not playqueue.read()['entries'] and player.current() is None:
+            # nothing waiting and nothing playing: a drop starts right away
+            ok = transport.play_entry(entry)
+            resp = {'ok': ok, 'uid': entry['uid'], 'played': True}
+            if not ok:
+                resp['error'] = 'could not play it'
+            return resp
+        at = msg.get('at')
+        index = playqueue.add(entry, at=at if isinstance(at, int) else None,
+                              play_next=bool(msg.get('play_next')))
+        return {'ok': True, 'uid': entry['uid'], 'index': index, 'played': False}
+    if cmd == 'queue_remove':
+        if playqueue.remove(str(msg.get('uid'))):
+            return {'ok': True}
+        return {'ok': False, 'error': 'unknown uid'}
+    if cmd == 'queue_move':
+        to = msg.get('to')
+        if not isinstance(to, int) or isinstance(to, bool):
+            return {'ok': False, 'error': 'missing to'}
+        if playqueue.move(str(msg.get('uid')), to):
+            return {'ok': True}
+        return {'ok': False, 'error': 'unknown uid'}
+    if cmd == 'queue_clear':
+        playqueue.clear()
+        return {'ok': True}
+    if cmd == 'queue_play':
+        entry = playqueue.take(str(msg.get('uid')))
+        if entry is None:
+            return {'ok': False, 'error': 'unknown uid'}
+        if transport.play_entry(entry):
+            return {'ok': True}
+        return {'ok': False, 'error': 'could not play it'}
+    if cmd == 'set_mode':
+        try:
+            transport.set_mode(msg.get('mode'))
+        except ValueError as e:
+            return {'ok': False, 'error': str(e)}
+        return {'ok': True}
+    if cmd == 'drain_notices':
+        return {'ok': True, 'notices': watcher.drain()}
     return {'ok': False, 'error': f'unknown cmd: {cmd}'}
 
 
@@ -153,6 +280,13 @@ def run_daemon():
     # Start MPRIS daemon in background thread
     from sqlch.core import mpris_daemon
     threading.Thread(target=mpris_daemon.main, daemon=True, name="mpris").start()
+    watcher.start(youtube.fetch_feed, youtube.poll_seconds)
+    try:
+        playqueue.set_now(None)  # mpv did not survive the restart; nothing is playing
+    except Exception:
+        pass
+    threading.Thread(target=_track_loop, daemon=True, name="progress").start()
+    threading.Thread(target=_tick_loop, daemon=True, name="queue-tick").start()
 
     try:
         if sock.exists():

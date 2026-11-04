@@ -68,11 +68,20 @@ class TestLibrespot(unittest.TestCase):
         self.lib.toggle()
         self.lib.stop()
         self.lib.seek(42.5)
+        self.lib.skip(True)
+        self.lib.skip(False)
         self.assertEqual(Api.log, [
             ("POST", "/player/play", {"uri": "spotify:track:T1"}),
             ("POST", "/player/playpause", None),
             ("POST", "/player/pause", None),
-            ("POST", "/player/seek", {"position": 42500})])
+            ("POST", "/player/seek", {"position": 42500}),
+            ("POST", "/player/next", None),
+            ("POST", "/player/prev", None)])
+
+    def test_play_within_a_context_skips_to_the_track(self):
+        self.lib.play("spotify:track:T1", "spotify:album:AL1")
+        self.assertEqual(Api.log, [("POST", "/player/play",
+                                    {"uri": "spotify:album:AL1", "skip_to_uri": "spotify:track:T1"})])
 
     def test_progress_in_seconds(self):
         self.assertEqual(self.lib.progress(), (12.5, 200.0))
@@ -83,6 +92,12 @@ class TestLibrespot(unittest.TestCase):
         Api.status = (200, {"track": None})
         self.assertEqual(self.lib.progress(), (None, None))
         self.assertEqual(handoff.Librespot("http://127.0.0.1:1").progress(), (None, None))
+
+    def test_track_uri_from_status(self):
+        Api.status = (200, {"track": {"uri": "spotify:track:T9"}})
+        self.assertEqual(self.lib.track_uri(), "spotify:track:T9")
+        Api.status = (204, None)
+        self.assertIsNone(self.lib.track_uri())
 
     def test_play_failure_is_a_runtime_error(self):
         with self.assertRaisesRegex(RuntimeError, "go-librespot"):
@@ -104,7 +119,7 @@ class TestPreferred(unittest.TestCase):
         self.p.toggle()
         self.p.seek(5)
         self.p.progress()
-        self.a.play.assert_called_once_with("u")
+        self.a.play.assert_called_once_with("u", None)
         self.a.toggle.assert_called_once()
         self.a.seek.assert_called_once_with(5)
         self.a.progress.assert_called_once()
@@ -114,7 +129,7 @@ class TestPreferred(unittest.TestCase):
         self.a.usable.return_value = False
         self.p.play("u")
         self.p.stop()
-        self.b.play.assert_called_once_with("u")
+        self.b.play.assert_called_once_with("u", None)
         self.b.stop.assert_called_once()
         self.a.play.assert_not_called()
 
@@ -122,7 +137,7 @@ class TestPreferred(unittest.TestCase):
         self.a.usable.return_value = True
         self.a.play.side_effect = RuntimeError("no active session")
         self.p.play("u")
-        self.b.play.assert_called_once_with("u")
+        self.b.play.assert_called_once_with("u", None)
         self.p.stop()
         self.b.stop.assert_called_once()
         self.a.stop.assert_not_called()

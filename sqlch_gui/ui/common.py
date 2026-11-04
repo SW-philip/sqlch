@@ -34,31 +34,41 @@ def _build_css(colors: dict) -> str:
     lyric = colors.get('LYRIC', '#c9c5da')
     rest = colors.get('REST', '#908caa')
     root = colors.get('ROOT', '#c4a7e7')
+    accent = colors.get('FIFTH', '#9ccfd8')  # eww's $accent
     seventh = colors.get('SEVENTH', '#3e8fb0')
     piano = colors.get('PIANO', '#f6c177')
     forte = colors.get('FORTE', '#eb6f92')
     sotto = colors.get('SOTTO', '#ea9a97')
 
-    a_outer = colors.get('STAFF_A_OUTER', '0.50')
     a_drop = colors.get('STAFF_A_DROP', '0.55')
     a_inset = colors.get('STAFF_A_INSET_BOT', '0.30')
 
-    mono = '"JetBrains Mono", "Courier New", monospace'
-    prop = '"Inter", "system-ui", sans-serif'
+    # Josefin Sans everywhere, same as the eww notification panel; the
+    # JetBrains Nerd Font stays as a glyph fallback for icons.
+    mono = '"Josefin Sans", "JetBrainsMono Nerd Font", "DejaVu Sans", sans-serif'
+    prop = mono  # kept as a separate name so a proportional face can be split out again
+    # Smallest label size. Below ~10px logical, glyphs land on fractional
+    # device pixels at 1.25x scale and strokes look broken; hierarchy below
+    # body text comes from caps, weight, spacing and color instead.
+    small = "0.85em"
 
-    hairline = f"1px solid rgba({score_rgb}, 0.14)"
+    # Art-deco accent, shared with the eww panels: keylines, active tab and
+    # nameplate in FIFTH (eww's $accent), not neutral score-tinted hairlines.
+    root_rgb = _hex_to_rgb(accent)
+    hairline = f"1px solid rgba({root_rgb}, 0.35)"
     # Now Playing card only: the plain hairline barely registers between
     # STAGE/WING fills that sit close in lightness on several palettes.
     # A louder border (not a fill-color change) separates the player from
     # the shell without touching text-bearing surfaces -- see
     # docs/superpowers/specs/2026-09-17-sqlch-gui-depth-pass-design.md for
     # why the fill-contrast route (a layer-contrast ladder) was rejected.
-    edge = f"2px solid rgba({score_rgb}, 0.32)"
+    edge = f"2px solid rgba({root_rgb}, 0.55)"
     rule = f"1px solid rgba({score_rgb}, 0.13)"
     drop = f"0 2px 3px rgba({staff}, {a_drop})"
     recess = f"inset 0 2px 4px rgba({staff}, {a_inset})"
     press = f"inset 0 1px 3px rgba({staff}, 0.6)"
     shell_shadow = f"3px 4px 0 0 rgba({staff}, {a_drop})"
+    shell_keyline = f"inset 0 0 0 4px {wing}, inset 0 0 0 5px rgba({root_rgb}, 0.35)"
 
     shell_noise = (
         "url(\"data:image/svg+xml;utf8,"
@@ -87,17 +97,18 @@ def _build_css(colors: dict) -> str:
         color: {score};
         font-family: {mono};
         border-radius: 18px;
-        border: 1px solid rgba({score_rgb}, {a_outer});
-        box-shadow: {shell_shadow};
+        border: 1px solid {accent};
+        box-shadow: {shell_keyline}, {shell_shadow};
         transition: box-shadow 60ms ease-out;
         margin: 2px 10px 10px 2px;
         padding: 2px;
     }}
 
     .sq-tab {{
-        padding: 4px 0;
+        min-height: 30px;
+        padding: 0;
         margin: 0;
-        border-radius: 7px 7px 0 0;
+        border-radius: 9px 9px 0 0;
         color: {lyric};
         background-color: {wing};
         background-image: none;
@@ -105,17 +116,17 @@ def _build_css(colors: dict) -> str:
         border-bottom-width: 0;
         box-shadow: none;
         font-family: {mono};
-        font-size: 0.68em;
+        font-size: {small};
         font-weight: 700;
-        letter-spacing: 0.12em;
+        letter-spacing: 0.2em;
     }}
     .sq-tab:hover {{
         background-color: {stage};
         color: {score};
     }}
     .sq-tab.active {{
-        background-color: {root};
-        border-color: {root};
+        background-color: {accent};
+        border-color: {accent};
         color: {outline};
     }}
 
@@ -145,15 +156,82 @@ def _build_css(colors: dict) -> str:
     .corner-tag {{
         font-family: {mono};
         font-weight: 700;
-        font-size: 0.6em;
+        font-size: {small};
         padding: 2px 6px;
         border-radius: 7px;
         border: {hairline};
+        box-shadow: {drop};
         margin: 6px;
     }}
     .corner-tag-left {{
         background-color: {root};
         color: {outline};
+    }}
+
+    .corner-tag-right {{
+        background-color: {seventh};
+        color: {hall};
+    }}
+    .thumb {{
+        border-radius: 5px;
+        background-color: {dim};
+    }}
+    .thumb-tag {{
+        margin: 3px;
+        padding: 1px 4px;
+        font-size: {small};
+    }}
+    .watch-bar trough {{
+        background-color: {wing};
+        border-radius: 2px;
+        min-height: 3px;
+    }}
+    .watch-bar progress {{
+        background-color: {score};
+        border-radius: 2px;
+        min-height: 3px;
+    }}
+
+    .toast {{
+        font-family: {mono};
+        font-weight: 700;
+        font-size: {small};
+        padding: 5px 10px;
+        margin: 8px;
+        border-radius: 9px;
+        border: {hairline};
+        background-color: {root};
+        color: {outline};
+    }}
+
+    .section-pill {{
+        font-family: {mono};
+        font-size: {small};
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 9px;
+        border: {hairline};
+        box-shadow: {drop};
+        background: none;
+        color: {root};
+    }}
+    .section-pill.active {{
+        background-color: {root};
+        color: {outline};
+    }}
+    .row-btn {{
+        font-family: {mono};
+        font-size: {small};
+        padding: 1px 6px;
+        min-height: 0;
+        border: {hairline};
+        border-radius: 8px;
+        box-shadow: {drop};
+        background: none;
+        color: {root};
+    }}
+    .section-pill:active, .row-btn:active {{
+        box-shadow: {press};
     }}
 
     .list-plate {{
@@ -207,7 +285,7 @@ def _build_css(colors: dict) -> str:
         color: {hall};
     }}
     .station-live {{
-        font-size: 0.8em;
+        font-size: {small};
         color: {seventh};
     }}
     .station-row.active .station-live {{
@@ -226,18 +304,25 @@ def _build_css(colors: dict) -> str:
         background-image: none;
         color: {score};
         border: {edge};
-        box-shadow: {drop};
+        /* The shell's hard offset (same as waybar / lock / greeter), with
+           margin reserving its footprint. Pressing trades the right/bottom
+           margin for left/top so the button lands on its shadow without
+           neighbors reflowing. */
+        box-shadow: {shell_shadow};
+        margin: 0 3px 4px 0;
+        transition: margin 60ms ease-out, box-shadow 60ms ease-out;
     }}
     .control-btn:hover {{
         background-color: {stage};
+        border-color: rgba({score_rgb}, 0.55);
     }}
     .control-btn:active {{
-        box-shadow: {press};
+        box-shadow: none;
+        margin: 4px 0 0 3px;
     }}
     .control-btn.primary {{
-        min-width: 36px;
-        min-height: 36px;
-        border-radius: 9px;
+        min-width: 52px;
+        min-height: 22px;
         background-color: {piano};
         background-image: none;
         color: {hall};
@@ -266,7 +351,7 @@ def _build_css(colors: dict) -> str:
 
     .thread-label {{
         font-family: {mono};
-        font-size: 0.75em;
+        font-size: {small};
         color: rgba({score_rgb}, 0.28);
     }}
     .thread-label.lit {{
@@ -277,13 +362,14 @@ def _build_css(colors: dict) -> str:
     .tech-badge, .tag-chip {{
         font-family: {mono};
         font-weight: 700;
-        font-size: 0.72em;
+        font-size: {small};
         background-color: {wing};
         background-image: none;
         color: {lyric};
         padding: 2px 7px;
         border-radius: 7px;
         border: {hairline};
+        box-shadow: {drop};
     }}
     .tag-chip:hover {{
         background-color: {stage};
@@ -300,7 +386,7 @@ def _build_css(colors: dict) -> str:
     .small-badge {{
         font-family: {mono};
         font-weight: 700;
-        font-size: 0.65em;
+        font-size: {small};
         background-color: {dim};
         color: {root};
         padding: 2px 6px;
@@ -316,8 +402,8 @@ def _build_css(colors: dict) -> str:
         color: {lyric};
         font-family: {mono};
         font-weight: 700;
-        font-size: 10px;
-        letter-spacing: 0.14em;
+        font-size: {small};
+        letter-spacing: 0.3em;
     }}
     .section-rule.gold label {{
         color: {root};
@@ -336,7 +422,7 @@ def _build_css(colors: dict) -> str:
     .knob-tag {{
         font-family: {mono};
         font-weight: 700;
-        font-size: 0.58em;
+        font-size: {small};
         color: {rest};
         letter-spacing: 0.05em;
     }}
@@ -346,10 +432,10 @@ def _build_css(colors: dict) -> str:
     }}
     .sq-nameplate {{
         font-family: {mono};
-        font-size: 0.6em;
+        font-size: {small};
         font-weight: 700;
-        letter-spacing: 0.24em;
-        color: {rest};
+        letter-spacing: 0.4em;
+        color: {accent};
         margin: 4px 4px 0 4px;
     }}
     window.dock-overlay, .dock-overlay {{
@@ -360,10 +446,10 @@ def _build_css(colors: dict) -> str:
     }}
     .dock-title {{
         font-family: {mono};
-        font-size: 0.6em;
+        font-size: {small};
         font-weight: 700;
-        letter-spacing: 0.24em;
-        color: {rest};
+        letter-spacing: 0.4em;
+        color: {accent};
     }}
     .dock-close {{
         min-width: 20px;
@@ -379,7 +465,7 @@ def _build_css(colors: dict) -> str:
     }}
     .dock-grip {{
         font-family: {mono};
-        font-size: 0.8em;
+        font-size: {small};
         color: {rest};
         opacity: 0.5;
     }}
@@ -392,7 +478,7 @@ def _build_css(colors: dict) -> str:
         opacity: 1;
     }}
     .popup-window.dock-flash {{
-        box-shadow: 0 0 0 2px {score}, 0 0 12px 2px rgba({_hex_to_rgb(root)}, 0.7), {shell_shadow};
+        box-shadow: 0 0 0 2px {score}, 0 0 12px 2px rgba({root_rgb}, 0.7), {shell_shadow};
     }}
     .sq-plate {{
         padding: 6px 4px 8px 4px;
@@ -418,23 +504,25 @@ def _build_css(colors: dict) -> str:
         box-shadow: none;
     }}
     .sq-track {{
+        padding: 2px 0 1px 0;
         font-family: {prop};
         font-size: 1.1em;
         font-weight: 700;
         color: {score};
     }}
     .sq-station {{
+        padding: 1px 0 2px 0;
         font-family: {mono};
-        font-size: 0.72em;
+        font-size: {small};
         font-style: italic;
         color: {lyric};
     }}
     .sq-tabs {{
-        border-bottom: 2px solid {root};
+        border-bottom: 2px solid {accent};
     }}
     .sq-source-row {{
         font-family: {mono};
-        font-size: 0.7em;
+        font-size: {small};
         letter-spacing: 0.1em;
         color: {lyric};
     }}
@@ -538,12 +626,13 @@ def _build_css(colors: dict) -> str:
         padding: 6px 10px;
         margin-top: 4px;
         border: {hairline};
+        box-shadow: {drop};
         background-image: none;
         background-color: {wing};
         color: {lyric};
         font-family: {mono};
         font-weight: 700;
-        font-size: 0.8em;
+        font-size: {small};
     }}
     .load-more-row:hover {{
         background-color: {stage};
@@ -565,7 +654,7 @@ def _build_css(colors: dict) -> str:
     }}
     .info-line {{
         font-family: {mono};
-        font-size: 0.72em;
+        font-size: {small};
         font-weight: 700;
         color: {lyric};
     }}
@@ -587,14 +676,14 @@ def _build_css(colors: dict) -> str:
         min-width: 0;
         padding: 0 5px;
         font-family: {mono};
-        font-size: 0.65em;
+        font-size: {small};
         color: {rest};
         background: transparent;
         box-shadow: none;
     }}
     .seek-time {{
         font-family: {mono};
-        font-size: 0.65em;
+        font-size: {small};
         color: {rest};
     }}
     """
