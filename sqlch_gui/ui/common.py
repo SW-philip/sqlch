@@ -34,6 +34,7 @@ def _build_css(colors: dict) -> str:
     lyric = colors.get('LYRIC', '#c9c5da')
     rest = colors.get('REST', '#908caa')
     root = colors.get('ROOT', '#c4a7e7')
+    accent = colors.get('FIFTH', '#9ccfd8')  # eww's $accent
     seventh = colors.get('SEVENTH', '#3e8fb0')
     piano = colors.get('PIANO', '#f6c177')
     forte = colors.get('FORTE', '#eb6f92')
@@ -51,9 +52,9 @@ def _build_css(colors: dict) -> str:
     # body text comes from caps, weight, spacing and color instead.
     small = "0.85em"
 
-    # Art-deco accent, shared with the eww panels: keylines in the theme's
-    # accent (ROOT) instead of neutral score-tinted hairlines.
-    root_rgb = _hex_to_rgb(root)
+    # Art-deco accent, shared with the eww panels: keylines, active tab and
+    # nameplate in FIFTH (eww's $accent), not neutral score-tinted hairlines.
+    root_rgb = _hex_to_rgb(accent)
     hairline = f"1px solid rgba({root_rgb}, 0.35)"
     # Now Playing card only: the plain hairline barely registers between
     # STAGE/WING fills that sit close in lightness on several palettes.
@@ -96,7 +97,7 @@ def _build_css(colors: dict) -> str:
         color: {score};
         font-family: {mono};
         border-radius: 18px;
-        border: 1px solid {root};
+        border: 1px solid {accent};
         box-shadow: {shell_keyline}, {shell_shadow};
         transition: box-shadow 60ms ease-out;
         margin: 2px 10px 10px 2px;
@@ -104,7 +105,8 @@ def _build_css(colors: dict) -> str:
     }}
 
     .sq-tab {{
-        padding: 4px 0;
+        min-height: 30px;
+        padding: 0;
         margin: 0;
         border-radius: 9px 9px 0 0;
         color: {lyric};
@@ -123,8 +125,8 @@ def _build_css(colors: dict) -> str:
         color: {score};
     }}
     .sq-tab.active {{
-        background-color: {root};
-        border-color: {root};
+        background-color: {accent};
+        border-color: {accent};
         color: {outline};
     }}
 
@@ -426,7 +428,7 @@ def _build_css(colors: dict) -> str:
         font-size: {small};
         font-weight: 700;
         letter-spacing: 0.4em;
-        color: {root};
+        color: {accent};
         margin: 4px 4px 0 4px;
     }}
     window.dock-overlay, .dock-overlay {{
@@ -440,7 +442,7 @@ def _build_css(colors: dict) -> str:
         font-size: {small};
         font-weight: 700;
         letter-spacing: 0.4em;
-        color: {root};
+        color: {accent};
     }}
     .dock-close {{
         min-width: 20px;
@@ -469,7 +471,7 @@ def _build_css(colors: dict) -> str:
         opacity: 1;
     }}
     .popup-window.dock-flash {{
-        box-shadow: 0 0 0 2px {score}, 0 0 12px 2px rgba({_hex_to_rgb(root)}, 0.7), {shell_shadow};
+        box-shadow: 0 0 0 2px {score}, 0 0 12px 2px rgba({root_rgb}, 0.7), {shell_shadow};
     }}
     .sq-plate {{
         padding: 6px 4px 8px 4px;
@@ -509,7 +511,7 @@ def _build_css(colors: dict) -> str:
         color: {lyric};
     }}
     .sq-tabs {{
-        border-bottom: 2px solid {root};
+        border-bottom: 2px solid {accent};
     }}
     .sq-source-row {{
         font-family: {mono};
