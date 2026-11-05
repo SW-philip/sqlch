@@ -15,6 +15,7 @@ class ScrollLabel(Gtk.ScrolledWindow):
         self.set_hexpand(True)
         self.set_propagate_natural_height(True)
         self.label = Gtk.Label(xalign=0.0)
+        self.label.add_css_class("scroll-text")
         self.set_child(self.label)
         self._tick_id = 0
         self._t0 = None

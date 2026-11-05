@@ -222,7 +222,8 @@ def _build_css(colors: dict) -> str:
     .row-btn {{
         font-family: {mono};
         font-size: {small};
-        padding: 1px 6px;
+        /* Josefin caps ride high in the line box; sink them off the top border. */
+        padding: 2px 6px 0 6px;
         min-height: 0;
         border: {hairline};
         border-radius: 8px;
@@ -287,6 +288,12 @@ def _build_css(colors: dict) -> str:
     .station-live {{
         font-size: {small};
         color: {seventh};
+    }}
+    /* Josefin's line box is exactly 1em (ascent 0.75) but accented caps reach
+       0.90, and a ScrolledWindow clips to its allocation. Plain labels don't
+       clip, so only the marquee needs the room. */
+    .scroll-text {{
+        line-height: 1.35;
     }}
     .station-row.active .station-live {{
         color: {hall};
@@ -552,6 +559,11 @@ def _build_css(colors: dict) -> str:
         font-size: 0.85em;
         font-weight: 700;
         margin-top: 4px;
+    }}
+    /* Same Josefin overflow as .scroll-text: GtkText clips to its own node,
+       so entry padding can't help; the room has to be on the text node. */
+    entry > text {{
+        padding: 3px 0;
     }}
     .context-menu entry {{
         background-color: {dim};

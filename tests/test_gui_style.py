@@ -55,6 +55,17 @@ class TestFlatStylesheet(unittest.TestCase):
         self.assertIn("italic", rule(".sq-station"))
         self.assertNotIn("#222222", rule(".sq-tab"))
 
+    def test_clipping_widgets_leave_room_for_tall_glyphs(self):
+        from sqlch_gui.ui import common
+        css = common._build_css(dict(palette._DEFAULTS))
+
+        def rule(sel):
+            start = css.index("\n    " + sel + " {")
+            return css[start:css.index("}", start)]
+
+        self.assertIn("line-height", rule(".scroll-text"))
+        self.assertIn("padding", rule("entry > text"))
+
     def test_no_paper_cutout_vocabulary(self):
         from sqlch_gui.ui import common
         css = common._build_css(palette.load())
