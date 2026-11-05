@@ -223,7 +223,7 @@ def _build_css(colors: dict) -> str:
         font-family: {mono};
         font-size: {small};
         /* Josefin caps ride high in the line box; sink them off the top border. */
-        padding: 2px 6px 0 6px;
+        padding: 4px 6px 2px 6px;
         min-height: 0;
         border: {hairline};
         border-radius: 8px;
