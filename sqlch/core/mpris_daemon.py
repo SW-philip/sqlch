@@ -18,7 +18,7 @@ from gi.repository import GLib
 from pydbus import SessionBus
 from pydbus.generic import signal
 
-from sqlch.core import enrich
+from sqlch.core import enrich, transport
 from sqlch.core.player import mpv_socket, mpv_get, mpv_command, _parse_icy
 
 # ---------------------------------------------------------------------------
@@ -69,6 +69,8 @@ MPRIS_XML = """
     <method name="Pause"/>
     <method name="PlayPause"/>
     <method name="Stop"/>
+    <method name="Next"/>
+    <method name="Previous"/>
     <property name="PlaybackStatus" type="s"  access="read"/>
     <property name="Metadata"       type="a{sv}" access="read"/>
     <property name="Volume"         type="d"  access="readwrite"/>
@@ -160,8 +162,6 @@ class SQLCHMPRIS:
     CanPlay             = True
     CanPause            = True
     CanSeek             = False
-    CanGoNext           = False
-    CanGoPrevious       = False
 
     def __init__(self) -> None:
         self._playback_status: str = "Stopped"
@@ -232,6 +232,14 @@ class SQLCHMPRIS:
         t = mpv_get("playback-time")
         return int(float(t) * 1_000_000) if t is not None else 0
 
+    @property
+    def CanGoNext(self) -> bool:
+        return transport.can_go_next()
+
+    @property
+    def CanGoPrevious(self) -> bool:
+        return transport.can_go_previous()
+
     # --- Player commands ---
 
     def Play(self) -> None:
@@ -248,6 +256,12 @@ class SQLCHMPRIS:
 
     def PlayPause(self) -> None:
         mpv_command("cycle", "pause")
+
+    def Next(self) -> None:
+        transport.next_cmd()
+
+    def Previous(self) -> None:
+        transport.prev_cmd()
 
     def Raise(self) -> None:
         pass

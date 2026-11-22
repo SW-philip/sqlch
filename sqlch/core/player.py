@@ -13,6 +13,8 @@ from typing import Any
 
 from sqlch.core import enrich, handoff, library, notify
 from sqlch.core.paths import runtime_dir
+from sqlch.core.urlcheck import is_stream_url, require_stream_url
+from sqlch.sources.base import make_item
 
 
 # ------------------------------------------------------------
@@ -42,6 +44,8 @@ def _need_env(name: str, value: str | None) -> str:
 # ------------------------------------------------------------
 
 _current: dict[str, Any] | None = None
+_handoff_seen_playing = False  # the current handoff item was observed playing
+_item_started: float | None = None  # monotonic time play_target last started an mpv item
 _preview_timer: threading.Timer | None = None
 _metadata_thread: threading.Thread | None = None
 _metadata_stop = threading.Event()
@@ -264,6 +268,8 @@ def _kill_existing() -> None:
 TIMESHIFT_SECS = 3600
 TIMESHIFT_BYTES = 160 * 1024 * 1024
 LIVE_MARGIN = 1.0  # seeking exactly to the edge stalls on a live stream
+LOAD_GRACE = 3.0  # an idle mpv this long after starting an item means it failed to load
+HANDOFF_END_MARGIN = 1.0  # an external player this close to the end counts as finished
 
 
 def _ytdl_path(url: str) -> str | None:
@@ -273,9 +279,11 @@ def _ytdl_path(url: str) -> str | None:
 
 
 def _mpv_args(url: str, *, video: bool = False, preview: bool = False,
-              timeshift: bool = False, headers: tuple = ()) -> list[str]:
+              timeshift: bool = False, headers: tuple = (),
+              start: float | None = None) -> list[str]:
     args: list[str] = [
         mpv_bin(),
+        "--load-unsafe-playlists=no",
         f"--input-ipc-server={mpv_socket()}",
         "--idle=yes",
         "--keep-open=yes",
@@ -292,8 +300,13 @@ def _mpv_args(url: str, *, video: bool = False, preview: bool = False,
         args.append("--no-video")
     if preview:
         args.append("--volume=60")
+    if start:
+        args.append(f"--start={float(start):.1f}")
     args += [f"--http-header-fields-append={h}" for h in headers]
     ytdl = _ytdl_path(url)
+    if not ytdl:
+        # only youtube links need yt-dlp; don't let it chew on arbitrary hosts
+        args.append("--ytdl=no")
     if ytdl:
         # mpv's ytdl hook only searches its own PATH, which the daemon's may lack
         args.append(f"--script-opts=ytdl_hook-ytdl_path={ytdl}")
@@ -301,15 +314,16 @@ def _mpv_args(url: str, *, video: bool = False, preview: bool = False,
         args += [f"--cache-secs={TIMESHIFT_SECS}",
                  f"--demuxer-max-bytes={TIMESHIFT_BYTES}",
                  f"--demuxer-max-back-bytes={TIMESHIFT_BYTES}"]
-    args.append(url)
+    args += ["--", url]
     return args
 
 
 def _spawn_mpv(url: str, *, video: bool = False, preview: bool = False,
-               timeshift: bool = False, headers: tuple = ()) -> None:
+               timeshift: bool = False, headers: tuple = (),
+               start: float | None = None) -> None:
     mpv_socket().parent.mkdir(parents=True, exist_ok=True)
     args = _mpv_args(url, video=video, preview=preview, timeshift=timeshift,
-                     headers=headers)
+                     headers=headers, start=start)
 
     proc = subprocess.Popen(
         args,
@@ -357,6 +371,9 @@ def play_station(station: dict[str, Any]) -> None:
     if not url:
         notify.notify("sqlch error", "Station missing URL")
         return
+    if not is_stream_url(url):
+        notify.notify("sqlch error", "Station URL is not a stream address")
+        return
 
     stop(notify_user=False)
     notify.notify("sqlch", f"NOW PLAYING\n{station.get('name', 'Unknown Station')}")
@@ -377,20 +394,24 @@ def play_station(station: dict[str, Any]) -> None:
         _metadata_thread.start()
 
 
-def play_target(target, item: dict[str, Any]) -> None:
-    global _current
+def play_target(target, item: dict[str, Any], start: float | None = None) -> None:
+    global _current, _item_started, _handoff_seen_playing
     stop(notify_user=False)
     meta = target.meta or {}
     notify.notify("sqlch", f"NOW PLAYING\n{meta.get('title') or item.get('title', '')}")
     if meta.get("art") and not item.get("art"):
         item = {**item, "art": meta["art"]}
     if target.handoff:
-        handoff.play(target.handoff, target.url)
+        _handoff_seen_playing = False
+        handoff.play(target.handoff, target.url, target.context)
         _current = {"type": "item", "item": item, "handoff": target.handoff}
         return
     extra = {"headers": target.headers} if target.headers else {}
+    if start:
+        extra["start"] = start
     _spawn_mpv(target.url, video=target.video, **extra)
     _current = {"type": "item", "item": item}
+    _item_started = time.monotonic()
 
 
 def seek(pos: float) -> None:
@@ -412,11 +433,26 @@ def timeshift() -> dict[str, float] | None:
 
 
 def seek_relative(delta: float) -> None:
+    if _current and _current.get("type") == "item":
+        pos, dur = item_progress()
+        if pos is not None and dur:
+            seek(min(max(pos + delta, 0.0), dur))
+        return
     ts = timeshift()
     if ts is None:
         return
     target = min(max(ts["pos"] + delta, ts["start"]), ts["end"] - LIVE_MARGIN)
     seek(target)
+
+
+def can_skip() -> bool:
+    """Whether the playing item has an external player with its own queue."""
+    return bool(_current and _current.get("handoff"))
+
+
+def skip(forward: bool) -> None:
+    if can_skip():
+        handoff.skip(_current["handoff"], forward)
 
 
 def go_live() -> None:
@@ -431,9 +467,47 @@ def item_progress() -> tuple[float | None, float | None]:
     return mpv_get("time-pos"), mpv_get("duration")
 
 
+def _advance_queue(name: str) -> bool:
+    from sqlch.sources import source_config
+    val = source_config(name).get("advance_queue", True)
+    return val if isinstance(val, bool) else True
+
+
+def playback_ended() -> bool:
+    """True once the playing item has reached its end. mpv runs with
+    keep-open, so it parks at EOF rather than exiting; an external player
+    is judged by its progress, or by stopping after it was seen playing
+    (autoplay off)."""
+    global _handoff_seen_playing
+    if _current and _current.get("handoff"):
+        name = _current["handoff"]
+        if not _advance_queue(name):
+            return False
+        pos, dur, state = handoff.snapshot(name)
+        num = isinstance(pos, (int, float)) and isinstance(dur, (int, float))
+        # Stopped right after play() is a startup race, not an end.
+        if state == "playing" or (num and pos > 0):
+            _handoff_seen_playing = True
+        if num and dur > 0 and pos >= dur - HANDOFF_END_MARGIN:
+            return True
+        return state == "stopped" and _handoff_seen_playing
+    return mpv_get("eof-reached") is True
+
+
+def playback_failed() -> bool:
+    """True when an mpv item never loaded (404, expired url, missing file):
+    with --idle=yes mpv just sits idle, so eof-reached never turns true."""
+    if not _current or _current.get("type") != "item" or _current.get("handoff"):
+        return False
+    if not _item_started or time.monotonic() - _item_started < LOAD_GRACE:
+        return False
+    return mpv_get("idle-active") is True
+
+
 def preview(url: str, duration: int = 10) -> None:
     global _preview_timer
 
+    url = require_stream_url(url)
     if _preview_timer:
         _preview_timer.cancel()
         _preview_timer = None
@@ -451,7 +525,7 @@ def preview(url: str, duration: int = 10) -> None:
                     "-autoexit",
                     "-loglevel", "quiet",
                     "-t", str(duration),
-                    url,
+                    "-i", url,
                 ],
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
@@ -474,12 +548,42 @@ def preview(url: str, duration: int = 10) -> None:
         _preview_timer.start()
 
 
+def _follow_handoff() -> None:
+    """An external player carries on by itself (autoplay, skips in its own UI);
+    re-resolve whatever track it reports so the state follows it."""
+    global _current
+    cur = _current
+    if not cur or not cur.get("handoff"):
+        return
+    item = cur["item"]
+    uri = handoff.track_uri(cur["handoff"])
+    tid = uri.rsplit(":", 1)[-1] if uri else None
+    if not tid or tid in (item.get("id"), cur.get("tried")):
+        return
+    from sqlch import sources
+    src = sources.REGISTRY.get(item.get("source"))
+    marked = _current = {**cur, "tried": tid}  # a failed lookup is not retried on every poll
+    if src is None:
+        return
+    try:
+        meta = src.resolve({**item, "id": tid}).meta or {}
+    except Exception:
+        return
+    if _current is not marked:
+        return  # playback changed while the lookup ran
+    new = make_item(item["source"], tid, meta.get("title") or tid, artist=meta.get("artist"),
+                    album=meta.get("album"), art=meta.get("art"))
+    _current = {**marked, "item": new}
+
+
 def current() -> dict[str, Any] | None:
+    _follow_handoff()
     return _current
 
 
 def now_playing_info() -> dict:
     """Return structured now-playing info pulled from live MPV ICY metadata."""
+    _follow_handoff()
     if not mpv_socket().exists() and not (_current and _current.get("handoff")):
         return {"status": "stopped"}
 

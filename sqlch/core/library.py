@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from sqlch.core.paths import data_dir
+from sqlch.core.urlcheck import require_stream_url
 
 APP_NAME = "sqlch"
 LIBRARY_VERSION = 1
@@ -151,6 +152,7 @@ def add_station(
     source: dict | None = None,
     allow_existing: bool = False,
 ) -> dict:
+    url = require_stream_url(url)
     lib = load()
     station_id = _normalize_id(name)
 
@@ -187,6 +189,8 @@ def update_station(station_id: str, updates: dict) -> dict:
         if st["id"] == station_id:
             updates = dict(updates)
             updates.pop("id", None)
+            if updates.get("url") is not None:
+                updates["url"] = require_stream_url(updates["url"])
             st.update(updates)
             lib["stations"][i] = _normalize_station(st)
             save(lib)

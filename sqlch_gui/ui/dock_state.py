@@ -1,6 +1,7 @@
-"""Persisted open/placement state for the docked Library/Discover windows,
+"""Persisted open/placement state for the docked Radio and source windows,
 plus Now Playing's position ("np": None = default top-right, else {"x","y"}
-in overlay coordinates)."""
+in overlay coordinates), whether it is collapsed, and the docked windows'
+height ("pane_h"), which stays at NP's expanded height while it is collapsed."""
 
 import json
 from pathlib import Path
@@ -8,12 +9,14 @@ from pathlib import Path
 from .. import XDG_STATE
 
 STATE_PATH = XDG_STATE / "sqlch-gui" / "windows.json"
-NAMES = ("library", "discover")
+NAMES = ("radio", "playlist")
 
 
 def default_state(names=NAMES) -> dict:
     state = {n: {"open": False, "placed": None} for n in names}
     state["np"] = None
+    state["np_collapsed"] = False
+    state["pane_h"] = None
     return state
 
 
@@ -50,7 +53,17 @@ def load(path: Path = STATE_PATH, names=NAMES) -> dict:
         if isinstance(entry, dict):
             state[name] = {"open": entry.get("open") is True,
                            "placed": _placed(entry.get("placed"))}
+    if "radio" in names and "radio" not in raw:
+        # Library and Discover used to be separate windows; Radio inherits
+        # whichever was open, placed where Library was.
+        old = [raw.get(n) for n in ("library", "discover") if isinstance(raw.get(n), dict)]
+        if old:
+            state["radio"] = {"open": any(o.get("open") is True for o in old),
+                              "placed": _placed(old[0].get("placed"))}
     state["np"] = _np(raw.get("np"))
+    state["np_collapsed"] = raw.get("np_collapsed") is True
+    pane_h = raw.get("pane_h")
+    state["pane_h"] = pane_h if _int(pane_h) and pane_h > 0 else None
     return state
 
 

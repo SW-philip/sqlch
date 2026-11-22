@@ -1,3 +1,4 @@
+import types
 import unittest
 from unittest import mock
 
@@ -11,7 +12,17 @@ class TestMakeItem(unittest.TestCase):
         self.assertEqual(item, {
             "source": "local", "id": "a/b.mp3", "title": "B", "artist": None,
             "album": None, "art": None, "duration": None, "kind": "track",
-            "path": None})
+            "path": None, "channel_id": None, "date": None, "genre": None,
+            "providers": None, "feed_url": None, "url": None, "description": None,
+            "info": None, "group": None})
+
+    def test_podcast_fields(self):
+        item = make_item("podcasts", "f", "Show", kind="folder", path="feed:f",
+                         genre="Comedy", providers=["apple"], feed_url="https://x/f")
+        self.assertEqual((item["genre"], item["providers"], item["feed_url"]),
+                         ("Comedy", ["apple"], "https://x/f"))
+        self.assertEqual(make_item("podcasts", "e", "Ep", url="https://x/e.mp3")["url"],
+                         "https://x/e.mp3")
 
     def test_folder_requires_path(self):
         with self.assertRaises(ValueError):
@@ -22,6 +33,14 @@ class TestMakeItem(unittest.TestCase):
     def test_unknown_kind_rejected(self):
         with self.assertRaises(ValueError):
             make_item("local", "x", "X", kind="podcast")
+
+    def test_make_item_channel_id_defaults_to_none(self):
+        self.assertIsNone(make_item("local", "a", "A")["channel_id"])
+        self.assertEqual(make_item("youtube", "a", "A", channel_id="UC1")["channel_id"], "UC1")
+
+    def test_make_item_description_defaults_to_none(self):
+        self.assertIsNone(make_item("local", "a", "A")["description"])
+        self.assertEqual(make_item("local", "a", "A", description="d")["description"], "d")
 
 
 class TestTarget(unittest.TestCase):
@@ -69,3 +88,29 @@ class TestSafeAvailable(unittest.TestCase):
     def test_normal_value_passes_through(self):
         self.assertTrue(sources.safe_available(mock.Mock(available=lambda: True)))
         self.assertFalse(sources.safe_available(mock.Mock(available=lambda: False)))
+
+
+class TestSectionsFor(unittest.TestCase):
+    def test_source_without_sections_gets_browse_and_favorites(self):
+        src = types.SimpleNamespace(NAME="x")
+        self.assertEqual([s["id"] for s in sources.sections_for(src)],
+                         ["browse", "favorites"])
+
+    def test_own_sections_come_first_then_favorites(self):
+        src = types.SimpleNamespace(NAME="x", sections=lambda: [{"id": "a", "title": "A"}])
+        self.assertEqual([s["id"] for s in sources.sections_for(src)], ["a", "favorites"])
+
+    def test_broken_sections_fall_back_to_browse(self):
+        def boom():
+            raise RuntimeError("x")
+
+        src = types.SimpleNamespace(NAME="x", sections=boom)
+        with self.assertLogs("sqlch.sources", level="ERROR"):
+            self.assertEqual([s["id"] for s in sources.sections_for(src)],
+                             ["browse", "favorites"])
+
+    def test_registered_sources_have_sections(self):
+        for name, mod in sources.REGISTRY.items():
+            ids = [s["id"] for s in sources.sections_for(mod)]
+            self.assertEqual(ids[-1], "favorites", name)
+            self.assertEqual(len(ids), len(set(ids)), name)

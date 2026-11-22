@@ -1,0 +1,72 @@
+"""Grouping for a source pane's sort pill: pure, no Gtk. group() turns show
+items into ("header", text, depth) and ("item", item, tag) rows."""
+
+MODES = ("source", "genre", "az")
+LABELS = {"source": "SOURCE", "genre": "GENRE", "az": "A–Z"}
+OTHER = "Other"
+
+
+def next_mode(mode: str, modes=MODES) -> str:
+    return modes[(modes.index(mode) + 1) % len(modes)] if mode in modes else modes[0]
+
+
+def _str(value) -> str:
+    # Items come from external directories: a title or genre can be an int, a dict or None.
+    return value if isinstance(value, str) else ""
+
+
+def _title(item) -> str:
+    return _str(item.get("title")).casefold()
+
+
+def _genre(item) -> str:
+    return _str(item.get("genre")).strip() or OTHER
+
+
+def _provs(item) -> list:
+    v = item.get("providers")
+    return list(dict.fromkeys(p for p in v if isinstance(p, str))) if isinstance(v, list) else []
+
+
+def _by_genre(items, depth, tag) -> list:
+    rows = []
+    for g in sorted({_genre(i) for i in items}, key=lambda g: (g == OTHER, g.casefold())):
+        rows.append(("header", g, depth))
+        rows += [("item", i, tag(i)) for i in sorted(items, key=_title) if _genre(i) == g]
+    return rows
+
+
+def sectioned(items) -> list:
+    """The source's own headings (item["group"]) in first-seen order, or no
+    rows when no item has one."""
+    order = list(dict.fromkeys(_str(i.get("group")) for i in items))
+    if order == [""]:
+        return []
+    rows = []
+    for g in order:
+        rows.append(("header", g or OTHER.upper(), 0))
+        rows += [("item", i, "") for i in items if _str(i.get("group")) == g]
+    return rows
+
+
+def group(items, mode, providers=None) -> list:
+    providers = providers or {}
+
+    def shorts(i):
+        return "·".join(providers.get(p, {}).get("short", p) for p in _provs(i))
+
+    if mode == "az":
+        return [("item", i, _str(i.get("genre"))) for i in sorted(items, key=_title)]
+    if mode == "genre":
+        return _by_genre(items, 0, shorts)
+    seen = {p for i in items for p in _provs(i)}
+    order = [p for p in providers if p in seen] + sorted(seen - set(providers))
+    rows = []
+    for p in order:
+        rows.append(("header", providers.get(p, {}).get("title", p.upper()), 0))
+        rows += _by_genre([i for i in items if p in _provs(i)], 1, lambda i: "")
+    loose = [i for i in items if not _provs(i)]
+    if loose:
+        rows.append(("header", OTHER.upper(), 0))
+        rows += _by_genre(loose, 1, lambda i: "")
+    return rows

@@ -1,15 +1,17 @@
 """Playback delegated to an external player instead of mpv. Each handler takes
 the Target url (a URI the player understands) and offers play, toggle, stop,
-seek and progress. A new backend is another entry in HANDLERS."""
+seek, skip and progress. A new backend is another entry in HANDLERS."""
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
 from urllib.request import Request, urlopen
 
 STARTUP_WAIT = 12.0
+STATES = ("playing", "paused", "stopped")
 
 
 def _playerctl(*args: str, player: str) -> subprocess.CompletedProcess:
@@ -18,6 +20,14 @@ def _playerctl(*args: str, player: str) -> subprocess.CompletedProcess:
         raise RuntimeError("playerctl not found")
     return subprocess.run([exe, "-p", player, *args], capture_output=True,
                           text=True, timeout=5)
+
+
+_TRACK_ID = re.compile(r"track[:/]([A-Za-z0-9]+)")
+
+
+def _track_uri(raw: str | None) -> str | None:
+    m = _TRACK_ID.search(raw or "")
+    return f"spotify:track:{m.group(1)}" if m else None
 
 
 class Mpris:
@@ -48,9 +58,10 @@ class Mpris:
             time.sleep(0.5)
         raise RuntimeError(f"{self.launch} did not start")
 
-    def play(self, uri: str) -> None:
+    def play(self, uri: str, context: str | None = None) -> None:
+        # MPRIS can't start a context at a track; the album plays from the top.
         self._ensure_running()
-        r = _playerctl("open", uri, player=self.player)
+        r = _playerctl("open", context or uri, player=self.player)
         if r.returncode != 0:
             raise RuntimeError(r.stderr.strip() or f"{self.player} refused the uri")
 
@@ -66,8 +77,20 @@ class Mpris:
     def seek(self, pos: float) -> None:
         pass  # the external app owns its own position
 
+    def skip(self, forward: bool) -> None:
+        _playerctl("next" if forward else "previous", player=self.player)
+
     def progress(self) -> tuple[float | None, float | None]:
         return None, None
+
+    def track_uri(self) -> str | None:
+        r = _playerctl("metadata", "mpris:trackid", player=self.player)
+        return _track_uri(r.stdout) if r.returncode == 0 else None
+
+    def state(self) -> str | None:
+        r = _playerctl("status", player=self.player)
+        word = r.stdout.strip().lower() if r.returncode == 0 else ""
+        return word if word in STATES else None
 
     def usable(self) -> bool:
         return True
@@ -100,9 +123,10 @@ class Librespot:
             return False
         return bool(root and root.get("playback_ready"))
 
-    def play(self, uri: str) -> None:
+    def play(self, uri: str, context: str | None = None) -> None:
+        body = {"uri": context, "skip_to_uri": uri} if context else {"uri": uri}
         try:
-            self._call("/player/play", {"uri": uri})
+            self._call("/player/play", body)
         except OSError as e:
             raise RuntimeError(f"go-librespot: {e}") from e
 
@@ -118,15 +142,48 @@ class Librespot:
     def seek(self, pos: float) -> None:
         self._call("/player/seek", {"position": int(pos * 1000)})
 
-    def progress(self) -> tuple[float | None, float | None]:
-        try:
-            track = (self._call("/status") or {}).get("track") or {}
-        except (OSError, ValueError):
-            return None, None
+    def skip(self, forward: bool) -> None:
+        self._call("/player/next" if forward else "/player/prev")
+
+    @staticmethod
+    def _progress_of(status: dict) -> tuple[float | None, float | None]:
+        track = status.get("track") or {}
         pos, dur = track.get("position"), track.get("duration")
         if pos is None or not dur:
             return None, None
         return pos / 1000, dur / 1000
+
+    @staticmethod
+    def _state_of(status: dict) -> str | None:
+        if status.get("stopped"):
+            return "stopped"
+        if status.get("paused"):
+            return "paused"
+        return "playing" if status.get("track") else None
+
+    def progress(self) -> tuple[float | None, float | None]:
+        try:
+            return self._progress_of(self._call("/status") or {})
+        except (OSError, ValueError):
+            return None, None
+
+    def track_uri(self) -> str | None:
+        track = (self._call("/status") or {}).get("track") or {}
+        return _track_uri(track.get("uri"))
+
+    def state(self) -> str | None:
+        try:
+            return self._state_of(self._call("/status") or {})
+        except (OSError, ValueError):
+            return None
+
+    def snapshot(self) -> tuple[float | None, float | None, str | None]:
+        """Position, duration and state from a single /status fetch."""
+        try:
+            status = self._call("/status") or {}
+        except (OSError, ValueError):
+            return None, None, None
+        return (*self._progress_of(status), self._state_of(status))
 
 
 class Preferred:
@@ -136,16 +193,16 @@ class Preferred:
     def __init__(self, primary, fallback):
         self.primary, self.fallback, self.active = primary, fallback, fallback
 
-    def play(self, uri: str) -> None:
+    def play(self, uri: str, context: str | None = None) -> None:
         if self.primary.usable():
             try:
-                self.primary.play(uri)
+                self.primary.play(uri, context)
                 self.active = self.primary
                 return
             except RuntimeError:
                 pass
         self.active = self.fallback
-        self.fallback.play(uri)
+        self.fallback.play(uri, context)
 
     def toggle(self) -> None:
         self.active.toggle()
@@ -156,8 +213,23 @@ class Preferred:
     def seek(self, pos: float) -> None:
         self.active.seek(pos)
 
+    def skip(self, forward: bool) -> None:
+        self.active.skip(forward)
+
     def progress(self) -> tuple[float | None, float | None]:
         return self.active.progress()
+
+    def track_uri(self) -> str | None:
+        return self.active.track_uri()
+
+    def state(self) -> str | None:
+        return self.active.state()
+
+    def snapshot(self) -> tuple[float | None, float | None, str | None]:
+        snap = getattr(self.active, "snapshot", None)
+        if snap:
+            return snap()
+        return (*self.active.progress(), self.active.state())
 
     def usable(self) -> bool:
         return True
@@ -166,8 +238,8 @@ class Preferred:
 HANDLERS = {"spotify": Preferred(Librespot(), Mpris("spotify", "spotify"))}
 
 
-def play(name: str, uri: str) -> None:
-    HANDLERS[name].play(uri)
+def play(name: str, uri: str, context: str | None = None) -> None:
+    HANDLERS[name].play(uri, context)
 
 
 def toggle(name: str) -> None:
@@ -184,5 +256,34 @@ def seek(name: str, pos: float) -> None:
     HANDLERS[name].seek(pos)
 
 
+def skip(name: str, forward: bool) -> None:
+    HANDLERS[name].skip(forward)
+
+
 def progress(name: str) -> tuple[float | None, float | None]:
     return HANDLERS[name].progress()
+
+
+def track_uri(name: str) -> str | None:
+    """The track the external player is on now, which differs from the one
+    sqlch started once it autoplays or the user skips in the app."""
+    try:
+        return HANDLERS[name].track_uri()
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+        return None
+
+
+def state(name: str) -> str | None:
+    """"playing", "paused", "stopped", or None when the player can't say."""
+    try:
+        return HANDLERS[name].state()
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+        return None
+
+
+def snapshot(name: str) -> tuple[float | None, float | None, str | None]:
+    """(position, duration, state) in one go; (None, None, None) on error."""
+    try:
+        return HANDLERS[name].snapshot()
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+        return None, None, None

@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import gi
 gi.require_version("Gtk", "4.0")
@@ -227,3 +227,38 @@ class TestFavoriteDualRows(_LibraryBackedTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestStationTooltips(_LibraryBackedTestCase):
+    def test_row_tooltip_includes_live_text_when_set(self):
+        library.add_url("Tip Station", "http://example.com/stream")
+        sid = library.get_station_list()[0]["id"]
+        panel = _make_panel()
+        row, live_lbl, mini_eq = panel._rows_map[sid][0]
+        self.assertTrue(row.get_tooltip_text().startswith("Tip Station\n"))
+        panel._apply_probe(sid, "♫ Band — Song")
+        self.assertTrue(row.get_tooltip_text().endswith("♫ Band — Song"))
+        panel._apply_probe(sid, "")
+        self.assertNotIn("Band", row.get_tooltip_text())
+
+
+class TestStationQueueActions(_LibraryBackedTestCase):
+    def test_queue_station_sends_the_station(self):
+        library.add_url("Test Station", "http://example.com/stream")
+        station = library.get_station_list()[0]
+        panel = _make_panel()
+        popover = Mock()
+        with patch("sqlch_gui.ui.station_list.daemon.send") as send, \
+             patch("sqlch_gui.ui.station_list.threading.Thread") as thread:
+            panel._queue_station(popover, station, True)
+            # the send may block ~2 s on an idle queue_add: off the GTK thread
+            send.assert_not_called()
+            kw = thread.call_args.kwargs
+            self.assertTrue(kw["daemon"])
+            thread.return_value.start.assert_called_once_with()
+            kw["target"]()
+        popover.popdown.assert_called_once_with()
+        send.assert_called_once_with({
+            "cmd": "queue_add", "kind": "station", "play_next": True,
+            "payload": {"id": station["id"], "name": "Test Station",
+                        "url": "http://example.com/stream"}})

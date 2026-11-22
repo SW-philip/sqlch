@@ -5,8 +5,11 @@ import time
 
 from gi.repository import Gtk, Gdk, GLib
 from .. import library, daemon, icyprobe, metadata
+from . import dnd
 from .banner import RibbonBanner, PennantTag
 from .eq_strip import EqStrip
+from .scroll_label import ScrollLabel
+from .tooltips import station_tooltip
 
 PROBE_STALE_SECS = 45
 PROBE_TICK_SECS = 60
@@ -153,8 +156,7 @@ class StationListPanel(Gtk.Box):
             text = self._probe_titles.get(s_id, "")
             for row, live_lbl, mini_eq in entries:
                 if text and s_id != self._active_id:
-                    live_lbl.set_text(text)
-                    live_lbl.set_visible(True)
+                    self._show_live(row, live_lbl, text)
                 if s_id == self._active_id:
                     row.add_css_class("active")
                     mini_eq.set_visible(True)
@@ -198,7 +200,8 @@ class StationListPanel(Gtk.Box):
             lambda b, sid=s["id"], fav=s.get("favorite", False): self.on_toggle_favorite(sid, fav),
         )
 
-        freq_lbl = Gtk.Label()
+        # fixed width so 96.1 and 106.1 line the names up
+        freq_lbl = Gtk.Label(xalign=1.0, width_chars=5)
         freq_lbl.add_css_class("station-freq")
         freq_lbl.set_text(f"{_parse_freq(s.get('frequency')):.1f}")
 
@@ -206,9 +209,8 @@ class StationListPanel(Gtk.Box):
         body.set_hexpand(True)
         name_lbl = Gtk.Label(label=s.get("name"), xalign=0.0)
         name_lbl.set_ellipsize(3)  # Pango.EllipsizeMode.END
-        live_lbl = Gtk.Label(xalign=0.0)
-        live_lbl.add_css_class("station-live")
-        live_lbl.set_ellipsize(3)
+        live_lbl = ScrollLabel()
+        live_lbl.label.add_css_class("station-live")
         live_lbl.set_visible(False)
         body.append(name_lbl)
         body.append(live_lbl)
@@ -234,6 +236,9 @@ class StationListPanel(Gtk.Box):
         )
         row.add_controller(click_gesture)
 
+        dnd.attach_drag(row, {"kind": "station", "payload": dnd.station_payload(s)})
+        row._station = s
+        row.set_tooltip_text(station_tooltip(s))
         return row, live_lbl, mini_eq
 
     def on_toggle_favorite(self, station_id: str, currently_favorite: bool):
@@ -253,6 +258,13 @@ class StationListPanel(Gtk.Box):
         popover.set_parent(widget)
 
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+
+        for label, play_next in (("Add to queue", False), ("Play next", True)):
+            btn_q = Gtk.Button(label=label)
+            btn_q.add_css_class("menu-btn")
+            btn_q.connect("clicked", lambda b, n=play_next: self._queue_station(popover, station, n))
+            vbox.append(btn_q)
+        vbox.append(Gtk.Separator())
 
         # Modification entries
         ent_edit_name = Gtk.Entry(text=station["name"])
@@ -294,6 +306,12 @@ class StationListPanel(Gtk.Box):
         popover.popdown()
         self.refresh()
 
+    def _queue_station(self, popover, station, play_next):
+        popover.popdown()
+        msg = dnd.queue_msg("station", dnd.station_payload(station), play_next)
+        # an idle queue_add starts playback and can block for ~2 s
+        threading.Thread(target=lambda: daemon.send(msg), daemon=True).start()
+
     def on_delete_station(self, popover, station_id):
         library.remove(station_id)
         popover.popdown()
@@ -323,8 +341,12 @@ class StationListPanel(Gtk.Box):
                     mini_eq.set_active(False)
                     mini_eq.set_visible(False)
                     text = self._probe_titles.get(s_id, "")
-                live_lbl.set_text(text)
-                live_lbl.set_visible(bool(text))
+                self._show_live(row, live_lbl, text)
+
+    def _show_live(self, row, live_lbl, text):
+        live_lbl.set_text(text)
+        live_lbl.set_visible(bool(text))
+        row.set_tooltip_text(station_tooltip(row._station, text))
 
     # --- Live track probing for non-playing stations ---
 
@@ -388,6 +410,5 @@ class StationListPanel(Gtk.Box):
             self._probe_titles.pop(s_id, None)
         for row, live_lbl, mini_eq in self._rows_map.get(s_id, []):
             if s_id != self._active_id:
-                live_lbl.set_text(text)
-                live_lbl.set_visible(bool(text))
+                self._show_live(row, live_lbl, text)
         return False

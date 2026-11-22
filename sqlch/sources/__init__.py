@@ -7,8 +7,8 @@ import logging
 
 log = logging.getLogger(__name__)
 
-RESERVED = ("library", "discover", "np")
-_MODULES = ("local", "video", "jellyfin", "youtube", "spotify")
+RESERVED = ("library", "discover", "np", "radio", "playlist")
+_MODULES = ("local", "video", "jellyfin", "youtube", "spotify", "podcasts")
 
 
 def source_config(name: str) -> dict:
@@ -23,6 +23,22 @@ def safe_available(source) -> bool:
     except Exception:
         log.exception("source %s: available() failed", getattr(source, "NAME", source))
         return False
+
+
+BROWSE = {"id": "browse", "title": "BROWSE"}
+FAVORITES = {"id": "favorites", "title": "FAVORITES"}
+
+
+def sections_for(source) -> list[dict]:
+    """The source's own sections (BROWSE when it has none), then FAVORITES."""
+    own = getattr(source, "sections", None)
+    mine = [BROWSE]
+    if own:
+        try:
+            mine = list(own())
+        except Exception:
+            log.exception("source %s: sections() failed", getattr(source, "NAME", source))
+    return mine + [FAVORITES]
 
 
 def _load(names=_MODULES, package=__name__) -> dict:

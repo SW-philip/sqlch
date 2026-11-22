@@ -16,21 +16,22 @@ class TestNavColumn(unittest.TestCase):
     def test_click_emits_toggle_and_does_not_flip_highlight(self):
         nav, seen = NavColumn(), []
         nav.connect("nav-toggled", lambda _n, name: seen.append(name))
-        nav._buttons["library"].emit("clicked")
-        nav._buttons["library"].emit("clicked")
-        self.assertEqual(seen, ["library", "library"])
-        self.assertFalse(nav._buttons["library"].has_css_class("active"))
+        nav._buttons["radio"].emit("clicked")
+        nav._buttons["radio"].emit("clicked")
+        self.assertEqual(seen, ["radio", "radio"])
+        self.assertFalse(nav._buttons["radio"].has_css_class("active"))
 
     def test_set_open_syncs_highlight_independently(self):
         nav, seen = NavColumn(), []
         nav.connect("nav-toggled", lambda _n, name: seen.append(name))
-        nav.set_open("library", True)
-        nav.set_open("discover", True)
-        self.assertTrue(nav._buttons["library"].has_css_class("active"))
-        self.assertTrue(nav._buttons["discover"].has_css_class("active"))
-        nav.set_open("library", False)
-        self.assertFalse(nav._buttons["library"].has_css_class("active"))
-        self.assertTrue(nav._buttons["discover"].has_css_class("active"))
+        nav.set_sources(ENTRIES)
+        nav.set_open("radio", True)
+        nav.set_open("local", True)
+        self.assertTrue(nav._buttons["radio"].has_css_class("active"))
+        self.assertTrue(nav._sources_btn.has_css_class("active"))
+        nav.set_open("radio", False)
+        self.assertFalse(nav._buttons["radio"].has_css_class("active"))
+        self.assertTrue(nav._sources_btn.has_css_class("active"))
         self.assertEqual(seen, [])
 
 
@@ -73,8 +74,8 @@ class TestNavSources(unittest.TestCase):
     def test_library_open_leaves_sources_tab_alone(self):
         nav = NavColumn()
         nav.set_sources(ENTRIES)
-        nav.set_open("library", True)
-        self.assertTrue(nav._buttons["library"].has_css_class("active"))
+        nav.set_open("radio", True)
+        self.assertTrue(nav._buttons["radio"].has_css_class("active"))
         self.assertFalse(nav._sources_btn.has_css_class("active"))
 
 

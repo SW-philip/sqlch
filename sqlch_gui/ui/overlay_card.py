@@ -31,6 +31,7 @@ class OverlayCard:
                  on_drag: Callable[[Rect], Rect | None] | None = None,
                  on_drop: Callable[[Rect], None] | None = None,
                  on_drag_start: Callable[[], None] | None = None,
+                 on_double_click: Callable[[], None] | None = None,
                  exclude: tuple[Gtk.Widget, ...] = (),
                  sized: bool = True):
         self.window = window
@@ -63,6 +64,14 @@ class OverlayCard:
             drag.connect("cancel", self._drag_cancel)
             self.fixed.add_controller(drag)
             handle.set_cursor_from_name("grab")
+            if on_double_click is not None:
+                # Grouped with the drag so its claim doesn't cancel the
+                # click and reset the press count.
+                click = Gtk.GestureClick.new()
+                click.set_button(Gdk.BUTTON_PRIMARY)
+                click.connect("pressed", self._click_pressed, on_double_click)
+                self.fixed.add_controller(click)
+                drag.group(click)
 
         window.connect("map", lambda _w: self._apply_input_region())
 
@@ -107,9 +116,16 @@ class OverlayCard:
         return ok and b.get_x() <= x <= b.get_x() + b.get_width() \
             and b.get_y() <= y <= b.get_y() + b.get_height()
 
+    def _on_handle(self, x, y):
+        return self._in_widget(self.handle, x, y) \
+            and not any(self._in_widget(w, x, y) for w in self._exclude)
+
+    def _click_pressed(self, _g, n_press, x, y, on_double_click):
+        if n_press == 2 and self._on_handle(x, y):
+            on_double_click()
+
     def _drag_begin(self, gesture, x, y):
-        if not self._in_widget(self.handle, x, y) \
-                or any(self._in_widget(w, x, y) for w in self._exclude):
+        if not self._on_handle(x, y):
             self._dragging = False
             gesture.set_state(Gtk.EventSequenceState.DENIED)
             return

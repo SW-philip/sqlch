@@ -1,11 +1,23 @@
 # sqlch
 
-**sqlch** is an internet radio and stream control toolkit built around a
-single background daemon, with three interchangeable frontends on top of
-it: a **CLI**, a **Textual TUI**, and **sqlch-gui**, a GTK4 Wayland
-layer-shell widget. It's designed to sit comfortably in Unix pipelines,
-window manager setups, and declarative systems (especially NixOS), while
-remaining usable as a standalone Python application.
+**sqlch** is a swiss-army media suite for the Linux desktop: internet
+radio, podcasts, YouTube, Spotify, Jellyfin, and your local music and
+video, all behind a single background daemon. Three interchangeable
+frontends sit on top of it: a **CLI**, a **Textual TUI**, and
+**sqlch-gui**, a GTK4 Wayland layer-shell widget with a docked pane per
+source. It's designed to sit comfortably in Unix pipelines, window manager
+setups, and declarative systems (especially NixOS), while remaining usable
+as a standalone Python application.
+
+The look and the window model are **Winamp-inspired**: every source is its
+own small module window that docks to the player and snaps to its neighbors,
+and you can pull any of them free and place it wherever you like. Winamp
+had this in the '90s, and modular, dockable panes around a compact player
+are still a better way to build a media app than one monolithic window.
+
+Radio is still the core: live streams, a rolling one-hour timeshift
+buffer, lossless recording, and metadata enrichment. Everything else plugs
+in as a *source*.
 
 ---
 
@@ -18,21 +30,42 @@ remaining usable as a standalone Python application.
 
 ## What sqlch is
 
+- A **multi-source media front end** — each source is a small module with search, browse, and resolve; the GUI gives every source its own dockable pane
 - A **CLI-first** radio orchestrator — status, play, pause, stop, search, preview
 - A **daemon + IPC** architecture — a long-running process owns playback state; the CLI, TUI, and GUI all talk to it over a Unix socket
 - A **local station library** — stations are saved, tagged, favorited, and tracked with play history
-- A **GTK4 desktop widget** (`sqlch-gui`) — a Wayland layer-shell popup with a persistent Now Playing card and a slide-out Library/Discover drawer, themed live from a palette file
+- A **GTK4 desktop widget** (`sqlch-gui`) — a Winamp-style Wayland layer-shell popup with a persistent Now Playing card and docked, draggable panes, themed live from a palette file
+- **Radio timeshift** — a rolling one-hour seekable buffer on live streams
+- A **queue** — drag stations and tracks from any source into the Playlist pane (or use *Add to queue* / *Play next* in a row's menu); finished items advance to the next entry or the next item in the list you started from, and a RADIO / MEDIA toggle decides what next/prev and your media keys walk
 - **Stream recording** — bit-perfect capture of the raw stream via mpv, remuxed losslessly (no re-encode) into a tagged file per station
+- **Favorites, follows, and watch progress** — star anything, follow podcasts and YouTube channels (new uploads arrive as in-app toasts), and resume videos where you left off
 - An **MPRIS2 player** — integrates with desktop environments via D-Bus (playerctl, waybar, etc.)
 - A **metadata enricher** — ICY stream titles are enriched via Spotify and MusicBrainz in the background, with cover art fetched for the GUI
 - A **Nix-first artifact** — the CLI builds cleanly as a flake package; the GUI ships as a home-manager module
+
+### Sources
+
+| Source | What it does | Setup |
+|---|---|---|
+| **Radio** | Library plus RadioBrowser discovery, live ICY track info, timeshift, recording | none |
+| **Podcasts** | Apple Podcasts and Podcast Index search, RSS episodes, follow shows | optional Podcast Index key |
+| **YouTube** | Search, channel/playlist shortcuts, follow channels, played through mpv's yt-dlp hook | `yt-dlp` |
+| **Spotify** | Catalog search, your playlists and followed artists; playback handed to go-librespot or the desktop app | `SPOTIFY_CLIENT_ID`/`SECRET`, `sqlch spotify-login` |
+| **Jellyfin** | Browse and search your server's libraries, direct-file playback | API key |
+| **Local Library** | Browse and search a folder of music | `sources.local.library_root` |
+| **Local Video** | Browse and search a folder of video; plays in its own mpv window | `sources.video.library_root` |
+
+Sources are configured under a `sources` table in
+`~/.config/sqlch/sqlch.json`. A source that isn't set up shows a one-line
+hint in its pane instead of an empty list. Secrets are read from files
+(by default under `/run/secrets`), never stored in the config.
 
 ---
 
 ## What sqlch is not
 
-- Not a general-purpose music player — it only plays internet radio streams, not local files or Spotify tracks directly
-- Not a Spotify client — Spotify is used only as a metadata source, not a playback backend
+- Not a Spotify *player* — Spotify audio is played by go-librespot or the Spotify desktop app; sqlch browses, searches, and drives it
+- Not a library manager — it doesn't tag, transcode, or organize your files
 - Not dependent on global Python state or system packages for the CLI/TUI/daemon
 
 ---
@@ -54,9 +87,24 @@ sqlch/
 │   ├── enrich.py        # MusicBrainz enrichment + cache
 │   ├── spoti.py         # Spotify enrichment + cache
 │   ├── discover.py      # RadioBrowser search
+│   ├── follows.py       # Favorites, followed channels and podcasts
+│   ├── watcher.py       # Polls followed channels, queues new-upload notices
+│   ├── progress.py      # Watch/listen progress for resume
+│   ├── handoff.py       # Playback delegated to go-librespot / Spotify desktop
+│   ├── playqueue.py     # Persistent queue: entries, mode, resume point
+│   ├── transport.py     # Advance, next/prev, radio/media mode, parking
+│   ├── spotify_auth.py  # Spotify user login (PKCE) and token refresh
 │   ├── icyprobe.py      # Fetches a station's ICY StreamTitle without starting playback
 │   ├── curation_db.py   # SQLite store for heard-track history
 │   └── notify.py        # Desktop notifications
+├── sources/    # Pluggable media sources, one module each
+│   ├── base.py          # Item and Target types
+│   ├── podcasts.py      # Apple Podcasts + Podcast Index, RSS episodes
+│   ├── youtube.py       # yt-dlp search, shortcuts, follows
+│   ├── spotify.py       # Catalog, playlists, followed artists
+│   ├── jellyfin.py      # Jellyfin libraries and search
+│   ├── local.py         # Local music folder
+│   └── video.py         # Local video folder
 └── tui/        # Textual-based interface (optional)
 
 sqlch_gui/      # GTK4 layer-shell desktop widget (separate frontend, same daemon)
@@ -68,6 +116,10 @@ sqlch_gui/      # GTK4 layer-shell desktop widget (separate frontend, same daemo
     ├── window.py         # Popup window, layer-shell setup, drag-open drawer
     ├── now_playing.py    # Now Playing card: cover art, controls, volume
     ├── station_list.py   # Library panel: favorites, search, station rows
+    ├── radio_pane.py     # Radio pane with Library and Discover pills
+    ├── source_pane.py    # Generic pane for any registered source
+    ├── playlist_pane.py  # Queue pane: RADIO/MEDIA toggle, drag in and reorder
+    ├── dock_manager.py   # Docked, draggable pane windows
     ├── discover.py       # RadioBrowser search panel
     ├── controls.py       # Nav buttons, volume meter, record bubble
     ├── banner.py         # Section headers and tag chips
@@ -81,6 +133,7 @@ Key design decisions:
 - The MPRIS plugin is optional at runtime; `preview()` works without it
 - Enrichment is cached with a 30-day TTL (both Spotify and MusicBrainz)
 - Station library is a plain JSON file; plays are recorded with timestamps
+- Sources are registered from an explicit import list, so a missing optional dependency in one cannot break the others
 - `sqlch_gui` is a separate top-level package, not a subpackage of `sqlch` — it imports `sqlch.core.enrich` directly but keeps its own IPC client and station-list code, since the widget's needs (live probing, favorites, cover art) don't match the CLI's
 
 ---
@@ -191,6 +244,37 @@ to a temp file; on finalize, sqlch remuxes it losslessly with
 recordings directory. `--track` mode finalizes and rotates to a new file
 on every track change instead of waiting for a manual stop.
 
+### Spotify
+
+```bash
+sqlch spotify-login [--port N]   # log in (PKCE) to see your playlists and followed artists
+sqlch spotify-logout
+```
+
+Register `http://127.0.0.1:<port>/callback` (default port 8888) on your
+Spotify developer app once. Searching works without logging in.
+
+### Queue
+
+```bash
+sqlch queue                      # list entries and the mode
+sqlch queue add <id|name|url>    # queue a station
+sqlch queue clear
+sqlch mode [radio|media]         # show or set what next/prev walk
+```
+
+Items from the GUI sources are queued from the Playlist pane or a row's menu.
+A queued station starts when the item before it finishes and flips the mode to
+RADIO; flip back to MEDIA and the next queued item plays. Playing a station over
+media (or switching to RADIO) parks the item; flip back to MEDIA and it resumes
+where it left off. Dropping onto an empty, idle playlist plays right away.
+
+Turn off autoplay in Spotify so it stops at the end of a track; sqlch then
+advances the queue when Spotify stops after playing. Set
+`sources.spotify.advance_queue` to `false` in `~/.config/sqlch/sqlch.json` to
+leave Spotify alone. With autoplay on, Spotify moves on by itself and the queue
+may not follow.
+
 ### Library
 
 ```bash
@@ -227,9 +311,10 @@ sqlch-gui-toggle    # launch if not running, otherwise kill (for a keybind)
 
 `sqlch-gui` is a small popup anchored to a screen edge via
 `gtk4-layer-shell`. The Now Playing card — cover art, station/track info,
-codec/bitrate/buffer pills, play/stop, volume, and the record toggle — is
-always visible; Library (with a pinned Favorites section) and Discover
-live in a drawer that slides out on drag. It drives the same daemon as
+codec/bitrate/buffer pills, play/stop, volume, the record toggle, and a
+progress or timeshift bar — is always visible. Radio (Library with a
+pinned Favorites section, plus Discover) and every configured source open
+as docked panes that can be pulled free and moved. It drives the same daemon as
 the CLI, so playback started from the CLI shows up in the GUI and vice
 versa. Station rows in the Library panel periodically probe their ICY
 StreamTitle in the background, so a row can show what's currently
@@ -240,6 +325,24 @@ out of a `palette.sh` shell script — see `sqlch_gui/palette.py`'s
 `_DEFAULTS` for the full key list and fallback values — rather than
 hardcoded colors, so the widget can be re-skinned by pointing
 `SQLCH_GUI_PALETTE` at a different file.
+
+### Podcasts
+
+The Podcasts pane searches Apple Podcasts and, when a key is set,
+Podcast Index at the same time. A show listed in both appears once.
+Opening a show lists its episodes from the RSS feed, newest first, and
+they play through mpv. **Follow** saves a show to FOLLOWING; the star
+marks favorite episodes. The sort pill groups show lists by SOURCE
+(service, then genre), GENRE, or A–Z.
+
+Apple needs no setup. To add Podcast Index, get a free key at
+api.podcastindex.org and put it in `/run/secrets/podcastindex_env`
+(or point `sources.podcasts.env_file` in `sqlch.json` elsewhere):
+
+```bash
+PODCASTINDEX_API_KEY=...
+PODCASTINDEX_API_SECRET=...
+```
 
 ---
 
@@ -287,6 +390,10 @@ MusicBrainz enrichment requires no credentials.
 | `SPOTIFY_CLIENT_ID` | *(unset)* | Spotify API client ID |
 | `SPOTIFY_CLIENT_SECRET` | *(unset)* | Spotify API client secret |
 | `SQLCH_SPOTIFY_BASE` | Spotify API | Override Spotify API base URL |
+| `PODCASTINDEX_API_KEY` | *(unset)* | Podcast Index API key (overrides the secrets file) |
+| `PODCASTINDEX_API_SECRET` | *(unset)* | Podcast Index API secret |
+| `SQLCH_APPLE_PODCASTS_BASE` | Apple search API | Override Apple Podcasts search base URL |
+| `SQLCH_PODCASTINDEX_BASE` | Podcast Index API | Override Podcast Index API base URL |
 | `SQLCH_MUSICBRAINZ_BASE` | MusicBrainz API | Override MusicBrainz API base URL |
 | `SQLCH_RADIOBROWSER_BASE` | RadioBrowser API | Override RadioBrowser API base URL |
 | `XDG_CACHE_HOME` | `~/.cache` | Cache directory root |

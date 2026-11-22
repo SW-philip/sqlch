@@ -6,8 +6,9 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
-from sqlch.core import player, library, discover
+from sqlch.core import player, library, discover, playqueue
 from sqlch.core import client
+from sqlch.core.urlcheck import is_stream_url
 from sqlch.core.daemon import run_daemon
 
 HELP = (
@@ -34,6 +35,16 @@ HELP = (
     'Discovery:\n'
     '  sqlch search <query>\n'
     '  sqlch preview <index|url>\n'
+    '\n'
+    'Spotify:\n'
+    '  sqlch spotify-login [--port N]   (log in to see your playlists)\n'
+    '  sqlch spotify-logout\n'
+    '\n'
+    'Queue:\n'
+    '  sqlch queue                      (list entries and the mode)\n'
+    '  sqlch queue add <id|name|url>    (add a station)\n'
+    '  sqlch queue clear\n'
+    '  sqlch mode [radio|media]         (what next/prev walk)\n'
 )
 
 
@@ -73,7 +84,127 @@ def status():
     return player.status_string()
 
 
+SPOTIFY_LOGIN_USAGE = 'usage: sqlch spotify-login [--port N]'
+
+
+def _valid_port(port: int) -> bool:
+    return 1 <= port <= 65535
+
+
+def spotify_login_cmd(args: list[str]) -> None:
+    from sqlch.core import spotify_auth
+    from sqlch.sources import spotify
+    if args == []:
+        port = spotify.redirect_port()
+        if not _valid_port(port):
+            print(f'sqlch: sources.spotify.redirect_port must be 1-65535, got {port}',
+                  file=sys.stderr)
+            sys.exit(2)
+    elif len(args) == 2 and args[0] == '--port':
+        try:
+            port = int(args[1])
+        except ValueError:
+            port = 0
+        if not _valid_port(port):
+            print(SPOTIFY_LOGIN_USAGE, file=sys.stderr)
+            sys.exit(2)
+    else:
+        print(SPOTIFY_LOGIN_USAGE, file=sys.stderr)
+        sys.exit(2)
+    cid = spotify.client_id()
+    if cid is None:
+        print('sqlch: no Spotify credentials; put SPOTIFY_CLIENT_ID and '
+              f'SPOTIFY_CLIENT_SECRET in {spotify.DEFAULT_ENV_FILE}', file=sys.stderr)
+        sys.exit(1)
+    try:
+        spotify_auth.login(cid, port)
+    except KeyboardInterrupt:
+        print('sqlch: login cancelled', file=sys.stderr)
+        sys.exit(130)
+    except spotify_auth.AuthError as e:
+        print(f'sqlch: spotify login failed: {e}', file=sys.stderr)
+        sys.exit(1)
+    print('sqlch: logged in to Spotify')
+
+
+def spotify_logout_cmd() -> None:
+    from sqlch.core import spotify_auth
+    spotify_auth.clear()
+    print('sqlch: logged out of Spotify')
+
+
+QUEUE_USAGE = 'usage: sqlch queue [list | add <id|name|url> | clear]'
+MODE_USAGE = 'usage: sqlch mode [radio|media]'
+
+
+def _queue_call(payload: dict) -> None:
+    resp = daemon_call(payload)
+    if resp is None:
+        print('sqlch: daemon not running', file=sys.stderr)
+        sys.exit(1)
+    if not resp.get('ok', True):
+        print(f"sqlch: {resp.get('error') or 'daemon refused'}", file=sys.stderr)
+        sys.exit(1)
+
+
+def queue_cmd(args: list[str]) -> None:
+    sub = args[0] if args else 'list'
+    if sub == 'list':
+        state = playqueue.read()
+        print(f"mode: {state['mode']}")
+        if state['now']:
+            print(f"now:  {playqueue.entry_label(state['now'])}")
+        for i, entry in enumerate(state['entries'], 1):
+            print(f"{i:>3}. {playqueue.entry_label(entry)}")
+        return
+    if sub == 'clear':
+        _queue_call({'cmd': 'queue_clear'})
+        return
+    if sub == 'add':
+        query = ' '.join(args[1:]).strip()
+        if not query:
+            print(QUEUE_USAGE, file=sys.stderr)
+            sys.exit(2)
+        st = library.find_station(query)
+        if st is None and is_stream_url(query):
+            st = {'name': query, 'url': query}
+        if st is None:
+            print(f'sqlch: no station or stream called {query!r}', file=sys.stderr)
+            sys.exit(1)
+        _queue_call({'cmd': 'queue_add', 'kind': 'station',
+                     'payload': {'id': st.get('id'), 'name': st.get('name'),
+                                 'url': st.get('url')}})
+        return
+    print(QUEUE_USAGE, file=sys.stderr)
+    sys.exit(2)
+
+
+def mode_cmd(args: list[str]) -> None:
+    if not args:
+        print(playqueue.read()['mode'])
+        return
+    if len(args) != 1 or args[0] not in playqueue.MODES:
+        print(MODE_USAGE, file=sys.stderr)
+        sys.exit(2)
+    _queue_call({'cmd': 'set_mode', 'mode': args[0]})
+
+
 def dispatch_command(cmd: str, args: list[str]) -> None:
+    if cmd == 'spotify-login':
+        spotify_login_cmd(args)
+        return
+    if cmd == 'spotify-logout':
+        if args:
+            print('usage: sqlch spotify-logout', file=sys.stderr)
+            sys.exit(2)
+        spotify_logout_cmd()
+        return
+    if cmd == 'queue':
+        queue_cmd(args)
+        return
+    if cmd == 'mode':
+        mode_cmd(args)
+        return
     if cmd == 'status':
         print(status())
         return
@@ -341,6 +472,11 @@ def preview_cmd(args: list[str]) -> None:
         if not results or idx < 0 or idx >= len(results):
             print('Preview index out of range.', file=sys.stderr)
             sys.exit(1)
-        player.preview(results[idx]['url'])
+        url = results[idx]['url']
     else:
-        player.preview(arg)
+        url = arg
+    try:
+        player.preview(url)
+    except ValueError as e:
+        print(f'sqlch: {e}', file=sys.stderr)
+        sys.exit(1)

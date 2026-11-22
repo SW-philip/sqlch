@@ -8,9 +8,11 @@ from collections import deque
 from pathlib import Path
 from gi.repository import Gtk, GLib, GdkPixbuf, GObject, Pango
 
+from sqlch.core import progress
 from .. import XDG_CACHE, daemon, metadata
-from .controls import VolumeMeter, RecordBubble, NavColumn, SeekBar, TimelineBar
+from .controls import VolumeRamp, RecordBubble, NavColumn, SeekBar, TimelineBar
 from .header import Header
+from .toast import Toast
 
 _COVER_SIZE = 220     # keep in sync with .cover-art's min-width/min-height in common.py
 _PREVIOUS_SLOTS = 3  # matches the history deque's maxlen
@@ -68,6 +70,18 @@ class NowPlayingPanel(Gtk.Box):
         self.lbl_live_tag.set_visible(False)
         self.cover_overlay.add_overlay(self.lbl_live_tag)
 
+        self.lbl_watched_tag = Gtk.Label(label="WATCHED")
+        self.lbl_watched_tag.add_css_class("corner-tag")
+        self.lbl_watched_tag.add_css_class("corner-tag-right")
+        self.lbl_watched_tag.set_halign(Gtk.Align.END)
+        self.lbl_watched_tag.set_valign(Gtk.Align.END)
+        self.lbl_watched_tag.set_visible(False)
+        self.cover_overlay.add_overlay(self.lbl_watched_tag)
+        # Overlay on the cover (never a child that sizes it), so the card's
+        # height does not change when a toast appears.
+        self.toast = Toast()
+        self.cover_overlay.add_overlay(self.toast)
+
         card.append(self.cover_overlay)
 
         # --- Row 3: info panel (Previous tracks) plus stream diagnostic pills ---
@@ -99,29 +113,22 @@ class NowPlayingPanel(Gtk.Box):
             self._prev_rows.append(row)
         info_panel.append(self.lbl_previous)
 
-        # FlowBox (not a plain Box) so pills that don't fit on one line at
-        # the pinned width wrap onto a second line instead of being clipped.
-        pills_row = Gtk.FlowBox()
-        pills_row.set_selection_mode(Gtk.SelectionMode.NONE)
-        pills_row.set_max_children_per_line(3)
-        pills_row.set_row_spacing(4)
-        pills_row.set_column_spacing(4)
-        # Homogeneous (the default) sizes every cell to match the widest
-        # pill, which can waste enough space to force an awkward 2-then-1
-        # wrap even when all three would fit at their actual widths.
-        pills_row.set_homogeneous(False)
+        # One fixed line: a wrapping row made the card (and every pane docked
+        # to its height) jump when "--" placeholders became real values.
+        # Short texts, ellipsized as a backstop, so nothing can push it wider.
+        pills_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         self.pill_codec = Gtk.Label()
-        self.pill_codec.add_css_class("tech-badge")
-        self.pill_codec.set_visible(False)
+        self.pill_codec.set_tooltip_text("Codec")
         self.pill_bitrate = Gtk.Label()
-        self.pill_bitrate.add_css_class("tech-badge")
-        self.pill_bitrate.set_visible(False)
+        self.pill_bitrate.set_tooltip_text("Bitrate")
         self.pill_buffer = Gtk.Label()
-        self.pill_buffer.add_css_class("tech-badge")
-        self.pill_buffer.set_visible(False)
-        pills_row.append(self.pill_codec)
-        pills_row.append(self.pill_bitrate)
-        pills_row.append(self.pill_buffer)
+        self.pill_buffer.set_tooltip_text("Buffer")
+        for pill in (self.pill_codec, self.pill_bitrate, self.pill_buffer):
+            pill.add_css_class("tech-badge")
+            pill.set_hexpand(True)
+            pill.set_ellipsize(Pango.EllipsizeMode.END)
+            pill.set_width_chars(1)
+            pills_row.append(pill)
         info_panel.append(pills_row)
 
         self.info_scroll = Gtk.ScrolledWindow()
@@ -137,18 +144,30 @@ class NowPlayingPanel(Gtk.Box):
         self.info_scroll.set_margin_top(4)
         card.append(self.info_scroll)
 
+        # The seek bar and timeshift strip come and go with what's playing;
+        # their slot keeps the tallest one's height so the card (and the
+        # panes docked to its height) never resizes when they appear.
+        transport = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        transport.set_valign(Gtk.Align.START)
+        transport.connect("realize", self._reserve_transport)
+
         self.seek_bar = SeekBar()
         self.seek_bar.connect("seek-requested", self._on_seek_requested)
-        card.append(self.seek_bar)
+        self.seek_bar.connect(
+            "seek-relative", lambda _b, d: self._send_async({"cmd": "seek_rel", "delta": d}))
+        self.seek_bar.connect(
+            "skip", lambda _b, fwd: self._send_async({"cmd": "next" if fwd else "prev"}))
+        transport.append(self.seek_bar)
 
         self.timeline = TimelineBar()
         self.timeline.connect("seek-requested", self._on_seek_requested)
         self.timeline.connect(
             "seek-relative", lambda _b, d: self._send_async({"cmd": "seek_rel", "delta": d}))
         self.timeline.connect("go-live", lambda _b: self._send_async({"cmd": "go_live"}))
-        card.append(self.timeline)
+        transport.append(self.timeline)
+        card.append(transport)
 
-        # --- Row 4: RecordBubble / stop-play toggle | speaker + volume meter ---
+        # --- Row 4: RecordBubble / stop-play toggle | speaker + volume ramp ---
         control_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
 
         self.rec_bubble = RecordBubble()
@@ -163,16 +182,21 @@ class NowPlayingPanel(Gtk.Box):
 
         control_row.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
 
+        # The buttons reserve 4px under their faces for the offset shadow;
+        # the same bottom margin centers the volume side on the faces.
         self.speaker_icon = Gtk.Image(icon_name="audio-volume-high-symbolic")
         self.speaker_icon.set_valign(Gtk.Align.CENTER)
+        self.speaker_icon.set_margin_bottom(4)
         control_row.append(self.speaker_icon)
 
         self.vol_adj = Gtk.Adjustment(value=0.0, lower=0.0, upper=1.0, step_increment=0.05)
-        self.vol_meter = VolumeMeter(self.vol_adj)
+        self.vol_meter = VolumeRamp(self.vol_adj)
         self._vol_handler = self.vol_meter.connect("value-changed", self.on_vol_changed)
         self._pre_boost_vol: float | None = None
         self.vol_meter.connect("boost-toggled", self.on_boost_toggled)
         self.vol_meter.set_hexpand(True)
+        self.vol_meter.set_valign(Gtk.Align.CENTER)
+        self.vol_meter.set_margin_bottom(4)
         control_row.append(self.vol_meter)
 
         card.append(control_row)
@@ -190,6 +214,23 @@ class NowPlayingPanel(Gtk.Box):
         self._loaded = False
         self.reset_ui()
         self._load_history()
+
+    def _reserve_transport(self, slot):
+        # Measured fully shown, then hidden again; the next status poll
+        # puts back whichever one is in use.
+        self.seek_bar.set_state(0, 1, True)
+        self.timeline.set_visible(True)
+        tallest = max(bar.measure(Gtk.Orientation.VERTICAL, -1)[1]
+                      for bar in (self.seek_bar, self.timeline))
+        self.seek_bar.set_state(None, None)
+        self.timeline.set_visible(False)
+        slot.set_size_request(-1, tallest)
+
+    def set_collapsed(self, collapsed: bool):
+        """Hide the album art and Previous list, leaving the header, pills
+        and transport."""
+        self.cover_overlay.set_visible(not collapsed)
+        self.lbl_previous.set_visible(not collapsed)
 
     def clear_cover(self):
         self.cover_stack.set_visible_child_name("placeholder")
@@ -209,12 +250,9 @@ class NowPlayingPanel(Gtk.Box):
         self.header.set_connected(connected)
 
     def _set_pills_placeholder(self):
-        self.pill_codec.set_text("Codec: --")
-        self.pill_codec.set_visible(True)
-        self.pill_bitrate.set_text("Bitrate: --")
-        self.pill_bitrate.set_visible(True)
-        self.pill_buffer.set_text("Buffer: --")
-        self.pill_buffer.set_visible(True)
+        self.pill_codec.set_text("Codec --")
+        self.pill_bitrate.set_text("-- kbps")
+        self.pill_buffer.set_text("Buf --")
 
     def reset_ui(self):
         """Initial, never-played state -- same dimmed/idle look as stopping
@@ -224,6 +262,7 @@ class NowPlayingPanel(Gtk.Box):
         self.header.set_track("<i>Not Playing</i>")
         self.btn_toggle.set_icon_name("media-playback-start-symbolic")
         self.lbl_live_tag.set_visible(False)
+        self.lbl_watched_tag.set_visible(False)
         self._set_pills_placeholder()
         self.rec_bubble.set_state(False, "full")
         self.clear_cover()
@@ -304,6 +343,9 @@ class NowPlayingPanel(Gtk.Box):
             else:
                 row.set_text(" ")  # empty text collapses the row; a space keeps its height
 
+    def show_toast(self, text: str) -> None:
+        self.toast.push(text)
+
     def update(self, resp: dict | None, icy: tuple[str | None, str | None]):
         if not resp or not resp.get("ok") or not resp.get("current"):
             # Stopped: leave the last-rendered station/track/previous/cover
@@ -311,6 +353,7 @@ class NowPlayingPanel(Gtk.Box):
             # only the LIVE tag is no longer accurate and gets hidden.
             self._set_stale(True)
             self.lbl_live_tag.set_visible(False)
+            self.lbl_watched_tag.set_visible(False)
             self.seek_bar.set_state(None, None)
             self.timeline.set_state(None)
             return
@@ -353,6 +396,7 @@ class NowPlayingPanel(Gtk.Box):
             self._cur_artist, self._cur_title = None, None
         else:
             self.lbl_live_tag.set_visible(False)
+            self.lbl_watched_tag.set_visible(False)
             display_artist = artist or "Unknown Artist"
             display_title = title or "Unknown Track"
             self.header.set_track(
@@ -375,6 +419,7 @@ class NowPlayingPanel(Gtk.Box):
 
     def _update_item(self, item: dict, resp: dict):
         self.lbl_live_tag.set_visible(False)
+        self.lbl_watched_tag.set_visible(False)
         self._cur_station_id = None
         self._cur_frequency = None
         artist = item.get("artist") or ""
@@ -400,7 +445,11 @@ class NowPlayingPanel(Gtk.Box):
             else:
                 self.clear_cover()
 
-        self.seek_bar.set_state(resp.get("position"), resp.get("duration"))
+        self.seek_bar.set_state(resp.get("position"), resp.get("duration"),
+                                bool(resp.get("can_skip")))
+        row = progress.get(item.get("source", ""), item.get("id", "")) \
+            if item.get("kind") == "video" else None
+        self.lbl_watched_tag.set_visible(bool(row and row.get("watched")))
 
     def _send_async(self, msg: dict):
         threading.Thread(target=daemon.send, args=(msg,), daemon=True).start()
@@ -459,23 +508,9 @@ class NowPlayingPanel(Gtk.Box):
         if not playing:
             self._set_pills_placeholder()
         else:
-            if fmt:
-                self.pill_codec.set_text(f"Codec: {fmt}")
-                self.pill_codec.set_visible(True)
-            else:
-                self.pill_codec.set_visible(False)
-
-            if bitrate:
-                self.pill_bitrate.set_text(f"Bitrate: {bitrate}k")
-                self.pill_bitrate.set_visible(True)
-            else:
-                self.pill_bitrate.set_visible(False)
-
-            if buffer is not None:
-                self.pill_buffer.set_text(f"Buffer: {buffer}%")
-                self.pill_buffer.set_visible(True)
-            else:
-                self.pill_buffer.set_visible(False)
+            self.pill_codec.set_text(fmt if fmt else "Codec --")
+            self.pill_bitrate.set_text(f"{bitrate} kbps" if bitrate else "-- kbps")
+            self.pill_buffer.set_text(f"Buf {buffer}%" if buffer is not None else "Buf --")
 
         rec = recording or {}
         mode = rec.get("mode")
