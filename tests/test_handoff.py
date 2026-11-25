@@ -52,6 +52,7 @@ class TestMpris(unittest.TestCase):
 
 class TestPlayerHandoff(unittest.TestCase):
     def setUp(self):
+        self.addCleanup(setattr, player, "_current", player._current)
         self.item = {"source": "spotify", "id": "T1", "title": "S"}
         self.t = Target("spotify:track:T1", False, {"title": "S", "art": "/c/a.jpg"},
                         handoff="spotify")
@@ -85,7 +86,6 @@ class TestPlayerHandoff(unittest.TestCase):
     def test_now_playing_info_without_mpv(self):
         with mock.patch.object(player, "stop"), mock.patch.object(player.handoff, "play"):
             player.play_target(self.t, self.item)
-        self.addCleanup(setattr, player, "_current", None)
         with mock.patch.object(player, "mpv_socket") as sock:
             sock.return_value.exists.return_value = False
             info = player.now_playing_info()

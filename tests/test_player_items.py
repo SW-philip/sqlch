@@ -60,6 +60,9 @@ class TestMpvArgs(unittest.TestCase):
 
 
 class TestPlayTarget(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(setattr, player, "_current", player._current)
+
     def test_spawns_and_records_current_item(self):
         item = {"source": "local", "id": "a.mp3", "title": "A"}
         with mock.patch.object(player, "stop"), \
@@ -160,6 +163,9 @@ class TestPlaybackEnded(unittest.TestCase):
 
 
 class TestPlaybackFailed(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(setattr, player, "_current", player._current)
+
     def check(self, cur, started, idle, now=1000.0):
         with mock.patch.object(player, "_current", cur), \
              mock.patch.object(player, "_item_started", started), \
@@ -311,6 +317,9 @@ class TestNowPlayingInfo(unittest.TestCase):
 
 
 class TestPlayTargetHeaders(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(setattr, player, "_current", player._current)
+
     def test_headers_only_passed_when_present(self):
         item = {"source": "jellyfin", "id": "T1", "title": "S"}
         with mock.patch.object(player, "stop"), \
@@ -321,6 +330,9 @@ class TestPlayTargetHeaders(unittest.TestCase):
 
 
 class TestPlayTargetArt(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(setattr, player, "_current", player._current)
+
     def test_target_art_fills_missing_item_art(self):
         item = {"source": "jellyfin", "id": "T1", "title": "S", "art": None}
         with mock.patch.object(player, "stop"), \

@@ -182,6 +182,7 @@ class TestSession(unittest.TestCase):
                                return_value={"recordings_dir": str(self.root)}), {}),
             (mock.patch.object(recorder.notify, "notify"), {}),
             (mock.patch.object(recorder, "_finalize", return_value=None), {}),
+            (mock.patch("sqlch.core.enrich.enrich_track", return_value={}), {}),
         ]:
             target.start()
             self.addCleanup(target.stop)

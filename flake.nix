@@ -31,9 +31,15 @@
         python3Packages.virtualenv
         python3Packages.pydbus
         python3Packages.pygobject3
+        python3Packages.pytest
         glib
         gobject-introspection
+        gtk4
+        gtk4-layer-shell
+        librsvg
       ];
+      # must load before libwayland-client, which `import gi` pulls in
+      GTK4_LAYER_SHELL = "${pkgs.gtk4-layer-shell}/lib/libgtk4-layer-shell.so";
     };
   };
 }

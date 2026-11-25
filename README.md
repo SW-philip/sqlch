@@ -405,6 +405,15 @@ MusicBrainz enrichment requires no credentials.
 
 ---
 
+## Tests
+
+```bash
+nix develop -c sh -c 'LD_PRELOAD=$GTK4_LAYER_SHELL python -m pytest tests'
+```
+
+Use pytest: `unittest` skips the function-style tests without saying so. The
+GUI tests need a running graphical session.
+
 ## Notes on development
 
 AI-assisted tools were used throughout development as critical

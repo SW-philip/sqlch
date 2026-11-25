@@ -1,3 +1,4 @@
+import time
 import unittest
 
 import gi
@@ -156,16 +157,16 @@ class TestPreviousTracksReserveSpace(unittest.TestCase):
     def test_height_does_not_change_as_history_fills(self):
         p = self._panel()
         empty = p.lbl_previous.measure(Gtk.Orientation.VERTICAL, 300)[1]
-        p._history.appendleft(("Artist", "A very long title " * 20))
-        p._history.appendleft(("B", "T"))
-        p._history.appendleft(("C", "T"))
+        p._history.appendleft(("Artist", "A very long title " * 20, time.time()))
+        p._history.appendleft(("B", "T", time.time()))
+        p._history.appendleft(("C", "T", time.time()))
         p._update_previous_line()
         full = p.lbl_previous.measure(Gtk.Orientation.VERTICAL, 300)[1]
         self.assertEqual(empty, full)
 
     def test_rows_render_history_and_clear_on_reset(self):
         p = self._panel()
-        p._history.appendleft(("A", "T"))
+        p._history.appendleft(("A", "T", time.time()))
         p._update_previous_line()
         self.assertEqual(p._prev_rows[0].get_text(), "1. A — T")
         self.assertEqual(p._prev_rows[1].get_text().strip(), "")
@@ -178,7 +179,7 @@ class TestPreviousTracksReserveSpace(unittest.TestCase):
         p._cur_station_id = "wxpn"
         p._update_previous_line()
         self.assertEqual(p._prev_rows[0].get_text(), "It's playing now")
-        p._history.appendleft(("A", "T"))
+        p._history.appendleft(("A", "T", time.time()))
         p._update_previous_line()
         self.assertEqual(p._prev_rows[0].get_text(), "1. A — T")
         p.reset_ui()
