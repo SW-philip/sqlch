@@ -5,6 +5,7 @@ from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
+from sqlch.core import accounts
 from sqlch.core.paths import cache_dir
 from sqlch.sources import source_config
 from sqlch.sources.base import Target, make_item
@@ -12,7 +13,8 @@ from sqlch.sources.base import Target, make_item
 NAME = "jellyfin"
 TITLE = "JELLYFIN"
 LABEL = "Jellyfin"
-HINT = ("Create an API key in Jellyfin (Dashboard > API Keys) and put it in "
+HINT = ("Create an API key in Jellyfin (Dashboard > API Keys) and enter it in "
+        "Sources > Accounts, or put it in "
         "/run/secrets/jellyfin_api_key, or set sources.jellyfin.token_file")
 
 DEFAULT_SERVER = "https://swphil.tail6e0780.ts.net"
@@ -36,7 +38,10 @@ _LOOPBACK = {"localhost", "127.0.0.1", "::1"}
 
 
 def _server() -> str:
-    server = (_cfg().get("server") or DEFAULT_SERVER).rstrip("/")
+    # server and key come from the same place: the secrets key must never be
+    # sent to an address typed into the app
+    stored = accounts.get(NAME)
+    server = (stored[0] if stored else _cfg().get("server") or DEFAULT_SERVER).rstrip("/")
     u = urlparse(server)
     if u.scheme not in ("http", "https"):
         raise ValueError("jellyfin server must be an http(s) url")
@@ -50,6 +55,9 @@ def _server() -> str:
 
 
 def _token() -> str | None:
+    stored = accounts.get(NAME)
+    if stored:
+        return stored[1]
     path = Path(_cfg().get("token_file") or DEFAULT_TOKEN_FILE).expanduser()
     try:
         return path.read_text().strip() or None

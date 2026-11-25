@@ -23,7 +23,7 @@ from sqlch.sources.base import Target, make_item
 NAME = "podcasts"
 TITLE = "PODCASTS"
 LABEL = "Podcasts"
-HINT = ("Searches Apple Podcasts. Put PODCASTINDEX_API_KEY and "
+HINT = ("Searches Apple Podcasts. Add Podcast Index in Sources > Accounts, or put PODCASTINDEX_API_KEY and "
         "PODCASTINDEX_API_SECRET in /run/secrets/podcastindex_env to search "
         "Podcast Index too.")
 HAS_DATES = True

@@ -618,6 +618,11 @@ def _build_css(colors: dict) -> str:
         border: 1px solid {root};
     }}
 
+    .acct-help {{
+        color: {lyric};
+        font-size: {small};
+    }}
+
     .search-btn {{
         border-radius: 7px;
         padding: 5px 10px;

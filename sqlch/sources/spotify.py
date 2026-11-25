@@ -13,15 +13,15 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from sqlch.core.paths import cache_dir, write_private
-from sqlch.core import spotify_auth
+from sqlch.core import accounts, spotify_auth
 from sqlch.sources import source_config
 from sqlch.sources.base import Target, make_item
 
 NAME = "spotify"
 TITLE = "SPOTIFY"
 LABEL = "Spotify"
-HINT = ("Needs SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in "
-        "/run/secrets/spotify_env, and the Spotify desktop app to play. "
+HINT = ("Set it up in Sources > Accounts, or put SPOTIFY_CLIENT_ID and "
+        "SPOTIFY_CLIENT_SECRET in /run/secrets/spotify_env. Needs go-librespot or the Spotify desktop app to play. "
         "Run `sqlch spotify-login` to see your playlists and followed artists.")
 
 DEFAULT_ENV_FILE = "/run/secrets/spotify_env"
@@ -49,6 +49,9 @@ def _auth_base() -> str:
 
 
 def _credentials() -> tuple[str, str] | None:
+    stored = accounts.get(NAME)
+    if stored:
+        return stored
     cid, sec = os.environ.get("SPOTIFY_CLIENT_ID"), os.environ.get("SPOTIFY_CLIENT_SECRET")
     if not (cid and sec):
         cfg = source_config(NAME)

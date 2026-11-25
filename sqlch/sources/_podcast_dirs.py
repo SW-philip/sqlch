@@ -10,6 +10,8 @@ from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from sqlch.core import accounts
+
 TIMEOUT = 6
 LIMIT = 25
 UA = "sqlch/1.0"
@@ -45,6 +47,9 @@ def apple_search(term: str) -> list[dict]:
 
 
 def pi_credentials(env_file: str | None = None) -> tuple[str, str] | None:
+    stored = accounts.get("podcastindex")
+    if stored:
+        return stored
     key = os.environ.get("PODCASTINDEX_API_KEY")
     sec = os.environ.get("PODCASTINDEX_API_SECRET")
     if not (key and sec):

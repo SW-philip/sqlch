@@ -50,15 +50,17 @@ in as a *source*.
 | **Radio** | Library plus RadioBrowser discovery, live ICY track info, timeshift, recording | none |
 | **Podcasts** | Apple Podcasts and Podcast Index search, RSS episodes, follow shows | optional Podcast Index key |
 | **YouTube** | Search, channel/playlist shortcuts, follow channels, played through mpv's yt-dlp hook | `yt-dlp` |
-| **Spotify** | Catalog search, your playlists and followed artists; playback handed to go-librespot or the desktop app | `SPOTIFY_CLIENT_ID`/`SECRET`, `sqlch spotify-login` |
-| **Jellyfin** | Browse and search your server's libraries, direct-file playback | API key |
+| **Spotify** | Catalog search, your playlists and followed artists; playback handed to go-librespot or the desktop app | Accounts pane, or `SPOTIFY_CLIENT_ID`/`SECRET` and `sqlch spotify-login` |
+| **Jellyfin** | Browse and search your server's libraries, direct-file playback | Accounts pane, or an API key file |
 | **Local Library** | Browse and search a folder of music | `sources.local.library_root` |
 | **Local Video** | Browse and search a folder of video; plays in its own mpv window | `sources.video.library_root` |
 
 Sources are configured under a `sources` table in
 `~/.config/sqlch/sqlch.json`. A source that isn't set up shows a one-line
-hint in its pane instead of an empty list. Secrets are read from files
-(by default under `/run/secrets`), never stored in the config.
+hint in its pane instead of an empty list. Keys can be entered in
+the GUI (Sources > Accounts; kept in `~/.local/share/sqlch/accounts.json`, mode
+0600) or read from files (by default under `/run/secrets`). They are never
+stored in the config.
 
 ---
 

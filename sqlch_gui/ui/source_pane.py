@@ -166,6 +166,20 @@ class SourcePane(Gtk.Box):
     def on_hidden(self):
         self._gen += 1
 
+    def reset(self):
+        """Forget what was loaded: the account behind this source changed."""
+        self._gen += 1
+        self._stack = []
+        self._pending = None
+        self._loaded = False
+        self.section_row.set_visible(True)
+        self._set_status("")
+        self.nav.set_visible(False)
+        while child := self.list.get_first_child():
+            self.list.remove(child)
+        if self.get_mapped():
+            self.on_shown()
+
     def _set_status(self, text, play_error=False):
         self._play_error = play_error and bool(text)
         self.status.set_text(text)

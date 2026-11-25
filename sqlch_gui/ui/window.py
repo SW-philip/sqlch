@@ -14,6 +14,7 @@ from .now_playing import NowPlayingPanel
 from .station_list import StationListPanel
 from .discover import DiscoverPanel
 from .radio_pane import RadioPane
+from .accounts_pane import AccountsPane
 from .playlist_pane import PlaylistPane
 from .dock_manager import DockManager
 from .overlay_card import OverlayCard
@@ -93,14 +94,13 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
             exclude=(self.now_playing.nav_column,),
             sized=False)
 
-        panels = {"radio": self.radio, "playlist": lambda: PlaylistPane(self)}
-        titles = {}
+        panels = {"radio": self.radio, "playlist": lambda: PlaylistPane(self),
+                  "accounts": lambda: AccountsPane(on_changed=self.accounts_changed)}
+        titles = {"accounts": "ACCOUNTS"}
         for name, src in SOURCES.items():
             panels[name] = lambda s=src: SourcePane(self, s)
             titles[name] = src.TITLE
-        self.now_playing.nav_column.set_sources([
-            {"name": n, "label": s.LABEL, "available": safe_available(s), "hint": s.HINT}
-            for n, s in SOURCES.items()])
+        self._set_nav_sources()
 
         self.docks = DockManager(
             self, panels=panels, titles=titles,
@@ -125,6 +125,19 @@ class SqlchPopupWindow(Gtk.ApplicationWindow):
 
         # Connect focus destruction patterns
         self.connect("close-request", self.on_close_request)
+
+    def _set_nav_sources(self):
+        self.now_playing.nav_column.set_sources([
+            {"name": n, "label": s.LABEL, "available": safe_available(s), "hint": s.HINT}
+            for n, s in SOURCES.items()]
+            + [{"name": "accounts", "label": "Accounts", "available": True, "hint": ""}])
+
+    def accounts_changed(self):
+        self._set_nav_sources()
+        for name in SOURCES:
+            panel = self.docks.windows[name].panel
+            if panel is not None:
+                panel.reset()
 
     # --- card geometry (positioning policy lives in DockManager) ---
 

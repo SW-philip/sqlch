@@ -8,6 +8,7 @@ from typing import Any
 
 import requests
 
+from sqlch.core import accounts
 from sqlch.core.paths import cache_dir, write_private
 
 CACHE_TTL = 60 * 60 * 24 * 30  # 30 days
@@ -68,8 +69,8 @@ def _get_token() -> str | None:
                 return tok['access_token']
         except Exception:
             pass
-    cid = os.getenv('SPOTIFY_CLIENT_ID')
-    sec = os.getenv('SPOTIFY_CLIENT_SECRET')
+    cid, sec = accounts.get('spotify') or (
+        os.getenv('SPOTIFY_CLIENT_ID'), os.getenv('SPOTIFY_CLIENT_SECRET'))
     if not cid or not sec:
         return None
     auth = base64.b64encode(f'{cid}:{sec}'.encode()).decode()
