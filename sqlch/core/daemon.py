@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlch import sources
-from sqlch.core import discover, follows, library, notify, player, playqueue, progress, transport, watcher
+from sqlch.core import awake, discover, follows, library, notify, player, playqueue, progress, transport, watcher
 from sqlch.core.urlcheck import is_stream_url
 from sqlch.sources import youtube
 from sqlch.core.paths import runtime_dir
@@ -44,9 +44,9 @@ def track_once() -> None:
 
 
 def sample_once() -> None:
-    """One playhead sample: the video's watch progress, and the parked
-    position the queue resumes from."""
-    for sample in (track_once, transport.park):
+    """One playhead sample: the video's watch progress, the parked position
+    the queue resumes from, and whether the screen should stay awake."""
+    for sample in (track_once, transport.park, awake.update):
         try:
             sample()
         except Exception:
