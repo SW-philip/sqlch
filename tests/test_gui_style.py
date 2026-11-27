@@ -9,9 +9,9 @@ _REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 # They exist in the current-generation palette.sh; these must also be in
 # _DEFAULTS so the no-palette fallback still resolves them.
 _REQUIRED_KEYS = (
-    "HALL", "STAGE", "WING", "DIM", "SCORE", "LYRIC", "REST",
-    "ROOT", "SEVENTH", "PIANO", "FORTE", "SOTTO", "SHADOW", "STAFF",
-    "STAFF_A_OUTER", "STAFF_A_DROP", "STAFF_A_INSET_BOT",
+    "NIGHT", "DUSK", "FADE", "MURK", "LIGHT", "DAWN", "HAZE",
+    "SUN", "STAR", "SPOT", "FLARE", "METEOR", "UMBRA", "UMBRA_RGB",
+    "UMBRA_A_OUTER", "UMBRA_A_DROP", "UMBRA_A_INSET_BOT",
 )
 
 
@@ -43,8 +43,8 @@ class TestFlatStylesheet(unittest.TestCase):
     def test_station_uses_lyric_and_tab_not_rest(self):
         from sqlch_gui.ui import common
         colors = dict(palette._DEFAULTS)
-        colors["LYRIC"] = "#111111"
-        colors["REST"] = "#222222"
+        colors["DAWN"] = "#111111"
+        colors["HAZE"] = "#222222"
         css = common._build_css(colors)
 
         def rule(sel):
@@ -245,7 +245,7 @@ class TestEqStrip(unittest.TestCase):
         surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 18, 11)
         s._on_draw(s, cairo.Context(surf), 18, 11)
         src = (_REPO_ROOT / "sqlch_gui/ui/eq_strip.py").read_text()
-        # the ROOT->SEVENTH cross-fade is gone
+        # the SUN->STAR cross-fade is gone
         self.assertNotIn("tail_r", src)
 
 
@@ -282,7 +282,7 @@ class TestDepthPass(unittest.TestCase):
 class TestPlayerEdgeBorder(unittest.TestCase):
     """The Now Playing card and its own children get a louder border than
     the app-wide hairline, so the player visibly separates from the shell
-    even on palettes where STAGE/WING sit close in lightness. Scoped to
+    even on palettes where DUSK/FADE sit close in lightness. Scoped to
     classes now_playing.py owns outright (.card, .sq-tab,
     .cover-art, .info-panel, .control-btn) -- station list / discover /
     context-menu chrome keeps the original hairline."""

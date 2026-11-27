@@ -22,26 +22,26 @@ def _build_css(colors: dict) -> str:
     no side effects. Mirrors the vocabulary of ~/.config/swaync/style.css:
     flat fills, a hairline border, one soft drop; the hard-offset shadow and
     the faint fiber-noise live only on the outer .popup-window shell."""
-    outline = colors.get('SHADOW', '#0f0e17')
-    score = colors.get('SCORE', '#e0def4')
+    outline = colors.get('UMBRA', '#0f0e17')
+    score = colors.get('LIGHT', '#e0def4')
     score_rgb = _hex_to_rgb(score)
-    staff = colors.get('STAFF', '15, 14, 23')
+    staff = colors.get('UMBRA_RGB', '15, 14, 23')
 
-    stage = colors.get('STAGE', '#2a273f')
-    wing = colors.get('WING', '#393552')
-    dim = colors.get('DIM', '#1a1828')
-    hall = colors.get('HALL', '#232136')
-    lyric = colors.get('LYRIC', '#c9c5da')
-    rest = colors.get('REST', '#908caa')
-    root = colors.get('ROOT', '#c4a7e7')
-    accent = colors.get('FIFTH', '#9ccfd8')  # eww's $accent
-    seventh = colors.get('SEVENTH', '#3e8fb0')
-    piano = colors.get('PIANO', '#f6c177')
-    forte = colors.get('FORTE', '#eb6f92')
-    sotto = colors.get('SOTTO', '#ea9a97')
+    stage = colors.get('DUSK', '#2a273f')
+    wing = colors.get('FADE', '#393552')
+    dim = colors.get('MURK', '#1a1828')
+    hall = colors.get('NIGHT', '#232136')
+    lyric = colors.get('DAWN', '#c9c5da')
+    rest = colors.get('HAZE', '#908caa')
+    root = colors.get('SUN', '#c4a7e7')
+    accent = colors.get('MOON', '#9ccfd8')  # eww's $accent
+    seventh = colors.get('STAR', '#3e8fb0')
+    piano = colors.get('SPOT', '#f6c177')
+    forte = colors.get('FLARE', '#eb6f92')
+    sotto = colors.get('METEOR', '#ea9a97')
 
-    a_drop = colors.get('STAFF_A_DROP', '0.55')
-    a_inset = colors.get('STAFF_A_INSET_BOT', '0.30')
+    a_drop = colors.get('UMBRA_A_DROP', '0.55')
+    a_inset = colors.get('UMBRA_A_INSET_BOT', '0.30')
 
     # Josefin Sans everywhere, same as the eww notification panel; the
     # JetBrains Nerd Font stays as a glyph fallback for icons.
@@ -53,11 +53,11 @@ def _build_css(colors: dict) -> str:
     small = "0.85em"
 
     # Art-deco accent, shared with the eww panels: keylines, active tab and
-    # nameplate in FIFTH (eww's $accent), not neutral score-tinted hairlines.
+    # nameplate in MOON (eww's $accent), not neutral score-tinted hairlines.
     root_rgb = _hex_to_rgb(accent)
     hairline = f"1px solid rgba({root_rgb}, 0.35)"
     # Now Playing card only: the plain hairline barely registers between
-    # STAGE/WING fills that sit close in lightness on several palettes.
+    # DUSK/FADE fills that sit close in lightness on several palettes.
     # A louder border (not a fill-color change) separates the player from
     # the shell without touching text-bearing surfaces -- see
     # docs/superpowers/specs/2026-09-17-sqlch-gui-depth-pass-design.md for
@@ -86,7 +86,7 @@ def _build_css(colors: dict) -> str:
     window {{
         background-color: transparent;
         font-family: {mono};
-        font-size: {colors.get('TEMPO', '12px')};
+        font-size: {colors.get('ARC', '12px')};
         color: {score};
     }}
 

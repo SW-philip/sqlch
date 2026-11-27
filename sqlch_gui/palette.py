@@ -5,37 +5,52 @@ import re
 from pathlib import Path
 
 _DEFAULTS: dict[str, str] = {
-    "HALL": "#232136",
-    "STAGE": "#2a273f",
-    "WING": "#393552",
-    "MUTE": "#44415a",
-    "BAR": "#6e6a86",
-    "REST": "#908caa",
-    "SCORE": "#e0def4",
-    "FORTE": "#eb6f92",
-    "SEVENTH": "#3e8fb0",
-    "FIFTH": "#9ccfd8",
-    "SOTTO": "#ea9a97",
-    "ROOT": "#c4a7e7",
-    "PIANO": "#f6c177",
-    "SHADOW": "#0f0e17",
-    "GRAD_HALL_HI": "#282544",
-    "GRAD_HALL_LO": "#1a1828",
-    "GRAD_STAGE_HI": "#302c4d",
-    "GRAD_STAGE_LO": "#211f36",
-    "GRAD_WING_HI": "#443f60",
-    "GRAD_WING_LO": "#2d2944",
-    "STAFF": "15,14,23",
-    "DIM": "#1a1828",
-    "LYRIC": "#c9c5da",
-    "STAFF_A_OUTER": "0.50",
-    "STAFF_A_DROP": "0.55",
-    "STAFF_A_HOVER": "0.65",
-    "STAFF_A_INSET_TOP": "0.08",
-    "STAFF_A_INSET_BOT": "0.30",
-    "STAFF_A_BORDER": "0.07",
-    "MEASURE": "0 1px 2px rgba(0,0,0,0.80)",
-    "TEMPO": "12px",
+    "NIGHT": "#232136",
+    "DUSK": "#2a273f",
+    "FADE": "#393552",
+    "GLOAM": "#44415a",
+    "HORIZON": "#6e6a86",
+    "HAZE": "#908caa",
+    "LIGHT": "#e0def4",
+    "FLARE": "#eb6f92",
+    "STAR": "#3e8fb0",
+    "MOON": "#9ccfd8",
+    "METEOR": "#ea9a97",
+    "SUN": "#c4a7e7",
+    "SPOT": "#f6c177",
+    "UMBRA": "#0f0e17",
+    "GRAD_NIGHT_HI": "#282544",
+    "GRAD_NIGHT_LO": "#1a1828",
+    "GRAD_DUSK_HI": "#302c4d",
+    "GRAD_DUSK_LO": "#211f36",
+    "GRAD_FADE_HI": "#443f60",
+    "GRAD_FADE_LO": "#2d2944",
+    "UMBRA_RGB": "15,14,23",
+    "MURK": "#1a1828",
+    "DAWN": "#c9c5da",
+    "UMBRA_A_OUTER": "0.50",
+    "UMBRA_A_DROP": "0.55",
+    "UMBRA_A_HOVER": "0.65",
+    "UMBRA_A_INSET_TOP": "0.08",
+    "UMBRA_A_INSET_BOT": "0.30",
+    "UMBRA_A_BORDER": "0.07",
+    "HALO": "0 1px 2px rgba(0,0,0,0.80)",
+    "ARC": "12px",
+}
+
+
+# Palettes written before hrzn's dusk rename still use these names.
+LEGACY: dict[str, str] = {
+    "HALL": "NIGHT", "DIM": "MURK", "STAGE": "DUSK", "MUTE": "GLOAM", "WING": "FADE",
+    "SCORE": "LIGHT", "LYRIC": "DAWN", "REST": "HAZE",
+    "ROOT": "SUN", "FIFTH": "MOON", "SEVENTH": "STAR", "SOTTO": "METEOR",
+    "FORTE": "FLARE", "FERMATA": "AURORA", "PIANO": "SPOT", "TACET": "ECLIPSE",
+    "BAR": "HORIZON", "LEDGER": "CORONA", "SHADOW": "UMBRA", "STAFF": "UMBRA_RGB",
+    "TEMPO": "ARC", "MEASURE": "HALO", "ROOT_RGB": "SUN_RGB", "FORTE_RGB": "FLARE_RGB",
+    "GRAD_HALL_HI": "GRAD_NIGHT_HI", "GRAD_HALL_LO": "GRAD_NIGHT_LO",
+    "GRAD_STAGE_HI": "GRAD_DUSK_HI", "GRAD_STAGE_LO": "GRAD_DUSK_LO",
+    "GRAD_WING_HI": "GRAD_FADE_HI", "GRAD_WING_LO": "GRAD_FADE_LO",
+    **{f"STAFF_A_{s}": f"UMBRA_A_{s}" for s in ("OUTER", "DROP", "HOVER", "INSET_TOP", "INSET_BOT", "BORDER")},
 }
 
 
@@ -56,7 +71,7 @@ def load(path: str | None = None) -> dict[str, str]:
         for line in Path(path).read_text().splitlines():
             m = re.match(r'^export\s+(\w+)="([^"]*)"', line)
             if m:
-                p[m.group(1)] = m.group(2)
+                p[LEGACY.get(m.group(1), m.group(1))] = m.group(2)
     except Exception:
         pass
     return p

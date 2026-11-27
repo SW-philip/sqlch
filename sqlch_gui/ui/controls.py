@@ -29,13 +29,13 @@ def _rounded_rect(cr, x, y, w, h, r):
 
 class VolumeRamp(Gtk.DrawingArea):
     """Volume as a rising wedge of thin bars -- the shape of the universal
-    volume glyph. Bars light in ROOT up to the current level, with the edge
+    volume glyph. Bars light in SUN up to the current level, with the edge
     clipped mid-bar so the fill tracks the real value instead of snapping to
     a segment; unlit bars are faint ticks. Click or drag to scrub, scroll to
     nudge. No trough: the wedge sits straight on the card.
 
     Scrolling up while already at 100% engages the 120% boost: the extra
-    full-height bar past the ramp lights in FORTE. The adjustment itself is
+    full-height bar past the ramp lights in FLARE. The adjustment itself is
     never changed by boosting; only NowPlayingPanel's boost-toggled handler
     drives the actual wpctl volume change.
     """
@@ -127,9 +127,9 @@ class VolumeRamp(Gtk.DrawingArea):
 
     def _on_draw(self, area, cr, width, height, user_data=None):
         colors = palette.load()
-        score = _hex_to_rgb_floats(colors.get('SCORE', '#e0def4'))
-        lit = _hex_to_rgb_floats(colors.get('ROOT', '#c4a7e7'))
-        hot = _hex_to_rgb_floats(colors.get('FORTE', '#eb6f92'))
+        score = _hex_to_rgb_floats(colors.get('LIGHT', '#e0def4'))
+        lit = _hex_to_rgb_floats(colors.get('SUN', '#c4a7e7'))
+        hot = _hex_to_rgb_floats(colors.get('FLARE', '#eb6f92'))
 
         rects = self._bar_rects(width, height)
         for x, y, w, h in rects:
@@ -275,15 +275,15 @@ class RecordBubble(Gtk.DrawingArea):
     def _on_draw(self, area, cr, width, height, user_data=None):
         colors = palette.load()
         if self.recording:
-            face = _hex_to_rgb_floats(colors.get('FORTE', '#eb6f92'))
-            glyph = _hex_to_rgb_floats(colors.get('SCORE', '#e0def4'))
+            face = _hex_to_rgb_floats(colors.get('FLARE', '#eb6f92'))
+            glyph = _hex_to_rgb_floats(colors.get('LIGHT', '#e0def4'))
         else:
-            face = _hex_to_rgb_floats(colors.get('WING', '#393552'))
-            glyph = _hex_to_rgb_floats(colors.get('FORTE', '#eb6f92'))
-        ring = _hex_to_rgb_floats(colors.get('SCORE', '#e0def4'))
+            face = _hex_to_rgb_floats(colors.get('FADE', '#393552'))
+            glyph = _hex_to_rgb_floats(colors.get('FLARE', '#eb6f92'))
+        ring = _hex_to_rgb_floats(colors.get('LIGHT', '#e0def4'))
 
-        staff = tuple(int(c) / 255.0 for c in colors.get('STAFF', '15,14,23').split(','))
-        a_drop = float(colors.get('STAFF_A_DROP', '0.55'))
+        staff = tuple(int(c) / 255.0 for c in colors.get('UMBRA_RGB', '15,14,23').split(','))
+        a_drop = float(colors.get('UMBRA_A_DROP', '0.55'))
 
         # A keycap shaped like .control-btn, with the same hard offset as it
         # and the window shell; pressing slides the cap into its shadow.
@@ -571,9 +571,9 @@ class TimelineBar(Gtk.Box):
     def _on_draw(self, area, cr, width, height, user_data=None):
         ts = self._ts
         colors = palette.load()
-        trough = _hex_to_rgb_floats(colors.get('DIM', '#1a1828'))
-        span = _hex_to_rgb_floats(colors.get('WING', '#393552'))
-        head = _hex_to_rgb_floats(colors.get('SCORE', '#e0def4'))
+        trough = _hex_to_rgb_floats(colors.get('MURK', '#1a1828'))
+        span = _hex_to_rgb_floats(colors.get('FADE', '#393552'))
+        head = _hex_to_rgb_floats(colors.get('LIGHT', '#e0def4'))
         cr.set_source_rgba(*trough, 1.0)
         cr.rectangle(0, 2, width, height - 4)
         cr.fill()

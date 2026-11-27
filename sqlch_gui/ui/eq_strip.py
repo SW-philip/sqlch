@@ -58,9 +58,9 @@ class EqStrip(Gtk.DrawingArea):
 
     def _on_draw(self, area, cr, width, height, user_data=None):
         # One flat tone that reads against the .station-row.active fill
-        # (SEVENTH) these beads sit on -- HALL is that row's own text color.
+        # (STAR) these beads sit on -- NIGHT is that row's own text color.
         colors = palette.load()
-        r, g, b = _hex_to_rgb_floats(colors.get('HALL', '#232136'))
+        r, g, b = _hex_to_rgb_floats(colors.get('NIGHT', '#232136'))
 
         n = self.n_beads
         gap = 3.0
