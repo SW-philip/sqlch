@@ -11,6 +11,10 @@
     pkgs = import nixpkgs { inherit system; };
   in
   {
+    overlays.default = final: _prev: {
+      sqlch = final.callPackage ./pkgs/sqlch { };
+    };
+
     packages.${system} = {
       sqlch = pkgs.callPackage ./pkgs/sqlch { };
       default = self.packages.${system}.sqlch;
